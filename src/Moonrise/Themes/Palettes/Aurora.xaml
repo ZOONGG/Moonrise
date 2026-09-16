@@ -1,0 +1,19 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <SolidColorBrush x:Key="BackgroundPrimary" Color="#061016"/><SolidColorBrush x:Key="BackgroundSecondary" Color="#07151C"/>
+    <SolidColorBrush x:Key="SurfacePrimary" Color="#0B1C25"/><SolidColorBrush x:Key="SurfaceRaised" Color="#102630"/><SolidColorBrush x:Key="SurfaceFloating" Color="#15323C"/>
+    <SolidColorBrush x:Key="SurfaceHover" Color="#122B35"/><SolidColorBrush x:Key="SurfaceSelected" Color="#123847"/><SolidColorBrush x:Key="SurfaceDisabled" Color="#0C1B22"/>
+    <SolidColorBrush x:Key="BorderPrimary" Color="#244552"/><SolidColorBrush x:Key="BorderSubtle" Color="#183541"/><SolidColorBrush x:Key="BorderStrong" Color="#376777"/><SolidColorBrush x:Key="FocusRing" Color="#42BCD0"/>
+    <SolidColorBrush x:Key="TextPrimary" Color="#F1FAFB"/><SolidColorBrush x:Key="TextSecondary" Color="#A9C4C9"/><SolidColorBrush x:Key="TextMuted" Color="#708F98"/><SolidColorBrush x:Key="TextDisabled" Color="#52717A"/>
+    <SolidColorBrush x:Key="AccentPurple" Color="#3E93AF"/><SolidColorBrush x:Key="AccentViolet" Color="#468EBC"/><SolidColorBrush x:Key="AccentBlue" Color="#3E83C5"/><SolidColorBrush x:Key="AccentCyan" Color="#29B8C7"/>
+    <SolidColorBrush x:Key="Success" Color="#43D0A8"/><SolidColorBrush x:Key="Warning" Color="#E4C36B"/><SolidColorBrush x:Key="Danger" Color="#ED6877"/>
+    <SolidColorBrush x:Key="SurfaceSecondary" Color="#102630"/><SolidColorBrush x:Key="SurfaceElevated" Color="#15323C"/><SolidColorBrush x:Key="BorderActive" Color="#42BCD0"/>
+    <SolidColorBrush x:Key="Panel" Color="#0B1C25"/><SolidColorBrush x:Key="Panel2" Color="#102630"/><SolidColorBrush x:Key="Border" Color="#183541"/><SolidColorBrush x:Key="Muted" Color="#708F98"/><SolidColorBrush x:Key="Accent" Color="#3E93AF"/>
+    <SolidColorBrush x:Key="ChromeSurface" Color="#C907151C"/><SolidColorBrush x:Key="HeaderStatusSurface" Color="#88102A34"/><SolidColorBrush x:Key="DrawerSurface" Color="#FC0D222B"/><SolidColorBrush x:Key="OverlaySurface" Color="#DC041015"/><SolidColorBrush x:Key="DropOverlaySurface" Color="#EB06151B"/>
+    <SolidColorBrush x:Key="ScrollThumb" Color="#507784"/><SolidColorBrush x:Key="ScrollThumbHover" Color="#6A96A2"/><SolidColorBrush x:Key="ScrollThumbPressed" Color="#86B0BA"/>
+    <LinearGradientBrush x:Key="PrimaryGradient" StartPoint="0,0.5" EndPoint="1,0.5"><GradientStop Color="#327C9E" Offset="0"/><GradientStop Color="#337FB9" Offset="0.55"/><GradientStop Color="#24B3BD" Offset="1"/></LinearGradientBrush>
+    <LinearGradientBrush x:Key="PrimaryGradientHover" StartPoint="0,0.5" EndPoint="1,0.5"><GradientStop Color="#3C8CAB" Offset="0"/><GradientStop Color="#418FC7" Offset="0.55"/><GradientStop Color="#30C2CA" Offset="1"/></LinearGradientBrush>
+    <LinearGradientBrush x:Key="PrimaryGradientPressed" StartPoint="0,0.5" EndPoint="1,0.5"><GradientStop Color="#296A87" Offset="0"/><GradientStop Color="#2A6D9E" Offset="0.55"/><GradientStop Color="#1E969F" Offset="1"/></LinearGradientBrush>
+    <LinearGradientBrush x:Key="ActiveNavigationGradient" StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#173A45" Offset="0"/><GradientStop Color="#123044" Offset="1"/></LinearGradientBrush>
+    <LinearGradientBrush x:Key="SidebarGradient" StartPoint="0,0" EndPoint="0.9,1"><GradientStop Color="#07161C" Offset="0"/><GradientStop Color="#061117" Offset="0.64"/><GradientStop Color="#091A20" Offset="1"/></LinearGradientBrush>
+    <LinearGradientBrush x:Key="HeroOverlay" StartPoint="0,0.5" EndPoint="1,0.5"><GradientStop Color="#FC061016" Offset="0"/><GradientStop Color="#E907171E" Offset="0.48"/><GradientStop Color="#83102934" Offset="0.76"/><GradientStop Color="#D7061016" Offset="1"/></LinearGradientBrush>
+</ResourceDictionary>

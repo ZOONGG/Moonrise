@@ -1,0 +1,20 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Duration x:Key="InstantDuration">0:0:0.10</Duration>
+    <Duration x:Key="FastDuration">0:0:0.14</Duration>
+    <Duration x:Key="ControlDuration">0:0:0.16</Duration>
+    <Duration x:Key="PopupDuration">0:0:0.16</Duration>
+    <Duration x:Key="ToggleDuration">0:0:0.17</Duration>
+    <Duration x:Key="NormalDuration">0:0:0.20</Duration>
+    <Duration x:Key="PageDuration">0:0:0.21</Duration>
+    <Duration x:Key="DrawerDuration">0:0:0.225</Duration>
+    <Duration x:Key="ModalDuration">0:0:0.185</Duration>
+    <Duration x:Key="ToastDuration">0:0:0.20</Duration>
+    <QuadraticEase x:Key="ControlEase" EasingMode="EaseOut"/>
+    <CubicEase x:Key="StandardEase" EasingMode="EaseOut"/>
+    <CubicEase x:Key="AccelerateEase" EasingMode="EaseIn"/>
+    <CubicEase x:Key="ToggleEase" EasingMode="EaseInOut"/>
+    <Storyboard x:Key="LoadingPulse" RepeatBehavior="Forever" AutoReverse="True">
+        <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0.42" To="0.64" Duration="0:0:1.05" EasingFunction="{StaticResource StandardEase}"/>
+    </Storyboard>
+</ResourceDictionary>

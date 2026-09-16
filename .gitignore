@@ -1,0 +1,116 @@
+# .NET build, test, publish, and package output
+**/bin/
+**/obj/
+**/TestResults/
+publish/
+artifacts/
+artifacts-*/
+release/
+release-*/
+coverage/
+coverage.*
+*.trx
+*.coverage
+*.coveragexml
+*.nupkg
+*.snupkg
+*.pdb
+
+# IDE and local tooling
+.vs/
+.idea/
+.vscode/
+.nuget/
+*.user
+*.suo
+*.rsuser
+*.userosscache
+*.sln.docstates
+*.DotSettings.user
+
+# Moonrise user-owned/private data — never commit
+user-mods/
+user-agents/
+profiles/
+plugins/
+language-packs/
+themes/
+!src/Moonrise/Themes/
+!src/Moonrise/Themes/*.xaml
+/packages/
+/cache/
+/settings/
+moonrise-settings.json
+bridge-settings.json
+logs/
+crash-reports/
+crashes/
+*.log
+*.dmp
+*.mdmp
+*.jar
+
+# Runtime state; retain only the reviewed redistributable native bridge
+runtime/**
+!runtime/bridge/
+runtime/bridge/*
+!runtime/bridge/Moonrise.Native.dll
+
+# Generated archives and binaries
+*.zip
+*.7z
+*.rar
+*.exe
+*.dll
+!runtime/bridge/Moonrise.Native.dll
+
+# Accounts, sessions, credentials, and signing material
+accounts.json
+account.json
+sessions/
+session.json
+tokens.json
+credentials.json
+*.token
+*.secret
+*.pfx
+*.p12
+*.pem
+*.key
+*.snk
+.env
+.env.*
+!.env.example
+
+# Temporary files and caches
+*.tmp
+*.temp
+*.bak
+*.cache
+*.pid
+*.lock.tmp
+Thumbs.db
+Desktop.ini
+
+# Historical experiments, validation dumps, and private mod work
+mods/
+mods-src/
+validation*/
+REPORT.md
+tools/BridgeProbeAgent.java
+tools/WeaveMetadataProbe.java
+tools/bridge-probe-manifest.mf
+native/BridgeProbeParent/
+docs/MOD_COMPATIBILITY.md
+
+# Historical root screenshots and validation captures
+/*.png
+/moonrise-test-diag*
+src/Moonrise/Assets/*preview*
+
+# Reproducible Moonrise-owned BWH ExitLag adapter
+!runtime/bwh-network-agent-src/
+!runtime/bwh-network-agent-src/**
+!runtime/adapters/
+runtime/adapters/**
+!runtime/adapters/moonrise-bwh-exitlag-network-agent.jar

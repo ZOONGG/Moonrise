@@ -1,0 +1,17 @@
+<Application x:Class="Moonrise.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/MoonriseColors.xaml"/>
+                <ResourceDictionary Source="Themes/Palettes/Moonlight.xaml"/>
+                <ResourceDictionary Source="Themes/MoonriseTypography.xaml"/>
+                <ResourceDictionary Source="Themes/MoonriseSpacing.xaml"/>
+                <ResourceDictionary Source="Themes/MoonriseIcons.xaml"/>
+                <ResourceDictionary Source="Themes/MoonriseAnimations.xaml"/>
+                <ResourceDictionary Source="Themes/MoonriseControls.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">Moonrise tray icon</title>
+  <desc id="description">A simplified light crescent above a cyan horizon on a dark disc.</desc>
+  <defs>
+    <mask id="crescent">
+      <rect width="512" height="512" fill="#000"/>
+      <ellipse cx="257" cy="225" rx="141" ry="149" fill="#fff"/>
+      <ellipse cx="346" cy="171" rx="118" ry="123" fill="#000"/>
+    </mask>
+  </defs>
+  <circle cx="256" cy="256" r="226" fill="#090b20"/>
+  <circle cx="256" cy="256" r="219" fill="none" stroke="#7657eb" stroke-width="14"/>
+  <rect width="512" height="512" fill="#eee8ff" mask="url(#crescent)"/>
+  <path d="M72 390C156 318 356 318 440 390" fill="none" stroke="#4be0e2" stroke-width="18" stroke-linecap="round"/>
+</svg>

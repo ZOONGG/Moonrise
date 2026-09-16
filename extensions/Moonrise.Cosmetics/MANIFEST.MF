@@ -1,0 +1,7 @@
+Manifest-Version: 1.0
+Premain-Class: moonrise.cosmetics.CosmeticsAgent
+Implementation-Title: Moonrise Cosmetics
+Implementation-Version: 1.3.0
+Can-Redefine-Classes: false
+Can-Retransform-Classes: false
+Moonrise-Clients: lunar

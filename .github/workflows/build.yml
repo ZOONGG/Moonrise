@@ -1,0 +1,90 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+  NUGET_PACKAGES: ${{ github.workspace }}\.nuget\packages
+
+jobs:
+  build:
+    name: Build, test, and installer smoke test
+    runs-on: windows-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+
+      - name: Scan repository safety
+        shell: pwsh
+        env:
+          MOONRISE_PRIVATE_PATTERNS: ${{ secrets.PRIVATE_NAME_PATTERNS }}
+        run: ./tools/Test-RepositorySafety.ps1
+
+      - name: Restore locked dependencies
+        run: dotnet restore Moonrise.sln --locked-mode
+
+      - name: Build Release
+        run: dotnet build Moonrise.sln -c Release --no-restore
+
+      - name: Run tests
+        run: dotnet test Moonrise.sln -c Release --no-build --logger "trx;LogFileName=moonrise.trx" --results-directory artifacts/test-results
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build Setup and Portable artifacts
+        shell: pwsh
+        run: |
+          ./tools/New-MoonriseRelease.ps1 `
+            -Version "0.0.${{ github.run_number }}" `
+            -OutputRoot "artifacts/release" `
+            -SkipRestore `
+            -SkipTests
+
+      - name: Test clean install, upgrade, launch, uninstall, and data handling
+        shell: pwsh
+        run: |
+          ./tools/Test-MoonriseInstaller.ps1 `
+            -SetupPath "artifacts/release/Moonrise-Setup-0.0.${{ github.run_number }}-x64.exe" `
+            -LaunchSmokeTest `
+            -TestUserDataDeletion
+
+      - name: Upload Windows distribution artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: Moonrise-Windows-${{ github.run_number }}
+          path: |
+            artifacts/release/Moonrise-Setup-*
+            artifacts/release/Moonrise-Portable-*
+            artifacts/release/Moonrise-Release-Notes-*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Moonrise-test-results
+          path: artifacts/test-results/*.trx
+          if-no-files-found: error
+          retention-days: 14

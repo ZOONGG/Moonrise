@@ -1,0 +1,69 @@
+name: Bug report
+description: Report a reproducible Moonrise problem
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Moonrise.
+
+        **Do not upload account files, tokens, passwords, private mod JARs, personal information, or full unredacted command lines. Sanitize logs and paths before attaching them.**
+  - type: input
+    id: moonrise-version
+    attributes:
+      label: Moonrise version
+      placeholder: "For example: v1.0.0"
+    validations:
+      required: true
+  - type: input
+    id: windows-version
+    attributes:
+      label: Windows version
+      placeholder: "For example: Windows 11 24H2"
+    validations:
+      required: true
+  - type: input
+    id: client-version
+    attributes:
+      label: Minecraft and Lunar Client version
+      placeholder: "For example: Minecraft 1.8.9 with the current Lunar Client"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Use the smallest reliable sequence and replace personal paths or package names with neutral placeholders.
+      placeholder: |
+        1. Open...
+        2. Select...
+        3. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized diagnostics
+      description: Paste only relevant Moonrise lines after removing usernames, account data, tokens, identifiers, private package names, personal paths, and full command lines.
+      render: text
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed credentials, personal data, account files, private JARs, and unredacted command lines.
+          required: true

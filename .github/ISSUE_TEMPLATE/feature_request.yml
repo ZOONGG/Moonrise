@@ -1,0 +1,42 @@
+name: Feature request
+description: Suggest a focused, mod-agnostic Moonrise improvement
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Moonrise keeps authentication in the official Lunar Launcher and does not accept proprietary Lunar Client files or private mod code.
+
+        **Do not upload account files, tokens, passwords, private mod JARs, personal information, or full unredacted command lines.**
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem should Moonrise solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the user experience and keep the core mod-agnostic.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: input
+    id: compatibility
+    attributes:
+      label: Relevant Lunar Client and Minecraft versions
+      placeholder: "Leave blank if the request is version independent"
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Project boundaries
+      options:
+        - label: This request does not require custom authentication, credential access, proprietary client redistribution, or a bundled private mod.
+          required: true

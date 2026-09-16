@@ -1,0 +1,48 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <SolidColorBrush x:Key="BackgroundPrimary" Color="#070B15"/>
+    <SolidColorBrush x:Key="BackgroundSecondary" Color="#090F1C"/>
+    <SolidColorBrush x:Key="SurfacePrimary" Color="#0E1727"/>
+    <SolidColorBrush x:Key="SurfaceRaised" Color="#121D31"/>
+    <SolidColorBrush x:Key="SurfaceFloating" Color="#17243A"/>
+    <SolidColorBrush x:Key="SurfaceHover" Color="#16233A"/>
+    <SolidColorBrush x:Key="SurfaceSelected" Color="#1B2850"/>
+    <SolidColorBrush x:Key="SurfaceDisabled" Color="#101827"/>
+    <SolidColorBrush x:Key="BorderPrimary" Color="#273956"/>
+    <SolidColorBrush x:Key="BorderSubtle" Color="#1B2940"/>
+    <SolidColorBrush x:Key="BorderStrong" Color="#3A5278"/>
+    <SolidColorBrush x:Key="FocusRing" Color="#8B6FFF"/>
+    <SolidColorBrush x:Key="TextPrimary" Color="#F5F7FC"/>
+    <SolidColorBrush x:Key="TextSecondary" Color="#AAB6CA"/>
+    <SolidColorBrush x:Key="TextMuted" Color="#7182A1"/>
+    <SolidColorBrush x:Key="TextDisabled" Color="#52617B"/>
+    <SolidColorBrush x:Key="AccentPurple" Color="#8B5CF6"/>
+    <SolidColorBrush x:Key="AccentViolet" Color="#A855F7"/>
+    <SolidColorBrush x:Key="AccentBlue" Color="#4C7CFF"/>
+    <SolidColorBrush x:Key="AccentCyan" Color="#22C9E8"/>
+    <SolidColorBrush x:Key="Success" Color="#42D6A4"/>
+    <SolidColorBrush x:Key="Warning" Color="#F2C45C"/>
+    <SolidColorBrush x:Key="Danger" Color="#F05B6B"/>
+    <SolidColorBrush x:Key="SurfaceSecondary" Color="#121D31"/>
+    <SolidColorBrush x:Key="SurfaceElevated" Color="#17243A"/>
+    <SolidColorBrush x:Key="BorderActive" Color="#8B6FFF"/>
+    <SolidColorBrush x:Key="Panel" Color="#0E1727"/>
+    <SolidColorBrush x:Key="Panel2" Color="#121D31"/>
+    <SolidColorBrush x:Key="Border" Color="#1B2940"/>
+    <SolidColorBrush x:Key="Muted" Color="#7182A1"/>
+    <SolidColorBrush x:Key="Accent" Color="#8B5CF6"/>
+    <SolidColorBrush x:Key="ChromeSurface" Color="#B5090E1B"/>
+    <SolidColorBrush x:Key="HeaderStatusSurface" Color="#77131D30"/>
+    <SolidColorBrush x:Key="DrawerSurface" Color="#FC111B2E"/>
+    <SolidColorBrush x:Key="OverlaySurface" Color="#D9080C18"/>
+    <SolidColorBrush x:Key="DropOverlaySurface" Color="#E50A1020"/>
+    <SolidColorBrush x:Key="ScrollThumb" Color="#65748E"/>
+    <SolidColorBrush x:Key="ScrollThumbHover" Color="#8A9AB5"/>
+    <SolidColorBrush x:Key="ScrollThumbPressed" Color="#A6B5CD"/>
+    <LinearGradientBrush x:Key="PrimaryGradient" StartPoint="0,0.5" EndPoint="1,0.5"><GradientStop Color="#915EF5" Offset="0"/><GradientStop Color="#5D72F4" Offset="0.57"/><GradientStop Color="#27BFD8" Offset="1"/></LinearGradientBrush>
+    <LinearGradientBrush x:Key="PrimaryGradientHover" StartPoint="0,0.5" EndPoint="1,0.5"><GradientStop Color="#9E6BFA" Offset="0"/><GradientStop Color="#6980FF" Offset="0.57"/><GradientStop Color="#35CBE3" Offset="1"/></LinearGradientBrush>
+    <LinearGradientBrush x:Key="PrimaryGradientPressed" StartPoint="0,0.5" EndPoint="1,0.5"><GradientStop Color="#7D50D7" Offset="0"/><GradientStop Color="#4B60D1" Offset="0.57"/><GradientStop Color="#1DA5BF" Offset="1"/></LinearGradientBrush>
+    <LinearGradientBrush x:Key="ActiveNavigationGradient" StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#30254F" Offset="0"/><GradientStop Color="#192B4D" Offset="1"/></LinearGradientBrush>
+    <LinearGradientBrush x:Key="SidebarGradient" StartPoint="0,0" EndPoint="0.9,1"><GradientStop Color="#090F1D" Offset="0"/><GradientStop Color="#080D19" Offset="0.62"/><GradientStop Color="#0B1120" Offset="1"/></LinearGradientBrush>
+    <LinearGradientBrush x:Key="HeroOverlay" StartPoint="0,0.5" EndPoint="1,0.5"><GradientStop Color="#FC070B15" Offset="0"/><GradientStop Color="#E609101D" Offset="0.47"/><GradientStop Color="#7609101D" Offset="0.76"/><GradientStop Color="#D1070B15" Offset="1"/></LinearGradientBrush>
+</ResourceDictionary>

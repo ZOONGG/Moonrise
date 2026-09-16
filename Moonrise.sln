@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Moonrise", "src\Moonrise\Moonrise.csproj", "{D26790F7-5734-48D0-B587-961C49F1A05A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Moonrise.Tests", "tests\Moonrise.Tests\Moonrise.Tests.csproj", "{55266900-F820-4C6D-9960-C294A033EE74}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D26790F7-5734-48D0-B587-961C49F1A05A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D26790F7-5734-48D0-B587-961C49F1A05A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D26790F7-5734-48D0-B587-961C49F1A05A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D26790F7-5734-48D0-B587-961C49F1A05A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{55266900-F820-4C6D-9960-C294A033EE74}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{55266900-F820-4C6D-9960-C294A033EE74}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{55266900-F820-4C6D-9960-C294A033EE74}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{55266900-F820-4C6D-9960-C294A033EE74}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

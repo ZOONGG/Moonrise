@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 300" role="img" aria-labelledby="title description">
+  <title id="title">Moonrise horizontal logo</title>
+  <desc id="description">The Moonrise crescent and horizon icon beside the Moonrise wordmark.</desc>
+  <defs>
+    <linearGradient id="background" x1="30" y1="20" x2="275" y2="285" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0b0d27"/>
+      <stop offset="1" stop-color="#2b114e"/>
+    </linearGradient>
+    <linearGradient id="moon" x1="80" y1="50" x2="240" y2="220" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#d4c4ff"/>
+      <stop offset="1" stop-color="#8d52f5"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="45" y1="215" x2="265" y2="215" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8b5bff"/>
+      <stop offset="1" stop-color="#56dde1"/>
+    </linearGradient>
+    <mask id="crescent">
+      <rect width="300" height="300" fill="#000"/>
+      <ellipse cx="151" cy="126" rx="74" ry="80" fill="#fff"/>
+      <ellipse cx="194" cy="97" rx="64" ry="68" fill="#000"/>
+    </mask>
+  </defs>
+  <circle cx="150" cy="150" r="136" fill="url(#background)"/>
+  <circle cx="150" cy="150" r="132" fill="none" stroke="#49317d" stroke-width="5"/>
+  <rect width="300" height="300" fill="url(#moon)" mask="url(#crescent)"/>
+  <path d="M40 222C91 177 209 177 260 222V265H40Z" fill="#170e39"/>
+  <path d="M42 220C94 178 206 178 258 220" fill="none" stroke="url(#accent)" stroke-width="7" stroke-linecap="round"/>
+  <text x="335" y="184" fill="#f5f1ff" font-family="Segoe UI Variable Display,Segoe UI,sans-serif" font-size="148" font-weight="650" letter-spacing="-5">Moonrise</text>
+  <text x="342" y="235" fill="#9b9eb2" font-family="Segoe UI Variable Text,Segoe UI,sans-serif" font-size="27" letter-spacing=".3">MOD MANAGER · LAUNCHER · DIAGNOSTICS</text>
+</svg>

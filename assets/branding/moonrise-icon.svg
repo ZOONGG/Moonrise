@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">Moonrise application icon</title>
+  <desc id="description">A violet crescent rising above a cyan-edged curved horizon.</desc>
+  <defs>
+    <linearGradient id="background" x1="75" y1="55" x2="430" y2="460" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0b0d27"/>
+      <stop offset="1" stop-color="#2b114e"/>
+    </linearGradient>
+    <linearGradient id="moon" x1="150" y1="88" x2="370" y2="352" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#d4c4ff"/>
+      <stop offset="1" stop-color="#8d52f5"/>
+    </linearGradient>
+    <linearGradient id="horizon" x1="68" y1="350" x2="449" y2="350" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8b5bff"/>
+      <stop offset="1" stop-color="#56dde1"/>
+    </linearGradient>
+    <linearGradient id="land" x1="90" y1="330" x2="420" y2="444" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#140d34"/>
+      <stop offset="1" stop-color="#26124e"/>
+    </linearGradient>
+    <mask id="crescent">
+      <rect width="512" height="512" fill="#000"/>
+      <ellipse cx="264" cy="221" rx="130" ry="141" fill="#fff"/>
+      <ellipse cx="336" cy="170" rx="112" ry="118" fill="#000"/>
+    </mask>
+    <clipPath id="disc">
+      <circle cx="256" cy="256" r="228"/>
+    </clipPath>
+  </defs>
+  <circle cx="256" cy="256" r="228" fill="url(#background)"/>
+  <circle cx="256" cy="256" r="224" fill="none" stroke="#49317d" stroke-width="8" opacity=".82"/>
+  <rect width="512" height="512" fill="url(#moon)" mask="url(#crescent)"/>
+  <g clip-path="url(#disc)">
+    <path d="M61 374C148 298 363 298 451 374V451H61Z" fill="url(#land)"/>
+    <path d="M65 371C153 299 359 299 447 371" fill="none" stroke="#51e2e6" stroke-width="15" stroke-linecap="round" opacity=".25"/>
+    <path d="M65 371C153 299 359 299 447 371" fill="none" stroke="url(#horizon)" stroke-width="8" stroke-linecap="round"/>
+  </g>
+</svg>
