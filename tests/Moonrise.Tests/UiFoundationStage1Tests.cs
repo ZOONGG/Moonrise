@@ -66,8 +66,8 @@ public sealed class UiFoundationStage1Tests
         var xaml = Read("src", "Moonrise", "MainWindow.xaml");
         var code = Read("src", "Moonrise", "MainWindow.xaml.cs");
 
-        Assert.Contains("RussianLanguageButton_Click", xaml, StringComparison.Ordinal);
-        Assert.Contains("EnglishLanguageButton_Click", xaml, StringComparison.Ordinal);
+        Assert.Contains("LanguageOptionsPanel", xaml, StringComparison.Ordinal);
+        Assert.Contains("LanguagePackComboBox.SelectedItem = language", code, StringComparison.Ordinal);
         Assert.Contains("T(\"Главная\", \"Home\")", code, StringComparison.Ordinal);
         Assert.Contains("T(\"Настройки\", \"Settings\")", code, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"DevelopersTabButton\"", xaml, StringComparison.Ordinal);

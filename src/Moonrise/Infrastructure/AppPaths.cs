@@ -64,7 +64,7 @@ public sealed class AppPaths
     public string ProfilesDirectory => Path.Combine(SettingsDirectory, "profiles");
     public string PluginsDirectory => Path.Combine(RootDirectory, "plugins");
     public string LanguagePacksDirectory => Path.Combine(SettingsDirectory, "language-packs");
-    public string ThemesDirectory => Path.Combine(SettingsDirectory, "themes");
+    public string ThemesDirectory => Path.Combine(RootDirectory, "themes");
     public string RuntimeDirectory => Path.Combine(CacheDirectory, "runtime");
     public string WeaveDirectory => Path.Combine(RuntimeDirectory, "weave");
     public string WeaveAgentPath => Path.Combine(WeaveDirectory, "weave-loader.jar");

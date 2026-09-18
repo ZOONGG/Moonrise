@@ -41,6 +41,8 @@ public partial class App : System.Windows.Application
         MainWindow = window;
         window.Show();
 
+        if (visualQaMode) return;
+
         _activationCancellation = new CancellationTokenSource();
         _activationTask = ListenForActivationsAsync(_activationCancellation.Token);
     }

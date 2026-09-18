@@ -39,11 +39,13 @@ public sealed class MoonriseServicesTests
     }
 
     [Fact]
-    public void Settings_MigratesExistingInstallToBackgroundLunarLaunchOnce()
+    public void Settings_MigratesExistingInstallToBackgroundLunarLaunch()
     {
         using var temp = new TemporaryDirectory();
         var path = Path.Combine(temp.Path, "moonrise-settings.json");
-        File.WriteAllText(path, """{"BackgroundLunarLaunch":false,"Language":"ru"}""");
+        File.WriteAllText(
+            path,
+            """{"SettingsSchemaVersion":4,"BackgroundLunarLaunch":false,"Language":"ru"}""");
         var service = new AppSettingsService(path);
 
         var migrated = service.Load();
@@ -69,7 +71,7 @@ public sealed class MoonriseServicesTests
     }
 
     [Fact]
-    public void Settings_RestoresMoonlightDesignOnceAndPreservesLaterThemeChoices()
+    public void Settings_MigratesLegacyThemeIdsAndPreservesLaterThemePackChoices()
     {
         using var temp = new TemporaryDirectory();
         var path = Path.Combine(temp.Path, "moonrise-settings.json");
@@ -81,10 +83,10 @@ public sealed class MoonriseServicesTests
         Assert.Equal("moonlight", migrated.Theme);
         Assert.Equal(MoonriseSettings.CurrentSettingsSchemaVersion, migrated.SettingsSchemaVersion);
 
-        migrated.Theme = "aurora";
+        migrated.Theme = "ember";
         service.Save(migrated);
 
-        Assert.Equal("aurora", service.Load().Theme);
+        Assert.Equal("ember", service.Load().Theme);
     }
 
     [Fact]
@@ -459,7 +461,7 @@ public sealed class MoonriseServicesTests
     }
 
     [Fact]
-    public void AppearancePacks_LoadCustomLanguageAndExactlyThreeBuiltInThemes()
+    public void AppearancePacks_LoadCustomLanguageAndThreeThemePackBuiltIns()
     {
         using var temp = new TemporaryDirectory();
         var languages = Path.Combine(temp.Path, "languages");
@@ -475,7 +477,7 @@ public sealed class MoonriseServicesTests
 
         Assert.Equal("Starten", service.Translate(language, "Launch"));
         Assert.Equal("Settings", service.Translate(language, "Settings"));
-        Assert.Equal(["moonlight", "obsidian", "aurora"], themeIds);
+        Assert.Equal(["moonlight", "ember", "porcelain"], themeIds);
         Assert.Equal("Deutsch", language.ToString());
     }
 

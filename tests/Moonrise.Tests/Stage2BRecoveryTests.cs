@@ -47,7 +47,7 @@ public sealed class Stage2BRecoveryTests
             "var confirmed = await WaitForProfileWithLauncherAsync(",
             StringComparison.Ordinal);
         var dispatch = source.IndexOf(
-            "await DispatchLaunchToExistingLunarAsync(launcherPath, token)",
+            "await DispatchLaunchToExistingLunarAsync(launcherPath, backgroundLaunch, token)",
             launchFlowStart,
             StringComparison.Ordinal);
         var restore = source.IndexOf(

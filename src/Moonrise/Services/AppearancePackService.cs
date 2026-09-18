@@ -18,6 +18,16 @@ public sealed partial class AppearancePackService
             new() { Code = "ru", Name = "Русский" },
             new() { Code = "en", Name = "English" }
         };
+        var assembly = typeof(AppearancePackService).Assembly;
+        foreach (var resource in assembly.GetManifestResourceNames()
+                     .Where(name => name.StartsWith("Moonrise.LanguagePacks.", StringComparison.Ordinal))
+                     .OrderBy(name => name, StringComparer.Ordinal))
+        {
+            using var stream = assembly.GetManifestResourceStream(resource)!;
+            var pack = JsonSerializer.Deserialize<LanguagePack>(stream, JsonOptions)!;
+            ValidateLanguage(pack);
+            packs.Add(pack);
+        }
         foreach (var path in Directory.EnumerateFiles(directory, "*.moonrise-language.json")
                      .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
         {
@@ -37,16 +47,22 @@ public sealed partial class AppearancePackService
         return packs;
     }
 
-    public IReadOnlyList<ThemePack> LoadThemes(string directory)
+    public void WriteLanguageExamples(string directory)
     {
         Directory.CreateDirectory(directory);
-        return new List<ThemePack>
+        var assembly = typeof(AppearancePackService).Assembly;
+        foreach (var name in new[] { "en.template.json", "ru.template.json", "README.md" })
         {
-            new() { Id = "moonlight", Name = "Moonlight", WindowBackground = "#070B15", Panel = "#0E1727", PanelSecondary = "#121D31", Border = "#273956", Muted = "#7182A1", Accent = "#8B5CF6", PrimaryText = "#F5F7FC" },
-            new() { Id = "obsidian", Name = "Obsidian", WindowBackground = "#090B0F", Panel = "#12161C", PanelSecondary = "#171C23", Border = "#2A343F", Muted = "#737F8C", Accent = "#7189A5", PrimaryText = "#F1F3F5" },
-            new() { Id = "aurora", Name = "Aurora", WindowBackground = "#061016", Panel = "#0B1C25", PanelSecondary = "#102630", Border = "#244552", Muted = "#708F98", Accent = "#29B8C7", PrimaryText = "#F1FAFB" }
-        };
+            var destination = Path.Combine(directory, name);
+            if (File.Exists(destination)) continue;
+            using var source = assembly.GetManifestResourceStream("Moonrise.LanguageTemplates." + name)!;
+            using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write);
+            source.CopyTo(output);
+        }
     }
+
+    public IReadOnlyList<ThemePack> LoadThemes(string directory, Action<string>? reportError = null) =>
+        new ThemePackService().LoadThemes(directory, reportError);
 
     public string Translate(LanguagePack language, string english) =>
         language.Translations.TryGetValue(english, out var translation) && !string.IsNullOrWhiteSpace(translation)
@@ -74,19 +90,6 @@ public sealed partial class AppearancePackService
         }
     }
 
-    private static void ValidateTheme(ThemePack pack)
-    {
-        if (pack.SchemaVersion != CurrentSchemaVersion || !ThemeIdPattern().IsMatch(pack.Id) ||
-            string.IsNullOrWhiteSpace(pack.Name))
-            throw new InvalidDataException("The theme pack metadata is invalid.");
-        foreach (var color in new[] { pack.WindowBackground, pack.Panel, pack.PanelSecondary, pack.Border, pack.Muted, pack.Accent })
-            if (!ColorPattern().IsMatch(color)) throw new InvalidDataException("Theme colors must use #RRGGBB or #AARRGGBB.");
-    }
-
     [GeneratedRegex("^[a-zA-Z]{2,3}(?:-[a-zA-Z0-9]{2,8})*$", RegexOptions.CultureInvariant)]
     private static partial Regex LanguageCodePattern();
-    [GeneratedRegex("^[a-z0-9][a-z0-9-]{1,40}$", RegexOptions.CultureInvariant)]
-    private static partial Regex ThemeIdPattern();
-    [GeneratedRegex("^#(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$", RegexOptions.CultureInvariant)]
-    private static partial Regex ColorPattern();
 }

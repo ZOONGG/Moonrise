@@ -33,11 +33,10 @@ public sealed class Stage3VisualPolishTests
     }
 
     [Fact]
-    public void ThemeServiceExposesOnlyTheThreeBuiltInPalettes()
+    public void ThemeServiceExposesTheThreeThemePackBuiltIns()
     {
-        Assert.Equal(["moonlight", "obsidian", "aurora"], ThemeService.BuiltInThemeSources.Keys);
         var packs = new AppearancePackService().LoadThemes(Path.Combine(Path.GetTempPath(), "moonrise-stage3-theme-test"));
-        Assert.Equal(["moonlight", "obsidian", "aurora"], packs.Select(pack => pack.Id));
+        Assert.Equal(["moonlight", "ember", "porcelain"], packs.Select(pack => pack.Id));
     }
 
     [Fact]
@@ -46,8 +45,8 @@ public sealed class Stage3VisualPolishTests
         using var temp = new TemporaryDirectory();
         var path = Path.Combine(temp.Path, "settings.json");
         var service = new AppSettingsService(path);
-        service.Save(new MoonriseSettings { Theme = "aurora" });
-        Assert.Equal("aurora", service.Load().Theme);
+        service.Save(new MoonriseSettings { Theme = "porcelain" });
+        Assert.Equal("porcelain", service.Load().Theme);
     }
 
     [Fact]

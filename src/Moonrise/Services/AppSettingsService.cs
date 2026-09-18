@@ -17,18 +17,26 @@ public sealed class AppSettingsService(string path)
                 : new MoonriseSettings();
             if (settings.SettingsSchemaVersion < MoonriseSettings.CurrentSettingsSchemaVersion)
             {
-                if (settings.SettingsSchemaVersion < 2)
-                {
-                    // Version 2 makes quiet Lunar startup the default for existing
-                    // installations. Once migrated, an explicit user choice is kept.
-                    settings.BackgroundLunarLaunch = true;
-                }
                 if (settings.SettingsSchemaVersion < 3)
                 {
-                    // Version 3 restores the 02.08 Moonlight presentation once for
+                    // Version 3 restores the bundled Moonrise presentation once for
                     // existing installations. The theme picker remains available and
                     // later explicit choices are preserved.
-                    settings.Theme = "moonlight";
+                    settings.Theme = "standard";
+                }
+                if (settings.SettingsSchemaVersion < 5)
+                {
+                    // Background Lunar remains an internal launch behavior. The
+                    // user-facing switch was removed, so normalize old values.
+                    settings.BackgroundLunarLaunch = true;
+                }
+                if (settings.SettingsSchemaVersion < 6 &&
+                    (string.Equals(settings.Theme, "obsidian", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(settings.Theme, "aurora", StringComparison.OrdinalIgnoreCase)))
+                {
+                    // V1 replaces legacy palette-only choices with full theme packs.
+                    // Moonrise Standard is the safe migration target for removed ids.
+                    settings.Theme = "standard";
                 }
                 settings.SettingsSchemaVersion = MoonriseSettings.CurrentSettingsSchemaVersion;
                 TrySaveMigration(settings);

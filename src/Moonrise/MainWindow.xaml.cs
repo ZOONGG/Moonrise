@@ -50,7 +50,8 @@ public partial class MainWindow : Window
     private readonly ModpackProfileService _loadouts = new();
     private readonly ClientPluginService _clientPluginService = new();
     private readonly AppearancePackService _appearancePacks = new();
-    private readonly ThemeService _themeService = new();
+    private readonly ThemePackService _themePacks = new();
+    private readonly ThemeService _themeService;
     private readonly MotionController _motion = new();
     private readonly ToastController _toasts;
     private readonly ApplicationUpdateService _applicationUpdates = new();
@@ -107,7 +108,10 @@ public partial class MainWindow : Window
     public MainWindow(string? activationArgument = null, bool visualQaMode = false)
     {
         _toasts = new ToastController(Dispatcher);
+        _themeService = new ThemeService(_themePacks);
         _visualQaMode = visualQaMode;
+        if (visualQaMode && Environment.GetEnvironmentVariable("MOONRISE_VISUAL_QA_DATA_ROOT") is { Length: > 0 } qaRoot)
+            _paths = new AppPaths(qaRoot, AppContext.BaseDirectory, AppMode.Development);
         _packages = new PackageCatalogService(_jarParser);
         _library = new LocalPackageLibrary(_paths, _jarParser);
         _launchResolver = new PackageLaunchResolver(_jarParser, _paths);
@@ -124,7 +128,7 @@ public partial class MainWindow : Window
         ConfigureMotionResources();
         InitializeComponent();
         InitializeAppearancePacks();
-        InitializeTrayIcon();
+        if (!_visualQaMode) InitializeTrayIcon();
         var version = typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
         AboutVersionText.Text = $"Moonrise {version}";
         AboutInlineVersionText.Text = version;
@@ -558,7 +562,7 @@ public partial class MainWindow : Window
 
     private void MainWindow_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (LanguagePopup.IsOpen && !LanguageButton.IsMouseOver)
+        if (LanguagePopup.IsOpen && !LanguageButton.IsMouseOver && LanguagePopup.Child?.IsMouseOver != true)
             LanguagePopup.IsOpen = false;
     }
 
@@ -656,10 +660,15 @@ public partial class MainWindow : Window
         var code = _languageCode;
         var languages = _appearancePacks.LoadLanguages(_paths.LanguagePacksDirectory,
             error => AddDiagnostic($"Language pack: {error}"));
+        if (languages.Count == _languageChoices.Count && languages.Zip(_languageChoices).All(pair =>
+                pair.First.Code == pair.Second.Code && pair.First.Name == pair.Second.Name &&
+                pair.First.Translations.Count == pair.Second.Translations.Count &&
+                pair.First.Translations.All(item => pair.Second.Translations.GetValueOrDefault(item.Key) == item.Value)))
+            return;
         _languageChoices.Clear();
         foreach (var language in languages) _languageChoices.Add(language);
         LanguagePackComboBox.SelectedItem = _languageChoices.FirstOrDefault(pack =>
-            string.Equals(pack.Code, code, StringComparison.OrdinalIgnoreCase)) ?? _languageChoices.First(pack => pack.Code == "en");
+            string.Equals(pack.Code, code, StringComparison.OrdinalIgnoreCase)) ?? _languageChoices.First(pack => string.Equals(pack.Code, "en", StringComparison.OrdinalIgnoreCase));
     }
 
     private void ApplyLanguage()
@@ -668,10 +677,14 @@ public partial class MainWindow : Window
         LanguageButton.ToolTip = _activeLanguage?.Name;
         RefreshLanguageMenu();
         CatalogComingSoonText.Text = T("Скоро", "Coming soon");
-        DiscordButton.ToolTip = T("Discord — скоро", "Discord — coming soon");
+        DiscordButton.ToolTip = T("Открыть Discord Moonrise", "Open Moonrise Discord");
+        System.Windows.Automation.AutomationProperties.SetName(DiscordButton, (string)DiscordButton.ToolTip);
         SupportButton.ToolTip = T("Поддержать автора", "Support the author");
         System.Windows.Automation.AutomationProperties.SetName(SupportButton, (string)SupportButton.ToolTip);
-        OpenThemesButton.Content = T("Открыть папку", "Open folder");
+        OpenThemesButton.Content = T("Открыть папку тем", "Open themes folder");
+        ReloadThemesButton.Content = T("Обновить темы", "Reload themes");
+        ImportThemeButton.Content = T("Импортировать папку", "Import folder");
+        CreateThemeTemplateButton.Content = T("Создать шаблон темы", "Create theme template");
         HomeTabButton.Content = T("Главная", "Home"); CatalogTabButton.Content = T("Каталог", "Catalog");
         LibraryTabButton.Content = T("Библиотека", "Library"); SettingsTabButton.Content = T("Настройки", "Settings"); DevelopersTabButton.Content = T("Разработчикам", "Developers");
         DeveloperSectionLabel.Text = T("ДЛЯ РАЗРАБОТЧИКОВ", "FOR DEVELOPERS");
@@ -709,11 +722,12 @@ public partial class MainWindow : Window
         CloseAfterTitle.Text = T("Закрывать после запуска", "Close after launch"); CloseAfterHint.Text = T("Закрыть Moonrise после запуска игрового процесса.", "Close Moonrise when the game process starts.");
         RevealLunarTitle.Text = T("Показывать Lunar, если требуется действие", "Show Lunar when action is required"); RevealLunarHint.Text = T("Показать официальный лаунчер для входа, обновления или другого действия.", "Reveal the official launcher for authentication, updates, or other interaction.");
         StorageTitle.Text = T("Пакеты Moonrise занимают:", "Moonrise packages use:");
+        StorageHint.Text = T("Откройте папку данных Moonrise.", "Open the Moonrise data directory.");
         OpenRootButton.Content = T("Открыть папку", "Open folder");
         ClearTemporaryFilesButton.Content = T("Очистить временные файлы", "Clear temporary files");
         PluginsTitle.Text = T("Плагины клиентов", "Client plugins"); PluginsHint.Text = T("Подключайте новые клиенты через изолированный JSON-протокол запуска.", "Add clients through the isolated JSON launch protocol."); OpenPluginsButton.Content = T("Открыть папку", "Open folder");
         LanguagePacksTitle.Text = T("Языковые пакеты", "Language packs"); LanguagePacksHint.Text = T("Добавьте файл .moonrise-language.json в папку и выберите язык.", "Add a .moonrise-language.json file to the folder and select a language."); OpenLanguagePacksButton.Content = T("Открыть папку", "Open folder");
-        ThemesTitle.Text = T("Тема", "Theme"); ThemesHint.Text = T("Выберите одну из трёх встроенных цветовых тем.", "Choose one of three built-in color themes.");
+        ThemesTitle.Text = T("Пакеты тем", "Theme packs"); ThemesHint.Text = T("Встроенные стили и безопасные локальные темы.", "Built-in identities and safe local custom themes.");
         UpdatesTitle.Text = T("Обновления", "Updates"); UpdatesHint.Text = T("Проверять официальные выпуски Moonrise на GitHub. До появления сертификата выпуски не подписаны.", "Check official Moonrise releases on GitHub. Releases are unsigned until a certificate is available."); PrereleaseUpdatesText.Text = T("Предварительные версии", "Prerelease channel"); CheckUpdateButton.Content = T("Проверить", "Check"); InstallUpdateButton.Content = T("Установить и перезапустить", "Install and restart");
         DiagnosticsSettingsTitle.Text = T("Диагностика", "Diagnostics"); DiagnosticsSettingsHint.Text = T("Локальные события запуска и установки.", "Local launch and installation events."); OpenDiagnosticsSettingsButton.Content = OpenDiagnosticsButton.Content = T("Открыть диагностику", "Open diagnostics");
         DeveloperModeTitle.Text = T("Режим разработчика", "Developer mode"); DeveloperModeHint.Text = T("Показать локальную проверку пакетов и инструменты манифеста.", "Show local package inspection and manifest tools.");
@@ -746,13 +760,18 @@ public partial class MainWindow : Window
 
     private void InitializeAppearancePacks()
     {
+        var rejectedThemes = new List<string>();
         foreach (var language in _appearancePacks.LoadLanguages(_paths.LanguagePacksDirectory, error => AddDiagnostic($"Language pack: {error}"))) _languageChoices.Add(language);
-        foreach (var theme in _appearancePacks.LoadThemes(_paths.ThemesDirectory)) _themeChoices.Add(theme);
+        foreach (var theme in _themePacks.LoadThemes(_paths.ThemesDirectory, error =>
+                 {
+                     rejectedThemes.Add(error);
+                     AddDiagnostic($"Theme pack rejected: {error}");
+                 })) _themeChoices.Add(theme);
         LanguagePackComboBox.ItemsSource = _languageChoices;
         ThemeComboBox.ItemsSource = _themeChoices;
         ThemePreviewList.ItemsSource = _themeChoices;
         _activeLanguage = _languageChoices.FirstOrDefault(pack => string.Equals(pack.Code, _languageCode, StringComparison.OrdinalIgnoreCase))
-            ?? _languageChoices.First(pack => pack.Code == "en");
+            ?? _languageChoices.First(pack => string.Equals(pack.Code, "en", StringComparison.OrdinalIgnoreCase));
         _languageCode = _activeLanguage.Code;
         _russian = string.Equals(_languageCode, "ru", StringComparison.OrdinalIgnoreCase);
         LanguagePackComboBox.SelectedItem = _activeLanguage;
@@ -760,6 +779,9 @@ public partial class MainWindow : Window
             ?? _themeChoices[0];
         ThemeComboBox.SelectedItem = selectedTheme;
         ThemePreviewList.SelectedItem = selectedTheme;
+        if (rejectedThemes.Count > 0)
+            ShowToast(ToastKind.Warning, T("Некорректная тема пропущена", "Invalid theme skipped"),
+                T("Moonrise Standard оставлена активной; подробности в диагностике.", "Moonrise Standard was kept; see diagnostics for details."));
     }
 
     private void LanguagePackComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -796,11 +818,93 @@ public partial class MainWindow : Window
         ThemeComboBox.SelectedItem = theme;
     }
 
+    private void SettingsScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (Math.Abs(e.VerticalChange) < double.Epsilon && Math.Abs(e.HorizontalChange) < double.Epsilon)
+            return;
+
+        LanguagePackComboBox.IsDropDownOpen = false;
+        ThemeComboBox.IsDropDownOpen = false;
+    }
+
     private void ApplyTheme()
     {
         if (ThemeComboBox.SelectedItem is not ThemePack theme) return;
-        _themeService.Apply(Application.Current.Resources, theme.Id);
-        _settings.Theme = _themeService.CurrentThemeId;
+        try
+        {
+            _themeService.Apply(Application.Current.Resources, theme,
+                diagnostic =>
+                {
+                    AddDiagnostic(diagnostic);
+                    ShowToast(ToastKind.Warning, T("Тема не перезагружена", "Theme reload rejected"), diagnostic);
+                },
+                reloaded =>
+                {
+                    AddDiagnostic($"Theme hot reloaded: {reloaded.Id}");
+                    ShowToast(ToastKind.Success, T("Тема обновлена", "Theme reloaded"), reloaded.Name);
+                });
+            _settings.Theme = _themeService.CurrentThemeId;
+        }
+        catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            AddDiagnostic($"Theme '{theme.Id}' rejected: {exception.Message}");
+            var fallback = _themeChoices.First(item => item.Id == "standard");
+            _themeService.Apply(Application.Current.Resources, fallback);
+            _settings.Theme = fallback.Id;
+            if (ThemeComboBox.SelectedItem != fallback) ThemeComboBox.SelectedItem = fallback;
+            ShowToast(ToastKind.Warning, T("Тема отклонена", "Theme rejected"), T("Используется Moonrise Standard.", "Moonrise Standard was restored."));
+        }
+    }
+
+    private void ReloadThemesButton_Click(object sender, RoutedEventArgs e) => ReloadThemes();
+
+    private void ReloadThemes()
+    {
+        var selectedId = _settings.Theme;
+        _themeChoices.Clear();
+        foreach (var theme in _themePacks.LoadThemes(_paths.ThemesDirectory, error => AddDiagnostic($"Theme pack rejected: {error}")))
+            _themeChoices.Add(theme);
+        var selected = _themeChoices.FirstOrDefault(theme => string.Equals(theme.Id, selectedId, StringComparison.OrdinalIgnoreCase))
+                       ?? _themeChoices.First(theme => theme.Id == "standard");
+        ThemeComboBox.SelectedItem = selected;
+        ThemePreviewList.SelectedItem = selected;
+    }
+
+    private void CreateThemeTemplateButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var directory = _themePacks.CreateTemplate(_paths.ThemesDirectory);
+            ReloadThemes();
+            OpenFolder(directory);
+            ShowToast(ToastKind.Success, T("Шаблон темы создан", "Theme template created"), Path.GetFileName(directory));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            ShowError(exception.Message);
+        }
+    }
+
+    private void ImportThemeButton_Click(object sender, RoutedEventArgs e)
+    {
+        using var dialog = new Forms.FolderBrowserDialog
+        {
+            Description = T("Выберите папку темы с theme.json", "Select a theme folder containing theme.json"),
+            UseDescriptionForTitle = true,
+            ShowNewFolderButton = false
+        };
+        if (dialog.ShowDialog() != Forms.DialogResult.OK) return;
+        try
+        {
+            var imported = _themePacks.ImportDirectory(dialog.SelectedPath, _paths.ThemesDirectory);
+            ReloadThemes();
+            ThemeComboBox.SelectedItem = _themeChoices.First(theme => theme.Id == imported.Id);
+            ShowToast(ToastKind.Success, T("Тема импортирована", "Theme imported"), imported.Name);
+        }
+        catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+            ShowError(exception.Message);
+        }
     }
 
     private string FormatPackageCount(int count)
@@ -1293,8 +1397,20 @@ public partial class MainWindow : Window
     private void OpenLogsButton_Click(object sender, RoutedEventArgs e) => OpenFolder(_paths.LogsDirectory);
     private void OpenRootButton_Click(object sender, RoutedEventArgs e) => OpenFolder(_paths.PackagesDirectory);
     private void OpenPluginsButton_Click(object sender, RoutedEventArgs e) => OpenFolder(_paths.PluginsDirectory);
-    private void OpenLanguagePacksButton_Click(object sender, RoutedEventArgs e) => OpenFolder(_paths.LanguagePacksDirectory);
+    private void OpenLanguagePacksButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _appearancePacks.WriteLanguageExamples(_paths.LanguagePacksDirectory);
+            OpenFolder(_paths.LanguagePacksDirectory);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            ShowError(exception.Message);
+        }
+    }
     private void OpenThemesButton_Click(object sender, RoutedEventArgs e) => OpenFolder(_paths.ThemesDirectory);
+    private void DiscordButton_Click(object sender, RoutedEventArgs e) => OpenExternalUrl("https://discord.gg/RMZysft2g9");
     private void GitHubButton_Click(object sender, RoutedEventArgs e) => OpenExternalUrl("https://github.com/ZOONGG/Moonrise");
     private void SupportButton_Click(object sender, RoutedEventArgs e) =>
         ShowToast(ToastKind.Info, T("Поддержать автора", "Support the author"),
@@ -2188,9 +2304,7 @@ public partial class MainWindow : Window
                 launchReport.Set("bwhNetworkAgentSha256", BwhNetworkAgentDeploymentService.ExpectedSha256);
                 AddDiagnostic($"BWH ExitLag network adapter prepared: {bwhNetworkAgentPath}");
             }
-            SetLaunchProgress(backgroundLaunch
-                ? T("Запуск Lunar в фоне", "Starting Lunar in the background")
-                : T("Запуск Lunar", "Starting Lunar"));
+            SetLaunchProgress(T("Запуск Lunar в фоне", "Starting Lunar in the background"));
             if (enabledMods.Count + enabledAgents.Count == 0)
             {
                 using var process = StartLauncherWithoutBridge(launcherPath, backgroundLaunch);
@@ -2281,7 +2395,7 @@ public partial class MainWindow : Window
                 !string.Equals(confirmed.Version, SelectedVersion, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException($"Lunar selected {confirmed.Client} {confirmed.Version}, expected {SelectedClient} {SelectedVersion}.");
 
-            await DispatchLaunchToExistingLunarAsync(launcherPath, token);
+            await DispatchLaunchToExistingLunarAsync(launcherPath, backgroundLaunch, token);
             profileSelection.Restore();
             profileSelection = null;
             launchReport.Set("launchStage", "waiting-for-java");
@@ -2375,6 +2489,7 @@ public partial class MainWindow : Window
 
     private async Task DispatchLaunchToExistingLunarAsync(
         string launcherPath,
+        bool backgroundLaunch,
         CancellationToken cancellationToken)
     {
         var background = _activeLunarBackground;
@@ -2388,8 +2503,8 @@ public partial class MainWindow : Window
                 ?? throw new InvalidOperationException("Unable to send the launch command to Lunar Client.");
             AddDiagnostic($"Lunar launch command sent through hidden IPC sender: PID {sender.Id}");
 
-            var hideUntil = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(3);
-            while (DateTimeOffset.UtcNow < hideUntil)
+            var hideUntil = backgroundLaunch ? DateTimeOffset.UtcNow + TimeSpan.FromSeconds(3) : DateTimeOffset.UtcNow;
+            while (backgroundLaunch && DateTimeOffset.UtcNow < hideUntil)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 background?.HideOwnedWindows();
@@ -3223,6 +3338,7 @@ public partial class MainWindow : Window
     private void MainWindow_Closed(object? sender, EventArgs e)
     {
         _toasts.Clear();
+        _themeService.Dispose();
         if (!_visualQaMode)
             SaveSettings();
         _monitorCancellation?.Cancel();

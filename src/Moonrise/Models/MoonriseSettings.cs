@@ -2,11 +2,11 @@ namespace Moonrise.Models;
 
 public sealed class MoonriseSettings
 {
-    public const int CurrentSettingsSchemaVersion = 3;
+    public const int CurrentSettingsSchemaVersion = 6;
 
     public int SettingsSchemaVersion { get; set; }
     public string Language { get; set; } = "ru";
-    public string Theme { get; set; } = "moonlight";
+    public string Theme { get; set; } = "standard";
     public string Client { get; set; } = "lunar";
     public string MinecraftVersion { get; set; } = "1.8.9";
     public string LauncherExecutablePath { get; set; } = string.Empty;

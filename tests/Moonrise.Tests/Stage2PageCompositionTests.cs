@@ -22,6 +22,10 @@ public sealed class Stage2PageCompositionTests
         Assert.Contains("x:Name=\"LaunchProfileCard\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"ModsLoadoutCard\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"AgentsLoadoutCard\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ClientComboBox\" DisplayMemberPath=\"Name\" SelectionChanged=\"ClientComboBox_SelectionChanged\" Visibility=\"Collapsed\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"VersionComboBox\" DropDownOpened=\"VersionComboBox_DropDownOpened\" SelectionChanged=\"VersionComboBox_SelectionChanged\" Visibility=\"Collapsed\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"ClientNameText\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Name=\"VersionText\"", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -53,14 +57,21 @@ public sealed class Stage2PageCompositionTests
 
         foreach (var command in new[]
                  {
-                     "BrowseLauncherButton_Click", "BackgroundLaunchCheckBox_Click", "RevealLunarCheckBox_Click",
-                     "CloseAfterLaunchCheckBox_Click", "SafeLaunchCheckBox_Click", "CatalogAutoUpdateCheckBox_Click",
+                     "BrowseLauncherButton_Click", "RevealLunarCheckBox_Click",
+                     "CloseAfterLaunchCheckBox_Click",
                      "LanguagePackComboBox_SelectionChanged", "ThemeComboBox_SelectionChanged",
                      "DeveloperModeCheckBox_Click", "OpenDiagnosticsButton_Click", "OpenLogsButton_Click"
                  })
             Assert.Contains(command, xaml, StringComparison.Ordinal);
 
         Assert.Contains("x:Name=\"SettingsScrollViewer\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ScrollChanged=\"SettingsScrollViewer_ScrollChanged\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("LanguagePackComboBox.IsDropDownOpen = false", code, StringComparison.Ordinal);
+        Assert.Contains("ThemeComboBox.IsDropDownOpen = false", code, StringComparison.Ordinal);
+        foreach (var removed in new[] { "BackgroundLaunchCheckBox", "SafeLaunchCheckBox", "CatalogAutoUpdateCheckBox", "PrivacyTitle" })
+            Assert.DoesNotContain($"x:Name=\"{removed}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("var backgroundLaunch = true", code, StringComparison.Ordinal);
+        Assert.Contains("StartLunarWindowWatcher(_activeLunarBackground)", code, StringComparison.Ordinal);
         Assert.Contains("_settings.DeveloperMode || _visualQaMode", code, StringComparison.Ordinal);
         Assert.Contains("DevelopersTabButton.Visibility = _settings.DeveloperMode", code, StringComparison.Ordinal);
     }
