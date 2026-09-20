@@ -108,7 +108,7 @@
                 <GeometryDrawing Brush="#5B49C8"><GeometryDrawing.Geometry><EllipseGeometry Center="9,14" RadiusX="7" RadiusY="7"/></GeometryDrawing.Geometry></GeometryDrawing>
                 <GeometryDrawing Brush="#8B6CFF"><GeometryDrawing.Geometry><EllipseGeometry Center="15,10" RadiusX="7" RadiusY="7"/></GeometryDrawing.Geometry></GeometryDrawing>
                 <GeometryDrawing Brush="#D9D2FF"><GeometryDrawing.Geometry><PathGeometry Figures="M15,6 L18,10 L15,14 L12,10 Z"/></GeometryDrawing.Geometry></GeometryDrawing>
-                <GeometryDrawing Brush="#FFFFFF" Opacity="0.9"><GeometryDrawing.Geometry><EllipseGeometry Center="9" RadiusX="2.1" RadiusY="2.1"/></GeometryDrawing.Geometry></GeometryDrawing>
+                <GeometryDrawing Brush="#FFFFFF" Opacity="0.9"><GeometryDrawing.Geometry><EllipseGeometry Center="9,14" RadiusX="2.1" RadiusY="2.1"/></GeometryDrawing.Geometry></GeometryDrawing>
             </DrawingGroup>
         </DrawingImage.Drawing>
     </DrawingImage>
