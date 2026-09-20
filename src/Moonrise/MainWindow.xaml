@@ -1167,7 +1167,7 @@
                                         Click="SupportCryptoMethodButton_Click" AutomationProperties.Name="Cryptocurrency">
                                     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="52"/><ColumnDefinition/></Grid.ColumnDefinitions>
                                         <Border Width="42" Height="42" CornerRadius="21" Background="{DynamicResource SurfaceSecondary}" HorizontalAlignment="Left">
-                                             <Image Source="{StaticResource CryptoWalletIcon}" Width="30" Height="30"/>
+                                             <Image Source="{StaticResource CryptoMethodIcon}" Width="30" Height="30"/>
                                         </Border>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                             <TextBlock x:Name="SupportCryptoTitle" Text="Crypto" FontWeight="SemiBold" FontSize="15"/>
@@ -1208,7 +1208,7 @@
                                 <TextBlock x:Name="SupportChooseAssetTitle" Text="Choose an asset" FontSize="17" FontWeight="SemiBold"/>
                                 <TextBlock x:Name="SupportChooseAssetHint" Text="The payment network is shown on the next screen." Foreground="{DynamicResource TextMuted}" FontSize="12" Margin="0,5,0,0"/>
                             </StackPanel>
-                            <WrapPanel x:Name="SupportAssetButtons" Grid.Row="2" HorizontalAlignment="Center"/>
+                            <Grid x:Name="SupportAssetButtons" Grid.Row="2" HorizontalAlignment="Stretch"/>
                             <Button x:Name="SupportBackToAmountButton" Grid.Row="4" Content="Back" Style="{StaticResource SupportBackButton}" HorizontalAlignment="Left" Click="SupportBackToAmountButton_Click"/>
                         </Grid>
 
@@ -1222,35 +1222,42 @@
                                 </StackPanel>
                             </StackPanel>
                             <StackPanel Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <Border x:Name="SupportQrFrame" Width="248" Height="248" Background="White" CornerRadius="14" Padding="6" SnapsToDevicePixels="True">
-                                    <Image x:Name="SupportQrImage" Width="236" Height="236" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                           Stretch="Uniform" RenderOptions.BitmapScalingMode="NearestNeighbor" AutomationProperties.Name="Payment checkout QR code"/>
+                                <Border x:Name="SupportQrFrame" Width="272" Height="272" Background="White" CornerRadius="16" Padding="14"
+                                        SnapsToDevicePixels="False" UseLayoutRounding="False" ClipToBounds="False">
+                                    <Image x:Name="SupportQrImage" MaxWidth="244" MaxHeight="244" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Stretch="Uniform" SnapsToDevicePixels="False" UseLayoutRounding="False"
+                                           RenderOptions.BitmapScalingMode="NearestNeighbor" AutomationProperties.Name="Payment checkout QR code"/>
                                 </Border>
-                                <TextBlock x:Name="SupportScanText" Text="Scan with your phone" Foreground="{DynamicResource TextSecondary}" Margin="0,10,0,0" HorizontalAlignment="Center"/>
+                                <TextBlock x:Name="SupportScanText" Text="Scan with your phone" Foreground="{DynamicResource TextSecondary}" Margin="0,11,0,0" HorizontalAlignment="Center"/>
                                 <Button x:Name="SupportOpenTelegramButton" Content="Open Telegram" Style="{StaticResource PrimaryButton}" Width="280" Margin="0,18,0,0"
                                         Click="SupportOpenTelegramButton_Click" AutomationProperties.Name="Open payment checkout"/>
-                                 <TextBlock x:Name="SupportOpenTelegramHint" Text="Continue securely in Telegram." Foreground="{DynamicResource TextMuted}" FontSize="12" Margin="0,6,0,0" TextAlignment="Center"/>
-                                 <StackPanel x:Name="SupportCryptoDetailsPanel" Visibility="Collapsed" Width="430" Margin="0,12,0,0">
-                                     <Button x:Name="SupportCopyAddressButton" Style="{StaticResource ButtonBase}" Height="54" Padding="13,7" HorizontalContentAlignment="Stretch" Click="SupportCopyAddressButton_Click">
-                                         <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                             <StackPanel><TextBlock x:Name="SupportAddressLabel" Text="Address" Foreground="{DynamicResource TextMuted}" FontSize="10"/><TextBlock x:Name="SupportAddressText" TextTrimming="CharacterEllipsis" Margin="0,3,0,0"/></StackPanel>
-                                             <TextBlock x:Name="SupportAddressCopyText" Grid.Column="1" Text="Copy" Foreground="{DynamicResource Accent}" VerticalAlignment="Center" Margin="12,0,0,0"/>
-                                         </Grid>
-                                     </Button>
-                                     <Button x:Name="SupportCopyAmountButton" Style="{StaticResource ButtonBase}" Height="54" Padding="13,7" Margin="0,7,0,0" HorizontalContentAlignment="Stretch" Click="SupportCopyAmountButton_Click">
-                                         <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                             <StackPanel><TextBlock x:Name="SupportExactAmountLabel" Text="Amount" Foreground="{DynamicResource TextMuted}" FontSize="10"/><TextBlock x:Name="SupportExactAmountText" Margin="0,3,0,0"/></StackPanel>
-                                             <TextBlock x:Name="SupportAmountCopyText" Grid.Column="1" Text="Copy" Foreground="{DynamicResource Accent}" VerticalAlignment="Center" Margin="12,0,0,0"/>
-                                         </Grid>
-                                     </Button>
-                                     <TextBlock x:Name="SupportNetworkWarningText" Text="Send funds only on the network shown above." Foreground="{DynamicResource Warning}" FontSize="11" TextWrapping="Wrap" TextAlignment="Center" Margin="0,9,0,0"/>
-                                 </StackPanel>
+                                <TextBlock x:Name="SupportOpenTelegramHint" Text="Continue securely in Telegram." Foreground="{DynamicResource TextMuted}" FontSize="12" Margin="0,6,0,0" TextAlignment="Center"/>
+                                <StackPanel x:Name="SupportCryptoDetailsPanel" Visibility="Collapsed" Width="452" Margin="0,15,0,0">
+                                    <Border Height="58" Background="{DynamicResource SurfaceSecondary}" BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="1" CornerRadius="12" Padding="14,8">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="44"/></Grid.ColumnDefinitions>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock x:Name="SupportAddressLabel" Text="Wallet address" Foreground="{DynamicResource TextMuted}" FontSize="10"/>
+                                                <TextBlock x:Name="SupportAddressText" FontFamily="Cascadia Mono, Consolas" FontSize="12" TextTrimming="CharacterEllipsis" Margin="0,4,8,0"/>
+                                            </StackPanel>
+                                            <Button x:Name="SupportCopyAddressButton" Grid.Column="1" Width="38" Height="38" Padding="0" Style="{StaticResource ButtonBase}"
+                                                    Click="SupportCopyAddressButton_Click" AutomationProperties.Name="Copy wallet address" ToolTip="Copy address">
+                                                <Viewbox Width="17" Height="17">
+                                                    <Path Data="{StaticResource IconCopy}" Stroke="{DynamicResource Accent}" StrokeThickness="1.7"
+                                                          Fill="Transparent" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                                </Viewbox>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                    <TextBlock x:Name="SupportNetworkWarningText" Text="Send funds only on the network shown above." Foreground="{DynamicResource Warning}" FontSize="11"
+                                               TextWrapping="Wrap" TextAlignment="Center" Margin="6,10,6,0"/>
+                                </StackPanel>
                              </StackPanel>
                             <StackPanel Grid.Row="4" HorizontalAlignment="Center" Opacity="0.86">
                                 <Grid HorizontalAlignment="Center">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="8"/><ColumnDefinition Width="9"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <Ellipse x:Name="SupportWaitingIndicator" Width="7" Height="7" Fill="{DynamicResource AccentPurple}" VerticalAlignment="Center"/>
-                                    <TextBlock x:Name="SupportWaitingText" Grid.Column="2" Text="Waiting for payment…" Foreground="{DynamicResource TextSecondary}" FontSize="13"/>
+                                    <TextBlock x:Name="SupportWaitingText" Grid.Column="2" Text="Waiting for payment" Foreground="{DynamicResource TextSecondary}" FontSize="13"/>
                                 </Grid>
                                 <ProgressBar x:Name="SupportWaitingProgress" Style="{StaticResource SupportWaitingProgress}" Width="220" Height="3"
                                              Margin="0,9,0,0" IsIndeterminate="True" AutomationProperties.Name="Payment status activity"/>

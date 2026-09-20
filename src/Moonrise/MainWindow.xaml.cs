@@ -1674,7 +1674,7 @@ public partial class MainWindow : Window
                 SupportWaitingProgress.IsIndeterminate = !_motion.ReducedMotion;
                 SupportWaitingText.Text = _supportFlow.State == SupportFlowState.ConnectivityIssue
                     ? T("Связь прервана. Повторяем попытку…", "Connection interrupted. Retrying…")
-                    : T("Ожидаем оплату…", "Waiting for payment…");
+                    : T("Ожидаем оплату", "Waiting for payment");
                 break;
             case SupportFlowState.Paid:
                 RenderSupportSuccess();
@@ -1718,33 +1718,102 @@ public partial class MainWindow : Window
     private void RenderSupportAssets()
     {
         SupportChooseAssetTitle.Text = T("Выберите криптовалюту", "Choose an asset");
-        SupportChooseAssetHint.Text = T("Сеть будет указана на экране оплаты.", "The payment network is shown on the next screen.");
+        SupportChooseAssetHint.Text = T("Сеть указана под названием монеты.", "The network is shown under each asset.");
         SupportBackToAmountButton.Content = T("Назад", "Back");
         SupportAssetButtons.Children.Clear();
-        foreach (var asset in _supportFlow?.Method?.Assets ?? [])
+        SupportAssetButtons.RowDefinitions.Clear();
+        SupportAssetButtons.ColumnDefinitions.Clear();
+        for (var column = 0; column < 6; column++)
+            SupportAssetButtons.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        var assets = (_supportFlow?.Method?.Assets ?? []).ToArray();
+        var rows = Math.Max(1, (assets.Length + 2) / 3);
+        for (var row = 0; row < rows; row++)
+            SupportAssetButtons.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        for (var index = 0; index < assets.Length; index++)
         {
+            var asset = assets[index];
+            var row = index / 3;
+            var indexInRow = index % 3;
+            var remaining = assets.Length - row * 3;
+            var cardsInRow = Math.Min(3, remaining);
+            var column = cardsInRow switch
+            {
+                1 => 2,
+                2 => 1 + indexInRow * 2,
+                _ => indexInRow * 2
+            };
+
+            var icon = new Image
+            {
+                Source = SupportAssetIcon(asset.Asset),
+                Width = 28,
+                Height = 28,
+                Stretch = Stretch.Uniform,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
             var button = new Button
             {
                 Tag = asset,
-                Width = 250,
-                Height = 62,
+                Height = 72,
                 Margin = new Thickness(5),
-                Padding = new Thickness(14, 8, 14, 8),
+                Padding = new Thickness(12, 8, 12, 8),
                 HorizontalContentAlignment = HorizontalAlignment.Stretch,
                 Style = (Style)FindResource("ButtonBase"),
-                Content = new StackPanel
+                Content = new Grid
                 {
+                    ColumnDefinitions =
+                    {
+                        new ColumnDefinition { Width = new GridLength(42) },
+                        new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }
+                    },
                     Children =
                     {
-                        new TextBlock { Text = asset.Asset, FontWeight = FontWeights.SemiBold, Foreground = (Brush)FindResource("Accent") },
-                        new TextBlock { Text = asset.NetworkName, FontSize = 11, Foreground = (Brush)FindResource("TextMuted"), Margin = new Thickness(0, 3, 0, 0) }
+                        new Border
+                        {
+                            Width = 36,
+                            Height = 36,
+                            CornerRadius = new CornerRadius(18),
+                            Background = (Brush)FindResource("SurfaceSecondary"),
+                            Child = icon
+                        },
+                        new StackPanel
+                        {
+                            Margin = new Thickness(8, 0, 0, 0),
+                            VerticalAlignment = VerticalAlignment.Center,
+                            Children =
+                            {
+                                new TextBlock { Text = asset.Asset, FontWeight = FontWeights.SemiBold, FontSize = 13, Foreground = (Brush)FindResource("TextPrimary") },
+                                new TextBlock { Text = asset.NetworkName, FontSize = 10, Foreground = (Brush)FindResource("TextMuted"), Margin = new Thickness(0, 3, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis }
+                            }
+                        }
                     }
                 }
             };
+            Grid.SetColumn(((Grid)button.Content).Children[1], 1);
+            Grid.SetRow(button, row);
+            Grid.SetColumn(button, column);
+            Grid.SetColumnSpan(button, 2);
+            System.Windows.Automation.AutomationProperties.SetName(button, $"{asset.DisplayName}, {asset.NetworkName}");
             button.Click += SupportAssetButton_Click;
             SupportAssetButtons.Children.Add(button);
         }
     }
+
+    private ImageSource SupportAssetIcon(string asset) =>
+        (ImageSource)FindResource(asset.ToUpperInvariant() switch
+        {
+            "BTC" => "BitcoinIcon",
+            "ETH" => "EthereumIcon",
+            "USDT" => "TetherIcon",
+            "USDC" => "UsdcIcon",
+            "BNB" => "BnbIcon",
+            "SOL" => "SolanaIcon",
+            "TRX" => "TronIcon",
+            _ => "CryptoMethodIcon"
+        });
 
     private void RenderSupportAmounts()
     {
@@ -1882,33 +1951,37 @@ public partial class MainWindow : Window
     private void RenderSupportCheckout(SupportCheckoutView checkout)
     {
         var crypto = IsCryptoSupportMethod(checkout.Provider);
-        SupportCheckoutMethodText.Text = crypto ? checkout.NetworkName ?? checkout.Network ?? T("Криптовалюта", "Crypto") : T("Звёзды Telegram", "Telegram Stars");
+        var selectedAsset = crypto
+            ? _supportFlow?.Method?.Assets?.FirstOrDefault(item =>
+                string.Equals(item.Asset, checkout.Asset, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(item.Network, checkout.Network, StringComparison.OrdinalIgnoreCase))
+            : null;
+        SupportCheckoutMethodText.Text = crypto
+            ? selectedAsset?.DisplayName ?? checkout.Asset ?? T("Криптовалюта", "Crypto")
+            : T("Звёзды Telegram", "Telegram Stars");
         SupportCheckoutAmountText.Text = crypto
             ? $"{checkout.CryptoAmount} {checkout.Asset}"
             : checkout.Amount.ToString("N0", SupportAmountCulture);
         SupportCheckoutStarsIcon.Visibility = crypto ? Visibility.Collapsed : Visibility.Visible;
-        SupportQrFrame.Width = 248;
-        SupportQrFrame.Height = 248;
-        SupportQrImage.Width = 236;
-        SupportQrImage.Height = 236;
-        SupportOpenTelegramButton.Content = crypto ? T("Открыть кошелёк", "Open wallet") : T("Открыть Telegram", "Open Telegram");
-        SupportOpenTelegramHint.Text = crypto
-            ? checkout.NetworkName ?? checkout.Network ?? string.Empty
-            : T("Безопасно продолжите оплату в Telegram.", "Continue securely in Telegram.");
+        SupportQrFrame.Width = crypto ? 272 : 248;
+        SupportQrFrame.Height = crypto ? 272 : 248;
+        SupportQrImage.MaxWidth = crypto ? 244 : 220;
+        SupportQrImage.MaxHeight = crypto ? 244 : 220;
+        SupportOpenTelegramButton.Content = T("Открыть Telegram", "Open Telegram");
+        SupportOpenTelegramButton.Visibility = crypto ? Visibility.Collapsed : Visibility.Visible;
+        SupportOpenTelegramButton.IsEnabled = !crypto;
+        SupportOpenTelegramHint.Visibility = crypto ? Visibility.Collapsed : Visibility.Visible;
+        SupportOpenTelegramHint.Text = T("Безопасно продолжите оплату в Telegram.", "Continue securely in Telegram.");
         SupportScanText.Text = crypto ? T("Отсканируйте QR в криптокошельке", "Scan the QR code in your crypto wallet") : T("Отсканируйте телефоном", "Scan with your phone");
-        SupportOpenTelegramButton.Visibility = !crypto || checkout.PaymentUri is not null ? Visibility.Visible : Visibility.Collapsed;
-        SupportOpenTelegramButton.IsEnabled = !crypto || checkout.PaymentUri is not null;
         SupportCryptoDetailsPanel.Visibility = crypto ? Visibility.Visible : Visibility.Collapsed;
-        SupportAddressLabel.Text = T("Адрес", "Address");
-        SupportExactAmountLabel.Text = T("Сумма", "Amount");
-        SupportAddressCopyText.Text = T("Копировать", "Copy");
-        SupportAmountCopyText.Text = T("Копировать", "Copy");
+        SupportAddressLabel.Text = T("Адрес кошелька", "Wallet address");
+        SupportCopyAddressButton.ToolTip = T("Копировать адрес", "Copy address");
+        System.Windows.Automation.AutomationProperties.SetName(SupportCopyAddressButton, T("Копировать адрес кошелька", "Copy wallet address"));
         SupportAddressText.Text = ShortAddress(checkout.WalletAddress);
         SupportAddressText.ToolTip = checkout.WalletAddress;
-        SupportExactAmountText.Text = $"{checkout.CryptoAmount} {checkout.Asset}";
         SupportNetworkWarningText.Text = T(
-            "Отправляйте средства только в указанной сети. Ошибка сети может привести к потере средств.",
-            "Send funds only on the network shown above. Using the wrong network may permanently lose funds.");
+            $"Сеть: {checkout.NetworkName ?? checkout.Network}. Отправляйте средства только в этой сети.",
+            $"Network: {checkout.NetworkName ?? checkout.Network}. Send funds only on this network.");
         if (string.Equals(_renderedSupportCheckoutUrl, checkout.CheckoutUrl, StringComparison.Ordinal))
             return;
         try
@@ -1959,29 +2032,20 @@ public partial class MainWindow : Window
 
     private async void SupportCopyAddressButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_supportFlow?.Checkout?.WalletAddress is { Length: > 0 } value)
-            await CopySupportValueAsync(value, SupportAddressCopyText);
-    }
-
-    private async void SupportCopyAmountButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (_supportFlow?.Checkout?.CryptoAmount is { Length: > 0 } value)
-            await CopySupportValueAsync(value, SupportAmountCopyText);
-    }
-
-    private async Task CopySupportValueAsync(string value, TextBlock feedback)
-    {
+        if (_supportFlow?.Checkout?.WalletAddress is not { Length: > 0 } value)
+            return;
         try
         {
             Clipboard.SetText(value);
-            feedback.Text = T("Скопировано", "Copied");
-            await Task.Delay(1400);
+            SupportCopyAddressButton.Opacity = 0.52;
+            await Task.Delay(110);
             if (SupportOverlay.Visibility == Visibility.Visible)
-                feedback.Text = T("Копировать", "Copy");
+                SupportCopyAddressButton.Opacity = 1;
         }
         catch (ExternalException)
         {
-            // Visible full-value tooltip/amount and QR remain usable when clipboard is busy.
+            SupportCopyAddressButton.Opacity = 1;
+            // The full address remains available in the tooltip and QR if the clipboard is busy.
         }
     }
 
@@ -2102,6 +2166,8 @@ public partial class MainWindow : Window
         _renderedSupportCheckoutUrl = null;
         SupportQrImage.Source = null;
         SupportOpenTelegramButton.IsEnabled = false;
+        SupportOpenTelegramButton.Visibility = Visibility.Collapsed;
+        SupportOpenTelegramHint.Visibility = Visibility.Collapsed;
         SupportCryptoDetailsPanel.Visibility = Visibility.Collapsed;
     }
 
