@@ -1812,6 +1812,8 @@ public partial class MainWindow : Window
             "BNB" => "BnbIcon",
             "SOL" => "SolanaIcon",
             "TRX" => "TronIcon",
+            "DAI" => "DaiIcon",
+            "LINK" => "ChainlinkIcon",
             _ => "CryptoMethodIcon"
         });
 
@@ -1977,7 +1979,7 @@ public partial class MainWindow : Window
         SupportAddressLabel.Text = T("Адрес кошелька", "Wallet address");
         SupportCopyAddressButton.ToolTip = T("Копировать адрес", "Copy address");
         System.Windows.Automation.AutomationProperties.SetName(SupportCopyAddressButton, T("Копировать адрес кошелька", "Copy wallet address"));
-        SupportAddressText.Text = ShortAddress(checkout.WalletAddress);
+        SupportAddressText.Text = checkout.WalletAddress ?? string.Empty;
         SupportAddressText.ToolTip = checkout.WalletAddress;
         SupportNetworkWarningText.Text = T(
             $"Сеть: {checkout.NetworkName ?? checkout.Network}. Отправляйте средства только в этой сети.",
@@ -2037,22 +2039,17 @@ public partial class MainWindow : Window
         try
         {
             Clipboard.SetText(value);
-            SupportCopyAddressButton.Opacity = 0.52;
-            await Task.Delay(110);
-            if (SupportOverlay.Visibility == Visibility.Visible)
-                SupportCopyAddressButton.Opacity = 1;
+            SupportCopyToastText.Text = T("Скопировано", "Copied");
+            SupportCopyToast.IsOpen = true;
+            await Task.Delay(1250);
+            SupportCopyToast.IsOpen = false;
         }
         catch (ExternalException)
         {
-            SupportCopyAddressButton.Opacity = 1;
+            SupportCopyToast.IsOpen = false;
             // The full address remains available in the tooltip and QR if the clipboard is busy.
         }
     }
-
-    private static string ShortAddress(string? value) =>
-        string.IsNullOrWhiteSpace(value) || value.Length <= 22
-            ? value ?? string.Empty
-            : value[..10] + "…" + value[^8..];
 
     private void RenderSupportSuccess()
     {
@@ -2139,6 +2136,7 @@ public partial class MainWindow : Window
         _supportDialogCancellation = null;
         _supportFlow?.Close();
         SupportQrImage.Source = null;
+        SupportCopyToast.IsOpen = false;
         _renderedSupportCheckoutUrl = null;
         SupportOverlay.IsHitTestVisible = false;
         var animation = new DoubleAnimation(SupportOverlay.Opacity, 0, TimeSpan.FromMilliseconds(MotionController.FastMilliseconds));
@@ -2165,6 +2163,7 @@ public partial class MainWindow : Window
     {
         _renderedSupportCheckoutUrl = null;
         SupportQrImage.Source = null;
+        SupportCopyToast.IsOpen = false;
         SupportOpenTelegramButton.IsEnabled = false;
         SupportOpenTelegramButton.Visibility = Visibility.Collapsed;
         SupportOpenTelegramHint.Visibility = Visibility.Collapsed;

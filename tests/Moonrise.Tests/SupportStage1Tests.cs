@@ -609,6 +609,12 @@ public sealed class SupportStage1Tests
         Assert.Contains("BnbIcon", icons, StringComparison.Ordinal);
         Assert.Contains("SolanaIcon", icons, StringComparison.Ordinal);
         Assert.Contains("TronIcon", icons, StringComparison.Ordinal);
+        Assert.Contains("DaiIcon", icons, StringComparison.Ordinal);
+        Assert.Contains("ChainlinkIcon", icons, StringComparison.Ordinal);
+        Assert.Contains("SupportCopyToast", xaml, StringComparison.Ordinal);
+        Assert.Contains("Скопировано", code, StringComparison.Ordinal);
+        Assert.Contains("SupportAddressText.Text = checkout.WalletAddress", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("ShortAddress(checkout.WalletAddress)", code, StringComparison.Ordinal);
         Assert.DoesNotContain("SupportCopyAmountButton", xaml, StringComparison.Ordinal);
         Assert.DoesNotContain("Открыть кошелёк", code, StringComparison.Ordinal);
         Assert.Contains("crypto ? Visibility.Collapsed : Visibility.Visible", code, StringComparison.Ordinal);
