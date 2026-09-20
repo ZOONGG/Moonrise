@@ -140,8 +140,8 @@ public sealed class ThemePackService
             new ThemeVariants { Sidebar = "glass", Navigation = "pill", Cards = "flat", Buttons = "gradient", Inputs = "soft", Toggle = "soft", Scrollbar = "rounded", Density = "comfortable" },
             new ThemeBackground { Mode = "gradient", GradientStart = "#23143D", GradientEnd = "#070811" }),
         BuiltIn("moonlight", "Moonlight", "Core Moonrise identity: deep navy, violet-blue energy and soft depth.",
-            Colors("#070B15", "#0A1020", "#0F1828", "#142036", "#192843", "#1B2B47", "#21325A", "#2D4262", "#1C2B43", "#46658E", "#F7F9FD", "#B8C4D6", "#7F91AF", "#55647E", "#8F63F7", "#4F82FF", "#2C2657", "#43D5A5", "#F1C35B", "#F06475", "#4CC7E8"),
-            new ThemeGeometry(), new ThemeVariants(), new ThemeBackground { Mode = "gradient", GradientStart = "#23143D", GradientEnd = "#070B15" }),
+            Colors("#090A14", "#0D0E1B", "#121321", "#171827", "#1B1C2D", "#211F35", "#29233F", "#3B3655", "#242437", "#66558A", "#F7F5FC", "#C9C7D7", "#918FA5", "#666477", "#A46DFF", "#6E68FF", "#2B2047", "#35D19A", "#E9B95B", "#F06C82", "#61C9F2"),
+            new ThemeGeometry(), new ThemeVariants(), new ThemeBackground { Mode = "gradient", GradientStart = "#211536", GradientEnd = "#090A14" }),
         BuiltIn("ember", "Ember", "Compact graphite surfaces with warm amber focus and crisp, flatter components.",
             Colors("#11100F", "#181410", "#1E1C19", "#27231E", "#302A23", "#352D25", "#403225", "#5C4937", "#352E26", "#806044", "#FFF7EC", "#E1CDB7", "#AD957C", "#786858", "#F3A13C", "#D9612C", "#51301B", "#5BD09C", "#F3BC62", "#F1766C", "#6DB4E3"),
             new ThemeGeometry { CardRadius = 7, ButtonRadius = 6, InputRadius = 6, PopupRadius = 7, CardPadding = 16, ControlHeight = 38, SpacingScale = .86 },
@@ -150,7 +150,7 @@ public sealed class ThemePackService
         BuiltIn("porcelain", "Porcelain", "A complete light theme with cool white surfaces, dark text and clean lavender detail.",
             Colors("#F6F7FA", "#ECEFF5", "#FFFFFF", "#F0F3F8", "#FFFFFF", "#E7EBF3", "#E1E6F0", "#C5CDDC", "#D8DEE9", "#98A5BA", "#1D2433", "#465168", "#68758D", "#9AA4B5", "#6259D6", "#3975C6", "#E5E3FA", "#197B59", "#9A6112", "#C13D50", "#23749D"),
             new ThemeGeometry { CardRadius = 12, ButtonRadius = 8, InputRadius = 8, PopupRadius = 10, CardPadding = 20, ControlHeight = 42 },
-            new ThemeVariants { Sidebar = "flat", Navigation = "soft-block", Cards = "bordered", Buttons = "solid", Inputs = "filled", Toggle = "minimal", Scrollbar = "minimal", Density = "comfortable" },
+            new ThemeVariants { Sidebar = "flat", Navigation = "soft-block", Cards = "flat", Buttons = "solid", Inputs = "filled", Toggle = "minimal", Scrollbar = "minimal", Density = "comfortable" },
             new ThemeBackground { Mode = "gradient", GradientStart = "#FCFCFD", GradientEnd = "#F1F3F8" })
     ];
 

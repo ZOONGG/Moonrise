@@ -25,12 +25,19 @@
     <Product>Moonrise</Product>
     <Title>Moonrise</Title>
     <Description>A modern mod manager and launcher for Lunar Client.</Description>
+    <!-- Public endpoint only; no provider credentials are embedded. An explicit
+         MoonriseSupportApiBaseUrl MSBuild property wins over the configuration-specific
+         safe default and is stored as assembly metadata for single-file publishes. -->
+    <DefaultMoonriseSupportApiBaseUrl Condition="'$(Configuration)' == 'Release'">https://moonrise-backend-production.up.railway.app</DefaultMoonriseSupportApiBaseUrl>
+    <DefaultMoonriseSupportApiBaseUrl Condition="'$(Configuration)' != 'Release'">http://127.0.0.1:8787</DefaultMoonriseSupportApiBaseUrl>
+    <MoonriseSupportApiBaseUrl Condition="'$(MoonriseSupportApiBaseUrl)' == ''">$(DefaultMoonriseSupportApiBaseUrl)</MoonriseSupportApiBaseUrl>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
   <ItemGroup>
+    <AssemblyMetadata Include="MoonriseSupportApiBaseUrl" Value="$(MoonriseSupportApiBaseUrl)" />
     <EmbeddedResource Include="..\..\assets\languages\*.moonrise-language.json" LogicalName="Moonrise.LanguagePacks.%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\..\assets\languages\*.template.json" LogicalName="Moonrise.LanguageTemplates.%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\..\assets\languages\README.md" LogicalName="Moonrise.LanguageTemplates.README.md" />
@@ -38,6 +45,7 @@
     <Using Remove="System.Drawing" />
     <Using Remove="System.Windows.Forms" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.11" />
+    <PackageReference Include="QRCoder" Version="1.8.0" />
     <Resource Include="..\..\assets\branding\moonrise-icon.ico" Link="Assets\moonrise-icon.ico" />
     <Resource Include="..\..\assets\branding\moonrise-icon-128.png" Link="Assets\moonrise-icon-128.png" />
     <Resource Include="..\..\assets\branding\moonrise-tray.ico" Link="Assets\moonrise-tray.ico" />

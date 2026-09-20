@@ -42,6 +42,7 @@ public sealed class ThemeService : IDisposable
         var fallback = ThemePackService.CreateBuiltIns().First(item => item.Id == "moonlight");
         string C(string name) => theme.Colors.TryGetValue(name, out var value) ? value : fallback.Colors[name];
         var isLight = RelativeLuminance(ColorValue(C("AppBackground"))) > .55;
+        var isStandard = theme.IsBuiltIn && theme.Id.Equals("standard", StringComparison.OrdinalIgnoreCase);
         var dictionary = new ResourceDictionary { ["MoonriseThemeRuntime"] = true, ["ThemeId"] = theme.Id };
 
         dictionary["BackgroundPrimaryColor"] = ColorValue(C("AppBackground"));
@@ -109,12 +110,17 @@ public sealed class ThemeService : IDisposable
         AddBrush(dictionary, "Muted", C("TextMuted"));
         AddBrush(dictionary, "Accent", C("AccentPrimary"));
         AddBrush(dictionary, "ChromeSurface", C("SidebarBackground"), theme.Variants.Sidebar == "glass" ? .78 : 1);
+        AddBrush(dictionary, "ChromeHoverBackground", isStandard ? "#1A1C2A" : C("SurfaceHover"));
+        AddBrush(dictionary, "SocialBackground", isStandard ? "#141521" : C("SurfaceSecondary"));
+        AddBrush(dictionary, "SocialHoverBackground", isStandard ? "#201C2E" : C("SurfaceHover"));
+        AddBrush(dictionary, "SocialPressedBackground", isStandard ? "#171420" : C("SurfaceSelected"));
+        AddBrush(dictionary, "LanguageBackground", isStandard ? "#151725" : C("SurfaceSecondary"));
         AddBrush(dictionary, "HeaderStatusSurface", C("SurfaceSecondary"), .85);
         AddBrush(dictionary, "DrawerSurface", C("SurfaceRaised"), .98);
         AddBrush(dictionary, "OverlaySurface", C("AppBackground"), .86);
         AddBrush(dictionary, "DropOverlaySurface", C("AppBackground"), .92);
 
-        Brush primary = theme.Variants.Buttons.ToLowerInvariant() switch
+        Brush primary = isStandard ? Gradient("#B56CFF", "#705CFF") : theme.Variants.Buttons.ToLowerInvariant() switch
         {
             "gradient" => Gradient(C("AccentPrimary"), C("AccentSecondary")),
             "soft" => Brush(C("AccentSoft")),
@@ -122,7 +128,7 @@ public sealed class ThemeService : IDisposable
             _ => Brush(C("AccentPrimary"))
         };
         dictionary["PrimaryGradient"] = primary;
-        dictionary["PrimaryGradientHover"] = theme.Variants.Buttons.ToLowerInvariant() switch
+        dictionary["PrimaryGradientHover"] = isStandard ? Gradient("#C079FF", "#7B68FF") : theme.Variants.Buttons.ToLowerInvariant() switch
         {
             "gradient" => Gradient(C("AccentSecondary"), C("AccentPrimary")),
             "soft" => Brush(C("SurfaceSelected")),
@@ -132,38 +138,76 @@ public sealed class ThemeService : IDisposable
         dictionary["PrimaryGradientPressed"] = Brush(C("AccentSecondary"));
         dictionary["PrimaryButtonBorder"] = Brush(theme.Variants.Buttons.Equals("outline", StringComparison.OrdinalIgnoreCase) ? C("AccentPrimary") : "#00000000");
         dictionary["PrimaryButtonBorderThickness"] = new Thickness(theme.Variants.Buttons.Equals("outline", StringComparison.OrdinalIgnoreCase) ? theme.Geometry.BorderThickness : 0);
-        dictionary["PrimaryButtonForeground"] = Brush(ContrastOn(C("AccentPrimary")));
-        dictionary["ButtonBackground"] = Brush(C("SurfaceRaised"));
-        dictionary["ButtonHoverBackground"] = Brush(C("SurfaceHover"));
+        dictionary["PrimaryButtonRadius"] = Radius(isStandard ? 12 : theme.Geometry.ButtonRadius);
+        dictionary["PrimaryButtonForeground"] = Brush(
+            theme.Variants.Buttons.Equals("soft", StringComparison.OrdinalIgnoreCase) ||
+            theme.Variants.Buttons.Equals("outline", StringComparison.OrdinalIgnoreCase)
+                ? C("TextPrimary") : ContrastOn(C("AccentPrimary")));
+        dictionary["ButtonBackground"] = Brush(isStandard ? "#191A29" : isLight ? C("SurfaceSecondary") : C("SurfaceRaised"));
+        dictionary["ButtonHoverBackground"] = Brush(isStandard ? "#24263A" : C("SurfaceHover"));
         dictionary["ButtonBorder"] = Brush(C("BorderPrimary"));
-        dictionary["ButtonBorderThickness"] = new Thickness(isLight || theme.Variants.Buttons.Equals("outline", StringComparison.OrdinalIgnoreCase) ? theme.Geometry.BorderThickness : 0);
-        dictionary["ActiveNavigationGradient"] = theme.Variants.Navigation.Equals("left-accent", StringComparison.OrdinalIgnoreCase)
-            ? Brush(C("SurfaceHover")) : Gradient(C("AccentSoft"), C("SurfaceSelected"));
-        dictionary["NavigationAccentOpacity"] = theme.Variants.Navigation.Equals("soft-block", StringComparison.OrdinalIgnoreCase) ? 0d : 1d;
-        dictionary["SidebarGradient"] = theme.Variants.Sidebar.Equals("flat", StringComparison.OrdinalIgnoreCase)
-            ? Brush(C("SidebarBackground")) : Gradient(C("SidebarBackground"), C("SurfaceSecondary"));
+        dictionary["ButtonBorderThickness"] = new Thickness(theme.Variants.Buttons.Equals("outline", StringComparison.OrdinalIgnoreCase) ? theme.Geometry.BorderThickness : 0);
+        dictionary["NavigationHoverBackground"] = Brush(isStandard ? "#191A29" : C("SurfaceHover"));
+        dictionary["NavigationSelectedForeground"] = Brush(isStandard ? "#D6C2FF" : C("TextPrimary"));
+        dictionary["ActiveNavigationGradient"] = isStandard
+            ? Brush("#251C3B")
+            : theme.Variants.Navigation.Equals("left-accent", StringComparison.OrdinalIgnoreCase)
+                ? Brush(C("SurfaceHover")) : Gradient(C("AccentSoft"), C("SurfaceSelected"));
+        dictionary["NavigationAccentOpacity"] = theme.Variants.Navigation.Equals("left-accent", StringComparison.OrdinalIgnoreCase) ? 1d : 0d;
+        dictionary["SidebarGradient"] = isStandard
+            ? TripleGradient("#0C0D17", "#111020", "#1A1030")
+            : theme.Variants.Sidebar.Equals("flat", StringComparison.OrdinalIgnoreCase)
+                ? Brush(C("SidebarBackground")) : Gradient(C("SidebarBackground"), C("SurfaceSecondary"));
         dictionary["InputBackground"] = Brush(theme.Variants.Inputs.Equals("filled", StringComparison.OrdinalIgnoreCase) ? C("SurfaceSecondary") : C("SurfacePrimary"));
         dictionary["InputBorderThickness"] = new Thickness(theme.Variants.Inputs.Equals("outlined", StringComparison.OrdinalIgnoreCase) ? theme.Geometry.BorderThickness : 0);
+        var supportInputBackground = isStandard
+            ? "#1B1C2A"
+            : isLight
+                ? C("SurfacePrimary")
+                : Blend(C("SurfaceRaised"), C("TextPrimary"), .04);
+        dictionary["SupportInputBackground"] = Brush(supportInputBackground);
+        dictionary["SupportInputHoverBackground"] = Brush(isStandard
+            ? "#222335"
+            : Blend(supportInputBackground, C("TextPrimary"), isLight ? .025 : .055));
+        dictionary["SupportInputFocusBackground"] = Brush(isStandard
+            ? "#201F30"
+            : Blend(supportInputBackground, C("AccentPrimary"), isLight ? .025 : .04));
+        dictionary["SupportInputBorder"] = Brush(isStandard ? "#34354A" : C("BorderPrimary"));
         dictionary["CardBackground"] = Brush(theme.Variants.Cards.Equals("glass", StringComparison.OrdinalIgnoreCase) ? C("SurfaceRaised") : C("SurfacePrimary"), theme.Variants.Cards.Equals("glass", StringComparison.OrdinalIgnoreCase) ? .76 : theme.Effects.SurfaceOpacity);
-        dictionary["CardBorderThickness"] = new Thickness(theme.Variants.Cards.Equals("flat", StringComparison.OrdinalIgnoreCase) ? 0 : theme.Geometry.BorderThickness);
-        dictionary["ToggleOffBrush"] = Brush(C("SurfaceSelected"));
-        dictionary["ToggleOnBrush"] = Brush(C("AccentPrimary"));
-        dictionary["ToggleThumbOffBrush"] = Brush(isLight ? C("TextMuted") : C("TextSecondary"));
-        dictionary["ToggleThumbBrush"] = Brush(ContrastOn(C("AccentPrimary")));
+        dictionary["CardBorderThickness"] = new Thickness(theme.Variants.Cards.Equals("bordered", StringComparison.OrdinalIgnoreCase) ? theme.Geometry.BorderThickness : 0);
+        dictionary["LaunchCardBackground"] = Brush(isStandard ? C("SurfacePrimary") : C("SurfacePrimary"));
+        dictionary["LaunchCardBorder"] = Brush(isStandard ? "#151622" : "#00000000");
+        dictionary["LaunchCardBorderThickness"] = new Thickness(isStandard ? 2 : 0);
+        dictionary["LaunchCardHoverBackground"] = Brush(isStandard ? "#12121F" : C("SurfaceHover"));
+        dictionary["LaunchCardHoverBorder"] = Brush(isStandard ? "#72509D" : "#00000000");
+        dictionary["InteractiveTileBackground"] = Brush(isStandard ? "#151621" : C("SurfaceSecondary"));
+        dictionary["InteractiveTileHoverBackground"] = Brush(isStandard ? "#211C30" : C("SurfaceHover"));
+        dictionary["InteractiveTileRadius"] = Radius(isStandard ? 12 : theme.Geometry.CardRadius);
+        dictionary["ClientCardBackground"] = Brush(isStandard ? "#12131F" : C("SurfacePrimary"));
+        dictionary["ClientCardHoverBackground"] = Brush(isStandard ? "#191827" : C("SurfaceHover"));
+        dictionary["ClientCardSelectedBackground"] = Brush(isStandard ? "#201832" : C("SurfaceSelected"));
+        dictionary["ToggleOffBrush"] = Brush(isStandard ? "#242634" : C("SurfaceSelected"));
+        dictionary["ToggleOnBrush"] = Brush(isStandard ? "#1FD184" : C("AccentPrimary"));
+        dictionary["ToggleThumbOffBrush"] = Brush(isStandard ? "#B9BBC7" : isLight ? C("TextMuted") : C("TextSecondary"));
+        dictionary["ToggleThumbBrush"] = Brush(isStandard ? "#07120D" : ContrastOn(C("AccentPrimary")));
         dictionary["ToggleBorderBrush"] = Brush(isLight ? C("BorderStrong") : C("BorderPrimary"));
-        dictionary["ToggleBorderThickness"] = new Thickness(theme.Variants.Toggle.Equals("compact", StringComparison.OrdinalIgnoreCase) ? 0 : theme.Geometry.BorderThickness);
-        dictionary["ModIconBackground"] = Brush(C("AccentSoft"));
+        dictionary["ToggleBorderThickness"] = new Thickness(0);
+        dictionary["PopupBorderThickness"] = new Thickness(0);
+        dictionary["PackageIconBorderThickness"] = new Thickness(0);
+        dictionary["ModIconBackground"] = Brush(isStandard ? "#1B1728" : isLight ? "#E9ECF4" : C("SurfaceSecondary"));
         dictionary["ModIconBorder"] = Brush(C("AccentPrimary"), isLight ? .34 : .45);
         dictionary["ModIconForeground"] = Brush(C("AccentPrimary"));
-        dictionary["AgentIconBackground"] = Brush(isLight ? C("SurfaceSelected") : C("SurfaceSecondary"));
+        dictionary["AgentIconBackground"] = Brush(isStandard ? "#1B1728" : isLight ? "#E9ECF4" : C("SurfaceSecondary"));
         dictionary["AgentIconBorder"] = Brush(C("Info"), isLight ? .38 : .5);
         dictionary["AgentIconForeground"] = Brush(C("Info"));
         dictionary["UnknownIconBackground"] = Brush(C("SurfaceSecondary"));
         dictionary["UnknownIconBorder"] = Brush(C("BorderStrong"));
         dictionary["UnknownIconForeground"] = Brush(C("TextMuted"));
-        dictionary["ClientIconBackground"] = Brush(isLight ? C("SurfaceSelected") : C("SurfaceSecondary"));
+        dictionary["ClientIconBackground"] = Brush(isStandard ? "#1B1A27" : isLight ? "#E9ECF4" : C("SurfaceSecondary"));
         dictionary["ClientIconBorder"] = Brush(C("BorderSubtle"));
         dictionary["LunarIconForeground"] = Brush(C("TextPrimary"));
+        dictionary["BrandIconBackground"] = Brush(isStandard ? "#171525" : isLight ? "#00000000" : C("SurfaceSecondary"));
+        dictionary["BrandIconBorderThickness"] = new Thickness(0);
         dictionary["DangerSurface"] = Brush(C("Danger"), isLight ? .10 : .16);
         dictionary["DangerBorder"] = Brush(C("Danger"), .42);
         dictionary["DangerForeground"] = Brush(C("Danger"));
@@ -178,17 +222,17 @@ public sealed class ThemeService : IDisposable
         dictionary["ControlRadius"] = Radius(theme.Geometry.InputRadius);
         dictionary["PopupRadius"] = Radius(theme.Geometry.PopupRadius);
         dictionary["BadgeRadius"] = Radius(Math.Min(theme.Geometry.ButtonRadius, 9));
-        dictionary["BaseFontSize"] = 14 * theme.Typography.BaseSizeScale;
-        dictionary["BodyFontSize"] = 14 * theme.Typography.BaseSizeScale;
+        dictionary["BaseFontSize"] = (isStandard ? 13 : 14) * theme.Typography.BaseSizeScale;
+        dictionary["BodyFontSize"] = (isStandard ? 13 : 14) * theme.Typography.BaseSizeScale;
         dictionary["CaptionFontSize"] = 13 * theme.Typography.BaseSizeScale;
-        dictionary["HeadingFontSize"] = 32 * theme.Typography.BaseSizeScale;
+        dictionary["HeadingFontSize"] = (isStandard ? 28 : 32) * theme.Typography.BaseSizeScale;
         dictionary["HeadingFontWeight"] = FontWeightFrom(theme.Typography.HeadingWeight);
         dictionary["BodyFontWeight"] = FontWeightFrom(theme.Typography.BodyWeight);
         dictionary["ScrollBarSize"] = theme.Variants.Scrollbar.Equals("high-contrast", StringComparison.OrdinalIgnoreCase) ? 13d : theme.Variants.Scrollbar.Equals("minimal", StringComparison.OrdinalIgnoreCase) ? 7d : 10d;
         dictionary["ScrollBarRadius"] = Radius(theme.Variants.Scrollbar.Equals("rounded", StringComparison.OrdinalIgnoreCase) ? 5 : 2);
         dictionary["ThemeDensityScale"] = densityScale;
 
-        dictionary["FloatingShadow"] = Shadow(theme.Variants.Cards.Equals("flat", StringComparison.OrdinalIgnoreCase) ? 0 : theme.Effects.ShadowOpacity, C("AppBackground"));
+        dictionary["FloatingShadow"] = Shadow(theme.Variants.Cards.Equals("elevated", StringComparison.OrdinalIgnoreCase) ? theme.Effects.ShadowOpacity : 0, C("AppBackground"));
         dictionary["PrimaryButtonShadow"] = Shadow(theme.Variants.Buttons.Equals("gradient", StringComparison.OrdinalIgnoreCase) ? Math.Min(.35, theme.Effects.ShadowOpacity) : 0, C("AccentPrimary"), 10, 2);
         dictionary["AppBackgroundTreatment"] = CreateBackground(theme, C);
         dictionary["AppBackgroundOverlay"] = Brush(theme.Background.OverlayColor ?? C("AppBackground"), theme.Background.OverlayColor is null ? 0 : .35);
@@ -201,6 +245,18 @@ public sealed class ThemeService : IDisposable
 
     private Brush CreateBackground(ThemePack theme, Func<string, string> color)
     {
+        if (theme.IsBuiltIn && theme.Id.Equals("standard", StringComparison.OrdinalIgnoreCase))
+        {
+            var brush = new RadialGradientBrush
+            {
+                Center = new Point(.78, .04), GradientOrigin = new Point(.78, .04), RadiusX = .7, RadiusY = .9
+            };
+            brush.GradientStops.Add(new GradientStop(ColorValue("#23143D"), 0));
+            brush.GradientStops.Add(new GradientStop(ColorValue("#0B0B16"), .48));
+            brush.GradientStops.Add(new GradientStop(ColorValue("#070811"), 1));
+            brush.Freeze();
+            return brush;
+        }
         if (theme.Background.Mode.Equals("image", StringComparison.OrdinalIgnoreCase))
         {
             var path = _packs.ResolveAsset(theme, theme.Background.Asset)!;
@@ -312,6 +368,15 @@ public sealed class ThemeService : IDisposable
         brush.Freeze();
         return brush;
     }
+    private static LinearGradientBrush TripleGradient(string start, string middle, string end)
+    {
+        var brush = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 1) };
+        brush.GradientStops.Add(new GradientStop(ColorValue(start), 0));
+        brush.GradientStops.Add(new GradientStop(ColorValue(middle), .52));
+        brush.GradientStops.Add(new GradientStop(ColorValue(end), 1));
+        brush.Freeze();
+        return brush;
+    }
     private static CornerRadius Radius(double value) => new(value);
     private static DropShadowEffect Shadow(double opacity, string color, double blur = 18, double depth = 5) => new()
     {
@@ -323,6 +388,14 @@ public sealed class ThemeService : IDisposable
         "bold" => FontWeights.Bold, "semibold" => FontWeights.SemiBold, "medium" => FontWeights.Medium, _ => FontWeights.Normal
     };
     private static Color ColorValue(string value) => (Color)ColorConverter.ConvertFromString(value);
+    private static string Blend(string background, string foreground, double foregroundAmount)
+    {
+        var back = ColorValue(background);
+        var front = ColorValue(foreground);
+        static byte Channel(byte back, byte front, double amount) =>
+            (byte)Math.Round(back + ((front - back) * amount), MidpointRounding.AwayFromZero);
+        return $"#{Channel(back.R, front.R, foregroundAmount):X2}{Channel(back.G, front.G, foregroundAmount):X2}{Channel(back.B, front.B, foregroundAmount):X2}";
+    }
     private static string ContrastOn(string value) => RelativeLuminance(ColorValue(value)) > .42 ? "#17130E" : "#FFFFFF";
     private static double RelativeLuminance(Color color)
     {

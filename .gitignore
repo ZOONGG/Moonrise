@@ -17,6 +17,7 @@ coverage.*
 *.pdb
 
 # IDE and local tooling
+.work/
 .vs/
 .idea/
 .vscode/

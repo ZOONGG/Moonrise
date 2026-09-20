@@ -80,7 +80,7 @@ public sealed class MoonriseServicesTests
 
         var migrated = service.Load();
 
-        Assert.Equal("moonlight", migrated.Theme);
+        Assert.Equal("standard", migrated.Theme);
         Assert.Equal(MoonriseSettings.CurrentSettingsSchemaVersion, migrated.SettingsSchemaVersion);
 
         migrated.Theme = "ember";
@@ -477,7 +477,7 @@ public sealed class MoonriseServicesTests
 
         Assert.Equal("Starten", service.Translate(language, "Launch"));
         Assert.Equal("Settings", service.Translate(language, "Settings"));
-        Assert.Equal(["moonlight", "ember", "porcelain"], themeIds);
+        Assert.Equal(["standard", "moonlight", "ember", "porcelain"], themeIds);
         Assert.Equal("Deutsch", language.ToString());
     }
 

@@ -13,7 +13,9 @@ public sealed class ThemePackSystemTests
     public void BuiltInsAreDistinctAndPorcelainIsActuallyLight()
     {
         var themes = ThemePackService.CreateBuiltIns().ToDictionary(item => item.Id);
-        Assert.Equal(["moonlight", "ember", "porcelain"], themes.Keys);
+        Assert.Equal(["standard", "moonlight", "ember", "porcelain"], themes.Keys);
+        Assert.Equal("Moonrise Standard", themes["standard"].Name);
+        Assert.Equal("standard", new MoonriseSettings().Theme);
         Assert.True(Luminance(themes["porcelain"].Colors["AppBackground"]) > .8);
         Assert.True(Luminance(themes["porcelain"].Colors["TextPrimary"]) < .08);
 
@@ -58,7 +60,7 @@ public sealed class ThemePackSystemTests
 
         var themes = new ThemePackService().LoadThemes(temp.Path, diagnostics.Add);
 
-        Assert.Equal(["moonlight", "ember", "porcelain"], themes.Select(item => item.Id));
+        Assert.Equal(["standard", "moonlight", "ember", "porcelain"], themes.Select(item => item.Id));
         Assert.Equal(2, diagnostics.Count);
         Assert.Contains(diagnostics, item => item.Contains("schemaVersion", StringComparison.OrdinalIgnoreCase));
     }
@@ -111,7 +113,7 @@ public sealed class ThemePackSystemTests
     [Theory]
     [InlineData("Obsidian")]
     [InlineData("Aurora")]
-    public void LegacyThemeSelectionMigratesToMoonlight(string legacyTheme)
+    public void LegacyThemeSelectionMigratesToMoonriseStandard(string legacyTheme)
     {
         using var temp = new TemporaryDirectory();
         var path = Path.Combine(temp.Path, "settings.json");
@@ -119,7 +121,7 @@ public sealed class ThemePackSystemTests
 
         var settings = new AppSettingsService(path).Load();
 
-        Assert.Equal("moonlight", settings.Theme);
+        Assert.Equal("standard", settings.Theme);
         Assert.Equal(MoonriseSettings.CurrentSettingsSchemaVersion, settings.SettingsSchemaVersion);
     }
 
@@ -175,7 +177,31 @@ public sealed class ThemePackSystemTests
         Assert.IsType<SolidColorBrush>(runtime["TextPrimary"]);
         Assert.Equal("porcelain", runtime["ThemeId"]);
         Assert.Equal(new CornerRadius(12), runtime["CardRadius"]);
-        Assert.Equal("soft", porcelain.Variants.Buttons);
+        Assert.Equal("solid", porcelain.Variants.Buttons);
+        Assert.Equal(new Thickness(0), runtime["PrimaryButtonBorderThickness"]);
+        Assert.Equal(new Thickness(0), runtime["CardBorderThickness"]);
+        Assert.Equal(new Thickness(0), runtime["ToggleBorderThickness"]);
+        Assert.Equal(new Thickness(0), runtime["PackageIconBorderThickness"]);
+        Assert.Equal(new Thickness(0), runtime["PopupBorderThickness"]);
+        Assert.IsType<SolidColorBrush>(runtime["ToggleOnBrush"]);
+    }
+
+    [Fact]
+    public void StandardProjectsTheOriginalMoonriseTreatment()
+    {
+        using var service = new ThemeService();
+        var resources = new ResourceDictionary();
+        var standard = ThemePackService.CreateBuiltIns().Single(item => item.Id == "standard");
+
+        service.Apply(resources, standard);
+
+        var runtime = resources.MergedDictionaries.Single(item => item.Contains("MoonriseThemeRuntime"));
+        Assert.IsType<RadialGradientBrush>(runtime["AppBackgroundTreatment"]);
+        Assert.Equal(0d, runtime["NavigationAccentOpacity"]);
+        Assert.Equal(new Thickness(2), runtime["LaunchCardBorderThickness"]);
+        Assert.Equal(new CornerRadius(12), runtime["InteractiveTileRadius"]);
+        Assert.Equal(28d, runtime["HeadingFontSize"]);
+        Assert.Equal(13d, runtime["BaseFontSize"]);
     }
 
     [Fact]
@@ -188,6 +214,11 @@ public sealed class ThemePackSystemTests
         Assert.Contains("Theme packs", code, StringComparison.Ordinal);
         Assert.Contains("Пакеты тем", code, StringComparison.Ordinal);
         Assert.Contains("LanguagePackComboBox_SelectionChanged", xaml, StringComparison.Ordinal);
+        Assert.Contains("LunarClientIconTemplate", xaml, StringComparison.Ordinal);
+        Assert.Contains("ToggleThumbOffBrush", xaml, StringComparison.Ordinal);
+        Assert.Contains("Image Source=\"Assets/weave-mod-icon.png\" Width=\"40\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("NavigationAccentOpacity", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Image Source=\"Assets/LunarClient.png\"", xaml, StringComparison.Ordinal);
     }
 
     private static void WriteManifest(string directory, string json) => File.WriteAllText(Path.Combine(directory, "theme.json"), json);

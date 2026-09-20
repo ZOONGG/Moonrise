@@ -33,10 +33,10 @@ public sealed class Stage3VisualPolishTests
     }
 
     [Fact]
-    public void ThemeServiceExposesTheThreeThemePackBuiltIns()
+    public void ThemeServiceExposesStandardAndTheThreeAdditionalThemePackBuiltIns()
     {
         var packs = new AppearancePackService().LoadThemes(Path.Combine(Path.GetTempPath(), "moonrise-stage3-theme-test"));
-        Assert.Equal(["moonlight", "ember", "porcelain"], packs.Select(pack => pack.Id));
+        Assert.Equal(["standard", "moonlight", "ember", "porcelain"], packs.Select(pack => pack.Id));
     }
 
     [Fact]

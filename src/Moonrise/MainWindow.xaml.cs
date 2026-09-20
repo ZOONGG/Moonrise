@@ -1,12 +1,15 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using Moonrise.Infrastructure;
 using Moonrise.Models;
@@ -101,6 +104,12 @@ public partial class MainWindow : Window
     private bool _explicitExitRequested;
     private readonly bool _visualQaMode;
     private StatusLevel _lastStatusLevel = StatusLevel.Working;
+    private HttpClient? _supportHttpClient;
+    private SupportFlowController? _supportFlow;
+    private CancellationTokenSource? _supportDialogCancellation;
+    private bool _supportShowingMethods = true;
+    private string? _renderedSupportCheckoutUrl;
+    private string? _lastSupportDiagnosticKey;
 
     private IEnumerable<PackageInfo> _mods => _library.Packages.Where(item => item.Kind == PackageKind.WeaveMod);
     private IEnumerable<PackageInfo> _agents => _library.Packages.Where(item => item.Kind == PackageKind.JavaAgent);
@@ -250,10 +259,10 @@ public partial class MainWindow : Window
             await HandleDeepLinkAsync(activationArgument);
         }
         if (_visualQaMode)
-            ApplyVisualQaState();
+            await ApplyVisualQaStateAsync();
     }
 
-    private void ApplyVisualQaState()
+    private async Task ApplyVisualQaStateAsync()
     {
         if (int.TryParse(Environment.GetEnvironmentVariable("MOONRISE_VISUAL_QA_WIDTH"), out var qaWidth))
             Width = Math.Max(MinWidth, qaWidth);
@@ -327,15 +336,15 @@ public partial class MainWindow : Window
                 break;
             case "combobox":
                 ShowPage(HomePage, HomeTabButton);
-                Dispatcher.BeginInvoke(new Action(() => ClientComboBox.IsDropDownOpen = true), System.Windows.Threading.DispatcherPriority.Loaded);
+                _ = Dispatcher.BeginInvoke(new Action(() => ClientComboBox.IsDropDownOpen = true), System.Windows.Threading.DispatcherPriority.Loaded);
                 break;
             case "language-popup":
                 ShowPage(HomePage, HomeTabButton);
-                Dispatcher.BeginInvoke(new Action(() => LanguagePopup.IsOpen = true), System.Windows.Threading.DispatcherPriority.Loaded);
+                _ = Dispatcher.BeginInvoke(new Action(() => LanguagePopup.IsOpen = true), System.Windows.Threading.DispatcherPriority.Loaded);
                 break;
             case "context-menu":
                 ShowPage(LibraryPage, LibraryTabButton);
-                Dispatcher.BeginInvoke(new Action(OpenFirstPackageContextMenu), System.Windows.Threading.DispatcherPriority.Loaded);
+                _ = Dispatcher.BeginInvoke(new Action(OpenFirstPackageContextMenu), System.Windows.Threading.DispatcherPriority.Loaded);
                 break;
             case "toast":
                 ShowPage(HomePage, HomeTabButton);
@@ -345,15 +354,28 @@ public partial class MainWindow : Window
             case "stress":
                 _ = RunVisualStressTestAsync();
                 break;
+            case "support-methods":
+            case "support-amount":
+            case "support-custom":
+            case "support-checkout":
+            case "support-success":
+            case "support-expired":
+            case "support-failure":
+            case "support-crypto-methods":
+            case "support-crypto-amount":
+            case "support-crypto-checkout":
+            case "support-crypto-success":
+                await ApplySupportVisualQaStateAsync(state);
+                break;
         }
 
         SettingsScrollViewer.ScrollToTop();
         if (state == "settings-bottom")
-            Dispatcher.BeginInvoke(
+            _ = Dispatcher.BeginInvoke(
                 new Action(SettingsScrollViewer.ScrollToEnd),
                 System.Windows.Threading.DispatcherPriority.Loaded);
         else if (state == "settings-appearance")
-            Dispatcher.BeginInvoke(
+            _ = Dispatcher.BeginInvoke(
                 new Action(() => ThemeComboBox.BringIntoView()),
                 System.Windows.Threading.DispatcherPriority.Loaded);
 
@@ -377,6 +399,37 @@ public partial class MainWindow : Window
             RefreshVisiblePackages();
             RefreshCounts();
         }
+
+        if (Environment.GetEnvironmentVariable("MOONRISE_VISUAL_QA_SCREENSHOT") is { Length: > 0 } screenshotPath)
+        {
+            await Dispatcher.InvokeAsync(
+                () => { },
+                System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            await Task.Delay(450);
+            CaptureVisualQaScreenshot(screenshotPath);
+            if (string.Equals(
+                    Environment.GetEnvironmentVariable("MOONRISE_VISUAL_QA_EXIT_AFTER_SCREENSHOT"),
+                    "1",
+                    StringComparison.Ordinal))
+                _ = Dispatcher.BeginInvoke(Close, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        }
+    }
+
+    private void CaptureVisualQaScreenshot(string outputPath)
+    {
+        var fullPath = Path.GetFullPath(outputPath);
+        var directory = Path.GetDirectoryName(fullPath)
+                        ?? throw new InvalidOperationException("The screenshot output directory is unavailable.");
+        Directory.CreateDirectory(directory);
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var width = Math.Max(1, (int)Math.Ceiling(ActualWidth * dpi.DpiScaleX));
+        var height = Math.Max(1, (int)Math.Ceiling(ActualHeight * dpi.DpiScaleY));
+        var bitmap = new RenderTargetBitmap(width, height, dpi.PixelsPerInchX, dpi.PixelsPerInchY, PixelFormats.Pbgra32);
+        bitmap.Render(this);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var stream = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.Read);
+        encoder.Save(stream);
     }
 
     private void OpenFirstPackageContextMenu()
@@ -530,7 +583,7 @@ public partial class MainWindow : Window
         if (SelectedClientChoice?.Plugin is { } plugin)
         {
             ProfileStateText.Text = plugin.Manifest.Name;
-            ProfileStateText.Foreground = new SolidColorBrush(Color.FromRgb(0x71, 0xDE, 0xB5));
+            ProfileStateText.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, "Success");
             return;
         }
         try
@@ -541,13 +594,13 @@ public partial class MainWindow : Window
             ProfileStateText.Text = profile is null
                 ? T("Создайте профиль в Lunar", "Create it in Lunar first")
                 : profile.Name;
-            ProfileStateText.Foreground = new SolidColorBrush(profile is null
-                ? Color.FromRgb(0xF0, 0xAF, 0x62)
-                : Color.FromRgb(0x71, 0xDE, 0xB5));
+            ProfileStateText.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty,
+                profile is null ? "Warning" : "Success");
         }
         catch
         {
             ProfileStateText.Text = T("Lunar ещё не настроен", "Lunar is not configured yet");
+            ProfileStateText.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty, "Warning");
         }
     }
 
@@ -570,6 +623,12 @@ public partial class MainWindow : Window
     {
         if (e.Key != Key.Escape)
             return;
+        if (SupportOverlay.Visibility == Visibility.Visible)
+        {
+            CloseSupportDialog();
+            e.Handled = true;
+            return;
+        }
         if (LanguagePopup.IsOpen)
         {
             LanguagePopup.IsOpen = false;
@@ -643,9 +702,12 @@ public partial class MainWindow : Window
             var button = new Button
             {
                 Content = language.Name + (selected ? "  ✓" : ""),
-                Style = (Style)FindResource("LanguageOptionStyle"),
-                Background = new SolidColorBrush(selected ? Color.FromRgb(0x26, 0x20, 0x39) : Colors.Transparent)
+                Style = (Style)FindResource("LanguageOptionStyle")
             };
+            if (selected)
+                button.SetResourceReference(Control.BackgroundProperty, "SurfaceSelected");
+            else
+                button.Background = Brushes.Transparent;
             button.Click += (_, _) =>
             {
                 LanguagePopup.IsOpen = false;
@@ -679,8 +741,32 @@ public partial class MainWindow : Window
         CatalogComingSoonText.Text = T("Скоро", "Coming soon");
         DiscordButton.ToolTip = T("Открыть Discord Moonrise", "Open Moonrise Discord");
         System.Windows.Automation.AutomationProperties.SetName(DiscordButton, (string)DiscordButton.ToolTip);
-        SupportButton.ToolTip = T("Поддержать автора", "Support the author");
+        SupportButton.ToolTip = T("Поддержать Moonrise", "Support Moonrise");
         System.Windows.Automation.AutomationProperties.SetName(SupportButton, (string)SupportButton.ToolTip);
+        SupportTitle.Text = T("Поддержать Moonrise", "Support Moonrise");
+        SupportSubtitle.Text = T("Moonrise — бесплатный проект с открытым исходным кодом.", "Moonrise is free and open source.");
+        SupportIntroText.Text = T("Если вам нравится проект, вы можете поддержать его развитие.", "If you enjoy the project, you can support its development.");
+        SupportTelegramMethodTitle.Text = T("Звёзды Telegram", "Telegram Stars");
+        SupportTelegramMethodHint.Text = T("Быстрая оплата в Telegram", "Fast checkout in Telegram");
+        SupportCryptoTitle.Text = T("Криптовалюта", "Crypto");
+        SupportCryptoHint.Text = T("Оплата из любого криптокошелька", "Pay from any crypto wallet");
+        SupportLoadingText.Text = T("Загрузка способов оплаты…", "Loading payment methods…");
+        SupportChooseAmountTitle.Text = T("Выберите сумму", "Choose amount");
+        SupportBackToMethodsButton.Content = T("Назад", "Back");
+        SupportCustomAmountLabel.Text = T("ДРУГАЯ СУММА", "CUSTOM AMOUNT");
+        SupportTermsText.Text = T("Продолжая, вы принимаете условия поддержки.", "By continuing, you accept the support terms.");
+        SupportTermsHint.Text = T("Добровольная поддержка не открывает платные функции и не включает регулярные платежи.", "Voluntary support does not unlock paid features or start recurring payments.");
+        SupportContinueButton.Content = T("Продолжить", "Continue");
+        SupportCheckoutMethodText.Text = T("Звёзды Telegram", "Telegram Stars");
+        SupportOpenTelegramButton.Content = T("Открыть Telegram", "Open Telegram");
+        SupportOpenTelegramHint.Text = T("Безопасно продолжите оплату в Telegram.", "Continue securely in Telegram.");
+        SupportScanText.Text = T("Отсканируйте телефоном", "Scan with your phone");
+        SupportThankYouTitle.Text = T("Спасибо за поддержку!", "Thank you for your support!");
+        SupportThankYouText.Text = T("Ваша поддержка помогает развивать Moonrise и сохранять проект бесплатным.", "Your support helps Moonrise grow and remain free.");
+        SupportDoneButton.Content = T("Готово", "Done");
+        SupportCreateNewButton.Content = T("Создать новый платёж", "Create new payment");
+        System.Windows.Automation.AutomationProperties.SetName(SupportCloseButton, T("Закрыть окно поддержки", "Close support"));
+        SupportCloseButton.ToolTip = T("Закрыть", "Close");
         OpenThemesButton.Content = T("Открыть папку тем", "Open themes folder");
         ReloadThemesButton.Content = T("Обновить темы", "Reload themes");
         ImportThemeButton.Content = T("Импортировать папку", "Import folder");
@@ -745,6 +831,8 @@ public partial class MainWindow : Window
         OpenCrashReportButton.Content = T("Открыть отчёт", "Open report");
         if (_trayOpenItem is not null) _trayOpenItem.Text = T("Открыть Moonrise", "Open Moonrise");
         if (_trayExitItem is not null) _trayExitItem.Text = T("Выйти", "Exit");
+        if (SupportOverlay.Visibility == Visibility.Visible)
+            UpdateSupportState();
         RefreshProfileState();
         if (_initialized && Volatile.Read(ref _launchInProgress) == 0 && _lastStatusLevel == StatusLevel.Ready)
             SetStatus(
@@ -782,6 +870,59 @@ public partial class MainWindow : Window
         if (rejectedThemes.Count > 0)
             ShowToast(ToastKind.Warning, T("Некорректная тема пропущена", "Invalid theme skipped"),
                 T("Moonrise Standard оставлена активной; подробности в диагностике.", "Moonrise Standard was kept; see diagnostics for details."));
+    }
+
+    private async Task ApplySupportVisualQaStateAsync(string state)
+    {
+        var crypto = state.StartsWith("support-crypto-", StringComparison.Ordinal);
+        _supportFlow?.Dispose();
+        _supportFlow = new SupportFlowController(new VisualQaSupportApiClient(
+            state switch
+            {
+                "support-success" or "support-crypto-success" => "paid",
+                "support-expired" => "expired",
+                "support-failure" => "failed",
+                _ => "pending"
+            }, crypto));
+        _supportFlow.StateChanged += SupportFlow_StateChanged;
+        _supportDialogCancellation?.Dispose();
+        _supportDialogCancellation = new CancellationTokenSource();
+        _supportShowingMethods = state is "support-methods" or "support-crypto-methods";
+        _renderedSupportCheckoutUrl = null;
+        _lastSupportDiagnosticKey = null;
+        SupportQrImage.Source = null;
+        SupportTermsCheckBox.IsChecked = false;
+        SupportOverlay.Visibility = Visibility.Visible;
+        SupportOverlay.IsHitTestVisible = true;
+        await _supportFlow.LoadAsync(_supportDialogCancellation.Token);
+
+        if (_supportShowingMethods)
+            return;
+
+        _supportFlow.SelectMethod(crypto ? "direct_crypto" : "telegram_stars");
+
+        if (state is "support-amount" or "support-custom" or "support-crypto-amount")
+        {
+            UpdateSupportState();
+            SupportCustomAmountTextBox.Text = crypto ? "5" : state == "support-amount" ? "100" : "5000";
+            SupportTermsCheckBox.IsChecked = true;
+            _ = Dispatcher.BeginInvoke(
+                new Action(() => Keyboard.Focus(SupportCustomAmountTextBox)),
+                System.Windows.Threading.DispatcherPriority.Loaded);
+            return;
+        }
+
+        await _supportFlow.BeginCheckoutAsync(
+            crypto ? 1 : state == "support-success" ? 100 : 50,
+            _russian ? "ru" : "en",
+            _supportDialogCancellation.Token);
+        if (crypto && _supportFlow.Method?.Assets?.FirstOrDefault() is { } asset)
+            await _supportFlow.BeginDirectCryptoCheckoutAsync(
+                asset,
+                _supportDialogCancellation.Token);
+        if (state is ("support-success" or "support-crypto-success" or "support-expired" or "support-failure") &&
+            _supportFlow.ActivePollingTask is { } polling)
+            await polling;
     }
 
     private void LanguagePackComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1412,9 +1553,629 @@ public partial class MainWindow : Window
     private void OpenThemesButton_Click(object sender, RoutedEventArgs e) => OpenFolder(_paths.ThemesDirectory);
     private void DiscordButton_Click(object sender, RoutedEventArgs e) => OpenExternalUrl("https://discord.gg/RMZysft2g9");
     private void GitHubButton_Click(object sender, RoutedEventArgs e) => OpenExternalUrl("https://github.com/ZOONGG/Moonrise");
-    private void SupportButton_Click(object sender, RoutedEventArgs e) =>
-        ShowToast(ToastKind.Info, T("Поддержать автора", "Support the author"),
-            T("Ссылка для поддержки появится позже.", "A support link will be added soon."));
+    private async void SupportButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (SupportOverlay.Visibility == Visibility.Visible)
+            return;
+
+        _supportShowingMethods = true;
+        _renderedSupportCheckoutUrl = null;
+        SupportCustomAmountTextBox.Text = string.Empty;
+        SupportTermsCheckBox.IsChecked = false;
+        SupportQrImage.Source = null;
+        _supportDialogCancellation?.Cancel();
+        _supportDialogCancellation?.Dispose();
+        _supportDialogCancellation = new CancellationTokenSource();
+
+        SupportOverlay.Visibility = Visibility.Visible;
+        SupportOverlay.IsHitTestVisible = true;
+        SupportOverlay.BeginAnimation(OpacityProperty,
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(MotionController.ModalMilliseconds))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            }, HandoffBehavior.SnapshotAndReplace);
+        if (!_motion.ReducedMotion && SupportDialogPanel.RenderTransform is ScaleTransform scale)
+        {
+            scale.BeginAnimation(ScaleTransform.ScaleXProperty,
+                new DoubleAnimation(.98, 1, TimeSpan.FromMilliseconds(MotionController.ModalMilliseconds)),
+                HandoffBehavior.SnapshotAndReplace);
+            scale.BeginAnimation(ScaleTransform.ScaleYProperty,
+                new DoubleAnimation(.98, 1, TimeSpan.FromMilliseconds(MotionController.ModalMilliseconds)),
+                HandoffBehavior.SnapshotAndReplace);
+        }
+
+        ShowOnlySupportPanel(SupportLoadingPanel);
+        SupportCloseButton.Focus();
+        var configuration = SupportApiConfiguration.Load();
+        if (!configuration.IsConfigured)
+        {
+            ShowSupportTerminal(
+                T("Поддержка пока недоступна", "Support is not available yet"),
+                T("Сервис поддержки не настроен в этой сборке.", configuration.Error ?? "The support service is not configured in this build."),
+                canCreateNew: false);
+            return;
+        }
+
+        if (_supportFlow is null)
+        {
+            _supportHttpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+            _supportFlow = new SupportFlowController(new SupportApiClient(_supportHttpClient, configuration.BaseUri!));
+            _supportFlow.StateChanged += SupportFlow_StateChanged;
+        }
+
+        await _supportFlow.LoadAsync(_supportDialogCancellation.Token);
+    }
+
+    private void SupportFlow_StateChanged(object? sender, EventArgs e)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(ApplySupportStateChange);
+            return;
+        }
+        ApplySupportStateChange();
+    }
+
+    private void ApplySupportStateChange()
+    {
+        if (_supportFlow is null)
+            return;
+        var diagnosticKey = $"{_supportFlow.State}|{_supportFlow.StatusPollCount}|{_supportFlow.LastErrorCode}";
+        if (!string.Equals(_lastSupportDiagnosticKey, diagnosticKey, StringComparison.Ordinal))
+        {
+            _lastSupportDiagnosticKey = diagnosticKey;
+            AddDiagnostic(
+                $"Support flow state: {_supportFlow.State}; polls={_supportFlow.StatusPollCount}; error={_supportFlow.LastErrorCode ?? "none"}.");
+        }
+        UpdateSupportState();
+    }
+
+    private void UpdateSupportState()
+    {
+        if (SupportOverlay.Visibility != Visibility.Visible || _supportFlow is null)
+            return;
+
+        switch (_supportFlow.State)
+        {
+            case SupportFlowState.LoadingMethods:
+                ShowOnlySupportPanel(SupportLoadingPanel);
+                break;
+            case SupportFlowState.ChoosingAmount:
+                if (_supportShowingMethods)
+                {
+                    RenderSupportMethods();
+                    ShowOnlySupportPanel(SupportMethodsPanel);
+                    (SupportTelegramMethodButton.IsEnabled ? SupportTelegramMethodButton : SupportCryptoMethodButton).Focus();
+                }
+                else
+                {
+                    RenderSupportAmounts();
+                    ShowOnlySupportPanel(SupportAmountPanel);
+                    SupportPresetPanel.Children.OfType<RadioButton>().FirstOrDefault()?.Focus();
+                }
+                break;
+            case SupportFlowState.ChoosingAsset:
+                RenderSupportAssets();
+                ShowOnlySupportPanel(SupportAssetPanel);
+                break;
+            case SupportFlowState.CreatingCheckout:
+                ClearRenderedSupportCheckout();
+                ShowOnlySupportPanel(SupportAmountPanel);
+                SetSupportAmountControlsEnabled(false);
+                SupportContinueButton.Content = T("Создание платежа…", "Creating payment…");
+                break;
+            case SupportFlowState.Waiting:
+            case SupportFlowState.ConnectivityIssue:
+                if (!_supportFlow.TryGetActiveCheckout(out var activeCheckout) || activeCheckout is null)
+                    break;
+                RenderSupportCheckout(activeCheckout);
+                ShowOnlySupportPanel(SupportCheckoutPanel);
+                SupportWaitingIndicator.Visibility = Visibility.Visible;
+                SupportWaitingProgress.IsIndeterminate = !_motion.ReducedMotion;
+                SupportWaitingText.Text = _supportFlow.State == SupportFlowState.ConnectivityIssue
+                    ? T("Связь прервана. Повторяем попытку…", "Connection interrupted. Retrying…")
+                    : T("Ожидаем оплату…", "Waiting for payment…");
+                break;
+            case SupportFlowState.Paid:
+                RenderSupportSuccess();
+                ShowOnlySupportPanel(SupportSuccessPanel);
+                SupportDoneButton.Focus();
+                break;
+            case SupportFlowState.Expired:
+                ShowSupportTerminal(
+                    T("Срок платёжной сессии истёк.", "This payment session expired."),
+                    T("Создайте новый платёж, чтобы продолжить.", "Create a new payment to continue."),
+                    canCreateNew: true);
+                break;
+            case SupportFlowState.Refunded:
+                ShowSupportTerminal(
+                    T("Платёж возвращён.", "This payment was refunded."),
+                    T("Эта платёжная сессия завершена.", "This payment session is complete."),
+                    canCreateNew: true);
+                break;
+            case SupportFlowState.Failed:
+                ShowSupportFailure(_supportFlow.LastErrorCode);
+                break;
+        }
+    }
+
+    private void RenderSupportMethods()
+    {
+        var stars = _supportFlow?.Methods.FirstOrDefault(item =>
+            string.Equals(item.Id, "telegram_stars", StringComparison.OrdinalIgnoreCase));
+        var crypto = _supportFlow?.Methods.FirstOrDefault(item =>
+            string.Equals(item.Id, "direct_crypto", StringComparison.OrdinalIgnoreCase));
+        SupportTelegramMethodButton.IsEnabled = stars?.Enabled == true;
+        SupportTelegramMethodHint.Text = stars?.Enabled == true
+            ? T("Только в Telegram", "Telegram only")
+            : T("Сейчас недоступно", "Currently unavailable");
+        SupportCryptoMethodButton.IsEnabled = crypto?.Enabled == true;
+        SupportCryptoHint.Text = crypto?.Enabled == true
+            ? T("Оплата из любого криптокошелька", "Pay from any crypto wallet")
+            : T("Сейчас недоступно", "Currently unavailable");
+    }
+
+    private void RenderSupportAssets()
+    {
+        SupportChooseAssetTitle.Text = T("Выберите криптовалюту", "Choose an asset");
+        SupportChooseAssetHint.Text = T("Сеть будет указана на экране оплаты.", "The payment network is shown on the next screen.");
+        SupportBackToAmountButton.Content = T("Назад", "Back");
+        SupportAssetButtons.Children.Clear();
+        foreach (var asset in _supportFlow?.Method?.Assets ?? [])
+        {
+            var button = new Button
+            {
+                Tag = asset,
+                Width = 250,
+                Height = 62,
+                Margin = new Thickness(5),
+                Padding = new Thickness(14, 8, 14, 8),
+                HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                Style = (Style)FindResource("ButtonBase"),
+                Content = new StackPanel
+                {
+                    Children =
+                    {
+                        new TextBlock { Text = asset.Asset, FontWeight = FontWeights.SemiBold, Foreground = (Brush)FindResource("Accent") },
+                        new TextBlock { Text = asset.NetworkName, FontSize = 11, Foreground = (Brush)FindResource("TextMuted"), Margin = new Thickness(0, 3, 0, 0) }
+                    }
+                }
+            };
+            button.Click += SupportAssetButton_Click;
+            SupportAssetButtons.Children.Add(button);
+        }
+    }
+
+    private void RenderSupportAmounts()
+    {
+        var method = _supportFlow?.Method;
+        if (method is null)
+            return;
+        SetSupportAmountControlsEnabled(true);
+        SupportContinueButton.Content = T("Продолжить", "Continue");
+        SupportCustomAmountTextBox.Tag = method.Id;
+        SupportCustomAmountTextBox.IsEnabled = method.Custom.Enabled;
+        SupportPresetPanel.Children.Clear();
+        foreach (var amount in method.Presets)
+        {
+            var button = new RadioButton
+            {
+                Tag = amount,
+                Content = CreateSupportAmountContent(amount),
+                GroupName = "SupportAmount",
+                Style = (Style)FindResource("SupportAmountSelector"),
+                Margin = new Thickness(0, 0, 10, 0)
+            };
+            System.Windows.Automation.AutomationProperties.SetName(button, FormatSupportAmount(amount));
+            button.Checked += SupportPresetButton_Checked;
+            SupportPresetPanel.Children.Add(button);
+        }
+        RefreshSupportAmountSelection();
+    }
+
+    private void SupportTelegramMethodButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_supportFlow?.SelectMethod("telegram_stars") != true)
+            return;
+        _supportShowingMethods = false;
+        UpdateSupportState();
+    }
+
+    private void SupportCryptoMethodButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_supportFlow?.SelectMethod("direct_crypto") != true)
+            return;
+        _supportShowingMethods = false;
+        UpdateSupportState();
+    }
+
+    private void SupportBackToAmountButton_Click(object sender, RoutedEventArgs e) => _supportFlow?.ChangeAmount();
+
+    private async void SupportAssetButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: SupportAsset asset } || _supportFlow is null)
+            return;
+        await _supportFlow.BeginDirectCryptoCheckoutAsync(asset, _supportDialogCancellation?.Token ?? default);
+    }
+
+    private void SupportBackToMethodsButton_Click(object sender, RoutedEventArgs e)
+    {
+        _supportShowingMethods = true;
+        UpdateSupportState();
+    }
+
+    private void SupportPresetButton_Checked(object sender, RoutedEventArgs e)
+    {
+        if (sender is not RadioButton { Tag: int amount } || _supportFlow is null ||
+            !_supportFlow.TryGetPresetInput(amount, SupportAmountCulture, out var value))
+            return;
+        SupportCustomAmountTextBox.Text = value;
+        SupportCustomAmountTextBox.CaretIndex = value.Length;
+    }
+
+    private void SupportCustomAmountTextBox_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) =>
+        RefreshSupportAmountSelection();
+
+    private void SupportCustomAmountTextBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e) =>
+        NormalizeSupportCustomAmount();
+
+    private void SupportCustomAmountTextBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+            NormalizeSupportCustomAmount();
+    }
+
+    private void SupportCustomAmountTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        => RefreshSupportAmountSelection();
+
+    private void SupportTermsCheckBox_Changed(object sender, RoutedEventArgs e) => RefreshSupportAmountSelection();
+
+    private void RefreshSupportAmountSelection()
+    {
+        if (SupportContinueButton is null || _supportFlow?.Method is not { } method)
+            return;
+        var hasInput = !string.IsNullOrWhiteSpace(SupportCustomAmountTextBox.Text);
+        var valid = _supportFlow.TryResolveAmountSelection(
+            SupportCustomAmountTextBox.Text,
+            SupportAmountCulture,
+            out var amount,
+            out var selectedPreset);
+        foreach (var button in SupportPresetPanel.Children.OfType<RadioButton>())
+        {
+            var buttonAmount = (int)button.Tag;
+            var selected = selectedPreset == buttonAmount;
+            button.IsChecked = selected;
+            System.Windows.Automation.AutomationProperties.SetItemStatus(
+                button,
+                selected ? T("Выбрано", "Selected") : T("Не выбрано", "Not selected"));
+        }
+
+        System.Windows.Automation.AutomationProperties.SetItemStatus(
+            SupportCustomAmountTextBox,
+            valid ? T("Допустимая сумма", "Valid amount") : T("Введите сумму", "Enter an amount"));
+        SupportAmountValidationText.Text = !hasInput
+            ? string.Empty
+            : valid
+                ? string.Empty
+                : T("Введите сумму числом.", "Enter a numeric amount.");
+        SupportContinueButton.IsEnabled = valid && SupportTermsCheckBox.IsChecked == true && method.Enabled;
+        if (valid)
+            System.Windows.Automation.AutomationProperties.SetHelpText(SupportContinueButton, FormatSupportAmount(amount));
+    }
+
+    private async void SupportContinueButton_Click(object sender, RoutedEventArgs e)
+    {
+        NormalizeSupportCustomAmount();
+        if (_supportFlow is null ||
+            !_supportFlow.TryNormalizeAmount(
+                SupportCustomAmountTextBox.Text,
+                SupportAmountCulture,
+                out var amount) ||
+            SupportTermsCheckBox.IsChecked != true)
+        {
+            RefreshSupportAmountSelection();
+            return;
+        }
+        await _supportFlow.BeginCheckoutAsync(amount, _russian ? "ru" : "en", _supportDialogCancellation?.Token ?? default);
+    }
+
+    private void RenderSupportCheckout(SupportCheckoutView checkout)
+    {
+        var crypto = IsCryptoSupportMethod(checkout.Provider);
+        SupportCheckoutMethodText.Text = crypto ? checkout.NetworkName ?? checkout.Network ?? T("Криптовалюта", "Crypto") : T("Звёзды Telegram", "Telegram Stars");
+        SupportCheckoutAmountText.Text = crypto
+            ? $"{checkout.CryptoAmount} {checkout.Asset}"
+            : checkout.Amount.ToString("N0", SupportAmountCulture);
+        SupportCheckoutStarsIcon.Visibility = crypto ? Visibility.Collapsed : Visibility.Visible;
+        SupportQrFrame.Width = 248;
+        SupportQrFrame.Height = 248;
+        SupportQrImage.Width = 236;
+        SupportQrImage.Height = 236;
+        SupportOpenTelegramButton.Content = crypto ? T("Открыть кошелёк", "Open wallet") : T("Открыть Telegram", "Open Telegram");
+        SupportOpenTelegramHint.Text = crypto
+            ? checkout.NetworkName ?? checkout.Network ?? string.Empty
+            : T("Безопасно продолжите оплату в Telegram.", "Continue securely in Telegram.");
+        SupportScanText.Text = crypto ? T("Отсканируйте QR в криптокошельке", "Scan the QR code in your crypto wallet") : T("Отсканируйте телефоном", "Scan with your phone");
+        SupportOpenTelegramButton.Visibility = !crypto || checkout.PaymentUri is not null ? Visibility.Visible : Visibility.Collapsed;
+        SupportOpenTelegramButton.IsEnabled = !crypto || checkout.PaymentUri is not null;
+        SupportCryptoDetailsPanel.Visibility = crypto ? Visibility.Visible : Visibility.Collapsed;
+        SupportAddressLabel.Text = T("Адрес", "Address");
+        SupportExactAmountLabel.Text = T("Сумма", "Amount");
+        SupportAddressCopyText.Text = T("Копировать", "Copy");
+        SupportAmountCopyText.Text = T("Копировать", "Copy");
+        SupportAddressText.Text = ShortAddress(checkout.WalletAddress);
+        SupportAddressText.ToolTip = checkout.WalletAddress;
+        SupportExactAmountText.Text = $"{checkout.CryptoAmount} {checkout.Asset}";
+        SupportNetworkWarningText.Text = T(
+            "Отправляйте средства только в указанной сети. Ошибка сети может привести к потере средств.",
+            "Send funds only on the network shown above. Using the wrong network may permanently lose funds.");
+        if (string.Equals(_renderedSupportCheckoutUrl, checkout.CheckoutUrl, StringComparison.Ordinal))
+            return;
+        try
+        {
+            var png = SupportQrCodeService.CreatePng(checkout.Provider, checkout.CheckoutUrl);
+            using var stream = new MemoryStream(png, writable: false);
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.StreamSource = stream;
+            image.EndInit();
+            image.Freeze();
+            SupportQrImage.Source = image;
+            _renderedSupportCheckoutUrl = checkout.CheckoutUrl;
+        }
+        catch (InvalidDataException)
+        {
+            SupportQrImage.Source = null;
+            SupportOpenTelegramButton.IsEnabled = false;
+        }
+    }
+
+    private void SupportOpenTelegramButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_supportFlow?.TryGetActiveCheckout(out var activeCheckout) != true || activeCheckout is null)
+            return;
+        var checkoutUrl = IsCryptoSupportMethod(activeCheckout.Provider)
+            ? activeCheckout.PaymentUri
+            : activeCheckout.CheckoutUrl;
+        if (string.IsNullOrWhiteSpace(checkoutUrl))
+            return;
+        if (!CheckoutUrlValidator.TryValidateCheckout(activeCheckout.Provider, checkoutUrl, out _))
+        {
+            ShowToast(ToastKind.Error, T("Не удалось открыть оплату", "Could not open checkout"),
+                T("Сервис вернул небезопасную ссылку.", "The service returned an unsafe checkout link."));
+            return;
+        }
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = checkoutUrl, UseShellExecute = true })?.Dispose();
+        }
+        catch (Exception exception) when (exception is Win32Exception or InvalidOperationException)
+        {
+            ShowToast(ToastKind.Error, T("Не удалось открыть оплату", "Could not open checkout"),
+                T("Повторите попытку позже.", "Please try again later."));
+        }
+    }
+
+    private async void SupportCopyAddressButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_supportFlow?.Checkout?.WalletAddress is { Length: > 0 } value)
+            await CopySupportValueAsync(value, SupportAddressCopyText);
+    }
+
+    private async void SupportCopyAmountButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_supportFlow?.Checkout?.CryptoAmount is { Length: > 0 } value)
+            await CopySupportValueAsync(value, SupportAmountCopyText);
+    }
+
+    private async Task CopySupportValueAsync(string value, TextBlock feedback)
+    {
+        try
+        {
+            Clipboard.SetText(value);
+            feedback.Text = T("Скопировано", "Copied");
+            await Task.Delay(1400);
+            if (SupportOverlay.Visibility == Visibility.Visible)
+                feedback.Text = T("Копировать", "Copy");
+        }
+        catch (ExternalException)
+        {
+            // Visible full-value tooltip/amount and QR remain usable when clipboard is busy.
+        }
+    }
+
+    private static string ShortAddress(string? value) =>
+        string.IsNullOrWhiteSpace(value) || value.Length <= 22
+            ? value ?? string.Empty
+            : value[..10] + "…" + value[^8..];
+
+    private void RenderSupportSuccess()
+    {
+        if (_supportFlow?.Checkout is { } checkout)
+        {
+            var crypto = IsCryptoSupportMethod(checkout.Provider);
+            SupportSuccessStarsIcon.Visibility = crypto ? Visibility.Collapsed : Visibility.Visible;
+            SupportThankYouStarsIcon.Visibility = crypto ? Visibility.Collapsed : Visibility.Visible;
+            SupportThankYouAmountText.Text = crypto
+                ? $"${checkout.Amount.ToString("0.##", SupportAmountCulture)}"
+                : checkout.Amount.ToString("N0", SupportAmountCulture);
+        }
+        if (_motion.ReducedMotion)
+            return;
+        SupportSuccessPanel.BeginAnimation(
+            OpacityProperty,
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(MotionController.ModalMilliseconds))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            },
+            HandoffBehavior.SnapshotAndReplace);
+        if (SupportSuccessVisual.RenderTransform is ScaleTransform scale)
+        {
+            var ease = new BackEase { Amplitude = 0.18, EasingMode = EasingMode.EaseOut };
+            scale.BeginAnimation(
+                ScaleTransform.ScaleXProperty,
+                new DoubleAnimation(.88, 1, TimeSpan.FromMilliseconds(MotionController.ModalMilliseconds + 80)) { EasingFunction = ease },
+                HandoffBehavior.SnapshotAndReplace);
+            scale.BeginAnimation(
+                ScaleTransform.ScaleYProperty,
+                new DoubleAnimation(.88, 1, TimeSpan.FromMilliseconds(MotionController.ModalMilliseconds + 80)) { EasingFunction = ease },
+                HandoffBehavior.SnapshotAndReplace);
+        }
+    }
+
+    private void ShowSupportFailure(string? code)
+    {
+        var text = code switch
+        {
+            "PROVIDER_NOT_CONFIGURED" or "METHOD_UNAVAILABLE" => T("Этот способ оплаты сейчас недоступен.", "This payment method is currently unavailable."),
+            "UNSAFE_CHECKOUT_URL" => T("Сервис вернул небезопасную ссылку. Оплата не была открыта.", "The service returned an unsafe link. Checkout was not opened."),
+            "NETWORK_UNAVAILABLE" => T("Не удалось подключиться к сервису поддержки.", "Could not connect to the support service."),
+            "PAYMENT_NOT_FOUND" => T("Платёжная сессия больше недоступна.", "The payment session is no longer available."),
+            _ => T("Не удалось продолжить платёж. Попробуйте ещё раз позже.", "Could not continue the payment. Please try again later.")
+        };
+        ShowSupportTerminal(T("Что-то пошло не так", "Something went wrong"), text, _supportFlow?.Method is not null);
+    }
+
+    private void ShowSupportTerminal(string title, string text, bool canCreateNew)
+    {
+        SupportTerminalTitle.Text = title;
+        SupportTerminalText.Text = text;
+        SupportCreateNewButton.Visibility = canCreateNew ? Visibility.Visible : Visibility.Collapsed;
+        SupportCreateNewButton.Content = _supportFlow?.Method is null
+            ? T("Повторить", "Retry")
+            : T("Создать новый платёж", "Create new payment");
+        ShowOnlySupportPanel(SupportTerminalPanel);
+        if (canCreateNew)
+            SupportCreateNewButton.Focus();
+    }
+
+    private async void SupportCreateNewButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_supportFlow?.Method is null)
+        {
+            ShowOnlySupportPanel(SupportLoadingPanel);
+            if (_supportFlow is not null)
+                await _supportFlow.LoadAsync(_supportDialogCancellation?.Token ?? default);
+            return;
+        }
+        SupportCustomAmountTextBox.Text = string.Empty;
+        SupportTermsCheckBox.IsChecked = false;
+        ClearRenderedSupportCheckout();
+        _supportShowingMethods = false;
+        _supportFlow.ChangeAmount();
+    }
+
+    private void SupportCloseButton_Click(object sender, RoutedEventArgs e) => CloseSupportDialog();
+
+    private void CloseSupportDialog()
+    {
+        _supportDialogCancellation?.Cancel();
+        _supportDialogCancellation?.Dispose();
+        _supportDialogCancellation = null;
+        _supportFlow?.Close();
+        SupportQrImage.Source = null;
+        _renderedSupportCheckoutUrl = null;
+        SupportOverlay.IsHitTestVisible = false;
+        var animation = new DoubleAnimation(SupportOverlay.Opacity, 0, TimeSpan.FromMilliseconds(MotionController.FastMilliseconds));
+        animation.Completed += (_, _) =>
+        {
+            SupportOverlay.Visibility = Visibility.Collapsed;
+            SupportOverlay.Opacity = 1;
+            SupportButton.Focus();
+        };
+        SupportOverlay.BeginAnimation(OpacityProperty, animation, HandoffBehavior.SnapshotAndReplace);
+    }
+
+    private void ShowOnlySupportPanel(FrameworkElement panel)
+    {
+        foreach (var item in new FrameworkElement[]
+                 {
+                      SupportLoadingPanel, SupportMethodsPanel, SupportAmountPanel, SupportAssetPanel, SupportCheckoutPanel,
+                     SupportSuccessPanel, SupportTerminalPanel
+                 })
+            item.Visibility = ReferenceEquals(item, panel) ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void ClearRenderedSupportCheckout()
+    {
+        _renderedSupportCheckoutUrl = null;
+        SupportQrImage.Source = null;
+        SupportOpenTelegramButton.IsEnabled = false;
+        SupportCryptoDetailsPanel.Visibility = Visibility.Collapsed;
+    }
+
+    private void SetSupportAmountControlsEnabled(bool enabled)
+    {
+        SupportPresetPanel.IsEnabled = enabled;
+        SupportCustomAmountTextBox.IsEnabled = enabled && _supportFlow?.Method?.Custom.Enabled == true;
+        SupportTermsCheckBox.IsEnabled = enabled;
+        if (!enabled)
+            SupportContinueButton.IsEnabled = false;
+    }
+
+    private string FormatSupportAmount(decimal amount) =>
+        IsCryptoSupportMethod(_supportFlow?.Method?.Id)
+            ? $"${amount.ToString("0.##", SupportAmountCulture)}"
+            : $"{amount:N0} Stars";
+
+    private FrameworkElement CreateSupportAmountContent(int amount)
+    {
+        var panel = new StackPanel { Orientation = Orientation.Horizontal };
+        panel.Children.Add(new TextBlock
+        {
+            Text = IsCryptoSupportMethod(_supportFlow?.Method?.Id)
+                ? $"${amount:N0}"
+                : amount.ToString("N0", SupportAmountCulture),
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        if (!IsCryptoSupportMethod(_supportFlow?.Method?.Id))
+            panel.Children.Add(new Image
+        {
+            Source = (ImageSource)FindResource("TelegramStarsIcon"),
+            Width = 21,
+            Height = 21,
+            Margin = new Thickness(7, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center
+        });
+        return panel;
+    }
+
+    private static bool IsCryptoSupportMethod(string? methodId) =>
+        string.Equals(methodId, "direct_crypto", StringComparison.OrdinalIgnoreCase);
+
+    private CultureInfo SupportAmountCulture
+    {
+        get
+        {
+            try
+            {
+                return CultureInfo.GetCultureInfo(_languageCode);
+            }
+            catch (CultureNotFoundException)
+            {
+                return CultureInfo.CurrentCulture;
+            }
+        }
+    }
+
+    private void NormalizeSupportCustomAmount()
+    {
+        if (_supportFlow is null ||
+            !_supportFlow.TryNormalizeAmount(
+                SupportCustomAmountTextBox.Text,
+                SupportAmountCulture,
+                out var amount))
+            return;
+
+        var normalized = amount.ToString(SupportAmountCulture);
+        if (!string.Equals(SupportCustomAmountTextBox.Text, normalized, StringComparison.Ordinal))
+        {
+            SupportCustomAmountTextBox.Text = normalized;
+            SupportCustomAmountTextBox.CaretIndex = normalized.Length;
+        }
+        RefreshSupportAmountSelection();
+    }
 
     private void YouTubeButton_Click(object sender, RoutedEventArgs e) => OpenExternalUrl("https://www.youtube.com/@MythicHypixel");
 
@@ -3275,6 +4036,8 @@ public partial class MainWindow : Window
 
     private void MainWindow_Closing(object? sender, CancelEventArgs e)
     {
+        if (SupportOverlay.Visibility == Visibility.Visible)
+            CloseSupportDialog();
         if (!BwhRelayLifetimePolicy.ShouldHideInsteadOfClose(
                 _bwhApiRelay?.IsRunning == true,
                 _explicitExitRequested))
@@ -3337,6 +4100,10 @@ public partial class MainWindow : Window
 
     private void MainWindow_Closed(object? sender, EventArgs e)
     {
+        _supportDialogCancellation?.Cancel();
+        _supportDialogCancellation?.Dispose();
+        _supportFlow?.Dispose();
+        _supportHttpClient?.Dispose();
         _toasts.Clear();
         _themeService.Dispose();
         if (!_visualQaMode)
@@ -3360,6 +4127,63 @@ public partial class MainWindow : Window
             _trayIcon.Dispose();
             _trayIcon = null;
         }
+    }
+
+    private sealed class VisualQaSupportApiClient(string status, bool crypto) : ISupportApiClient
+    {
+        public Task<SupportMethodsResponse> GetMethodsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new SupportMethodsResponse([
+                new SupportMethod(
+                    "telegram_stars",
+                    true,
+                    "XTR",
+                    [50, 100, 250, 500],
+                    new SupportCustomAmount(true, 1, 10000)),
+                new SupportMethod(
+                    "direct_crypto",
+                    true,
+                    "USD",
+                    [1, 5, 10, 25],
+                    new SupportCustomAmount(true, 1),
+                    null,
+                    [new SupportAsset("USDT", "Tether USD", "ethereum", "Ethereum (ERC-20)", 6, "token", true)])
+            ]));
+
+        public Task<SupportCheckoutResponse> CreateCheckoutAsync(
+            string methodId,
+            SupportCheckoutRequest request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new SupportCheckoutResponse(
+                "visual-qa-payment",
+                methodId,
+                crypto ? "USDT" : "XTR",
+                request.Amount,
+                crypto ? null : "https://t.me/$moonrise-visual-qa",
+                DateTimeOffset.UtcNow.AddMinutes(30),
+                "visual-qa-memory-only-token",
+                null,
+                crypto ? request.Amount : null,
+                crypto ? "USDT" : null,
+                crypto ? "ethereum" : null,
+                crypto ? "Ethereum (ERC-20)" : null,
+                crypto ? "1.003821" : null,
+                crypto ? "0x1111111111111111111111111111111111111111" : null,
+                crypto ? "ethereum:0xdAC17F958D2ee523a2206206994597C13D831ec7@1/transfer?address=0x1111111111111111111111111111111111111111&uint256=1003821" : null));
+
+        public Task<SupportStatusResult> GetPaymentStatusAsync(
+            string paymentIntentId,
+            string statusToken,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new SupportStatusResult(
+                new PublicPaymentStatus(
+                    paymentIntentId,
+                    crypto ? "direct_crypto" : "telegram_stars",
+                    crypto ? "USDT" : "XTR",
+                    crypto ? 1 : status == "paid" ? 100 : 50,
+                    status,
+                    DateTimeOffset.UtcNow.AddMinutes(30),
+                    status == "paid" ? DateTimeOffset.UtcNow : null),
+                TimeSpan.FromSeconds(30)));
     }
 
     private enum StatusLevel { Working, Ready, Warning, Error }

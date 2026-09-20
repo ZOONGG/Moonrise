@@ -42,7 +42,7 @@
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource SurfaceHover}"/>
+                                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource ChromeHoverBackground}"/>
                                 <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
                             </Trigger>
                             <MultiTrigger>
@@ -66,7 +66,7 @@
             <Setter Property="Width" Value="86"/>
             <Setter Property="Height" Value="38"/>
             <Setter Property="Margin" Value="0,17,7,17"/>
-            <Setter Property="Background" Value="{DynamicResource SurfaceSecondary}"/>
+            <Setter Property="Background" Value="{DynamicResource SocialBackground}"/>
             <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -86,12 +86,12 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource SurfaceHover}"/>
+                                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource SocialHoverBackground}"/>
                                 <Setter TargetName="Surface" Property="BorderBrush" Value="{DynamicResource BorderStrong}"/>
                                 <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource SurfaceSelected}"/>
+                                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource SocialPressedBackground}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -146,7 +146,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Grid>
-                            <Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{DynamicResource ButtonRadius}" Effect="{DynamicResource PrimaryButtonShadow}" SnapsToDevicePixels="True"/>
+                            <Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{DynamicResource PrimaryButtonRadius}" Effect="{DynamicResource PrimaryButtonShadow}"/>
                             <Border x:Name="ClickGlow" Margin="2" Background="#D9E5FF" CornerRadius="10" Opacity="0" IsHitTestVisible="False"/>
                             <Border x:Name="EnergySweep" Width="72" Margin="3" HorizontalAlignment="Left" CornerRadius="9"
                                     Opacity="0" IsHitTestVisible="False">
@@ -163,7 +163,7 @@
                                     <TranslateTransform X="-90"/>
                                 </Border.RenderTransform>
                             </Border>
-                            <Border x:Name="HoverLight" Background="{DynamicResource TextPrimary}" CornerRadius="{DynamicResource ButtonRadius}" Opacity="0" IsHitTestVisible="False"/>
+                            <Border x:Name="HoverLight" Background="{DynamicResource TextPrimary}" CornerRadius="{DynamicResource PrimaryButtonRadius}" Opacity="0" IsHitTestVisible="False"/>
                             <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Grid>
                         <ControlTemplate.Triggers>
@@ -228,7 +228,7 @@
             <Setter Property="Width" Value="98"/>
             <Setter Property="Height" Value="38"/>
             <Setter Property="Padding" Value="13,0"/>
-            <Setter Property="Background" Value="{DynamicResource SurfaceSecondary}"/>
+            <Setter Property="Background" Value="{DynamicResource LanguageBackground}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}"/>
             <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
         </Style>
@@ -275,13 +275,13 @@
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource SurfaceHover}"/>
+                                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource NavigationHoverBackground}"/>
                                 <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="Surface" Property="Background" Value="{DynamicResource ActiveNavigationGradient}"/>
                                 <Setter TargetName="AccentLine" Property="Opacity" Value="{DynamicResource NavigationAccentOpacity}"/>
-                                <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource NavigationSelectedForeground}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -290,25 +290,25 @@
         </Style>
 
         <ControlTemplate x:Key="WeaveModIconTemplate" TargetType="ContentControl">
-            <Border Width="44" Height="44" CornerRadius="11" Background="{DynamicResource ModIconBackground}" BorderBrush="{DynamicResource ModIconBorder}" BorderThickness="1" SnapsToDevicePixels="True">
-                <Image Source="Assets/weave-mod-icon.png" Width="37" Height="37" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/>
+            <Border Width="44" Height="44" CornerRadius="11" Background="{DynamicResource ModIconBackground}" BorderBrush="{DynamicResource ModIconBorder}" BorderThickness="{DynamicResource PackageIconBorderThickness}">
+                <Image Source="Assets/weave-mod-icon.png" Width="40" Height="40" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/>
             </Border>
         </ControlTemplate>
 
         <ControlTemplate x:Key="AgentIconTemplate" TargetType="ContentControl">
-            <Border Width="44" Height="44" CornerRadius="11" Background="{DynamicResource AgentIconBackground}" BorderBrush="{DynamicResource AgentIconBorder}" BorderThickness="1" SnapsToDevicePixels="True">
-                <Viewbox Width="22" Height="22"><Path Data="{StaticResource IconAgent}" Stroke="{DynamicResource AgentIconForeground}" StrokeThickness="1.65" Fill="Transparent" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/></Viewbox>
+            <Border Width="44" Height="44" CornerRadius="11" Background="{DynamicResource AgentIconBackground}" BorderBrush="{DynamicResource AgentIconBorder}" BorderThickness="{DynamicResource PackageIconBorderThickness}">
+                <Image Source="Assets/weave-mod-icon.png" Width="40" Height="40" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/>
             </Border>
         </ControlTemplate>
 
         <ControlTemplate x:Key="UnclassifiedIconTemplate" TargetType="ContentControl">
-            <Border Width="44" Height="44" CornerRadius="11" Background="{DynamicResource UnknownIconBackground}" BorderBrush="{DynamicResource UnknownIconBorder}" BorderThickness="1" SnapsToDevicePixels="True">
+            <Border Width="44" Height="44" CornerRadius="11" Background="{DynamicResource UnknownIconBackground}" BorderBrush="{DynamicResource UnknownIconBorder}" BorderThickness="{DynamicResource PackageIconBorderThickness}">
                 <Viewbox Width="22" Height="22"><Path Data="{StaticResource IconUnknown}" Stroke="{DynamicResource UnknownIconForeground}" StrokeThickness="1.65" Fill="Transparent" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/></Viewbox>
             </Border>
         </ControlTemplate>
 
         <ControlTemplate x:Key="LunarClientIconTemplate" TargetType="ContentControl">
-            <Border Width="40" Height="40" CornerRadius="10" Background="{DynamicResource ClientIconBackground}" BorderBrush="{DynamicResource ClientIconBorder}" BorderThickness="1" SnapsToDevicePixels="True">
+            <Border Width="40" Height="40" CornerRadius="10" Background="{DynamicResource ClientIconBackground}" BorderBrush="{DynamicResource ClientIconBorder}" BorderThickness="{DynamicResource PackageIconBorderThickness}">
                 <Viewbox Width="29" Height="29">
                     <Canvas Width="168" Height="153">
                         <Path Fill="{DynamicResource LunarIconForeground}" Data="M162,55.81v63l-11-.68V58.76a18.53,18.53,0,0,0-9.83-16.16L94.23,15.83a20.54,20.54,0,0,0-19.66,0L27.74,42.6a18.51,18.51,0,0,0-9.83,16.16v59.35l-11.06.67v-63A22.92,22.92,0,0,1,18.32,36L72.94,3.07a22.94,22.94,0,0,1,22.92,0L150.49,36A22.93,22.93,0,0,1,162,55.81Z"/>
@@ -328,11 +328,11 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="Surface" Width="318" Height="108" Background="{DynamicResource SurfacePrimary}" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="{DynamicResource CardBorderThickness}" CornerRadius="15" Padding="17">
+                        <Border x:Name="Surface" Width="318" Height="108" Background="{DynamicResource ClientCardBackground}" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="{DynamicResource CardBorderThickness}" CornerRadius="15" Padding="17">
                             <Grid>
                                 <Grid.RowDefinitions><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                                 <StackPanel Orientation="Horizontal">
-                                    <Border Width="46" Height="46" CornerRadius="12" Background="{DynamicResource ClientIconBackground}" BorderBrush="{DynamicResource ClientIconBorder}" BorderThickness="1">
+                                    <Border Width="46" Height="46" CornerRadius="12" Background="{DynamicResource ClientIconBackground}" BorderBrush="{DynamicResource ClientIconBorder}" BorderThickness="{DynamicResource PackageIconBorderThickness}">
                                         <Grid>
                                             <Viewbox Width="34" Height="34">
                                                 <Canvas Width="168" Height="153">
@@ -359,11 +359,11 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource SurfaceHover}"/>
+                                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource ClientCardHoverBackground}"/>
                                 <Setter TargetName="Surface" Property="BorderBrush" Value="{DynamicResource BorderStrong}"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource SurfaceSelected}"/>
+                                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource ClientCardSelectedBackground}"/>
                                 <Setter TargetName="Surface" Property="BorderBrush" Value="{DynamicResource FocusRing}"/>
                                 <Setter TargetName="SelectedState" Property="Visibility" Value="Visible"/>
                             </Trigger>
@@ -383,26 +383,27 @@
         </Style>
 
         <Style x:Key="LaunchCard" TargetType="Border" BasedOn="{StaticResource Card}">
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderPrimary}"/>
+            <Setter Property="Background" Value="{DynamicResource LaunchCardBackground}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource LaunchCardBorder}"/>
+            <Setter Property="BorderThickness" Value="{DynamicResource LaunchCardBorderThickness}"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource SurfaceHover}"/>
-                    <Setter Property="BorderBrush" Value="{DynamicResource BorderStrong}"/>
+                    <Setter Property="Background" Value="{DynamicResource LaunchCardHoverBackground}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource LaunchCardHoverBorder}"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
 
         <Style x:Key="InteractiveTile" TargetType="Border">
-            <Setter Property="Background" Value="{DynamicResource SurfaceSecondary}"/>
+            <Setter Property="Background" Value="{DynamicResource InteractiveTileBackground}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderSubtle}"/>
-            <Setter Property="BorderThickness" Value="{DynamicResource CardBorderThickness}"/>
-            <Setter Property="CornerRadius" Value="{DynamicResource CardRadius}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="CornerRadius" Value="{DynamicResource InteractiveTileRadius}"/>
             <Setter Property="Padding" Value="15"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource SurfaceHover}"/>
-                    <Setter Property="BorderBrush" Value="{DynamicResource BorderStrong}"/>
+                    <Setter Property="Background" Value="{DynamicResource InteractiveTileHoverBackground}"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -425,7 +426,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="CheckBox">
                         <StackPanel Orientation="Horizontal">
-                            <Border x:Name="Box" Width="24" Height="24" Background="{DynamicResource SurfaceSecondary}" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="1" CornerRadius="8">
+                            <Border x:Name="Box" Width="24" Height="24" Background="{DynamicResource SurfaceSecondary}" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="0" CornerRadius="8">
                                 <Grid>
                                     <Ellipse x:Name="CheckedDisc" Width="16" Height="16" Fill="{DynamicResource Accent}" Visibility="Collapsed"/>
                                     <Path x:Name="Check" Data="M 6,12 L 10,16 L 18,7" Stroke="White" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Visibility="Collapsed"/>
@@ -583,7 +584,7 @@
                             </ToggleButton>
                             <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" VerticalOffset="-1"
                                    AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
-                                <Border Background="{DynamicResource SurfaceFloating}" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="1" CornerRadius="{DynamicResource PopupRadius}" Margin="0,5,0,0"
+                                <Border Background="{DynamicResource SurfaceFloating}" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="{DynamicResource PopupBorderThickness}" CornerRadius="{DynamicResource PopupRadius}" Margin="0,5,0,0"
                                         Width="{TemplateBinding ActualWidth}" MaxHeight="{TemplateBinding MaxDropDownHeight}">
                                     <Border.OpacityMask>
                                         <VisualBrush Stretch="Fill">
@@ -635,7 +636,7 @@
         <Grid Grid.Row="0">
             <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="28,0,0,0">
-                <Border Width="46" Height="46" CornerRadius="13" Background="{DynamicResource SurfaceRaised}" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="1">
+                <Border Width="46" Height="46" CornerRadius="13" Background="{DynamicResource BrandIconBackground}" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="{DynamicResource BrandIconBorderThickness}">
                     <Image Source="Assets/moonrise-icon-128.png" Width="39" Height="39" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/>
                 </Border>
                 <StackPanel Margin="13,0,0,0" VerticalAlignment="Center">
@@ -692,7 +693,7 @@
                     </StackPanel>
                 </Button>
                 <Button x:Name="SupportButton" Width="38" Padding="8,0" Style="{StaticResource SocialButton}" Click="SupportButton_Click">
-                    <Viewbox Width="18" Height="18"><Path Fill="#FF536F" Data="M12,21 L3,12 C-3,5 6,-1 12,6 C18,-1 27,5 21,12 Z"/></Viewbox>
+                    <Viewbox Width="18" Height="18"><Path Fill="{DynamicResource Danger}" Data="{StaticResource IconHeart}"/></Viewbox>
                 </Button>
                 <Border Width="1" Height="20" Background="{DynamicResource BorderSubtle}" VerticalAlignment="Center" Margin="1,0,8,0"/>
                 <Button x:Name="LanguageButton" Style="{StaticResource LanguageButtonStyle}" Margin="0,17,7,17" Click="LanguageButton_Click">
@@ -712,7 +713,7 @@
                 <Button Content="&#xE8BB;" Style="{StaticResource ChromeButton}" Tag="Close" Click="CloseButton_Click"/>
             </StackPanel>
             <Popup x:Name="LanguagePopup" Placement="Bottom" PlacementTarget="{Binding ElementName=LanguageButton}" HorizontalOffset="0" VerticalOffset="6" AllowsTransparency="True" StaysOpen="True" PopupAnimation="Fade">
-                <Border MinWidth="190" MaxWidth="320" Background="{DynamicResource SurfaceFloating}" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="1" CornerRadius="{DynamicResource PopupRadius}" Padding="4">
+                <Border MinWidth="190" MaxWidth="320" Background="{DynamicResource SurfaceFloating}" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="{DynamicResource PopupBorderThickness}" CornerRadius="{DynamicResource PopupRadius}" Padding="4">
                     <ScrollViewer MaxHeight="320" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <StackPanel x:Name="LanguageOptionsPanel"/>
                     </ScrollViewer>
@@ -923,7 +924,7 @@
                                  </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
-                        <StackPanel x:Name="EmptyLibraryPanel" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="✦" FontSize="26" Foreground="#9F6EF3" HorizontalAlignment="Center"/><TextBlock x:Name="EmptyLibraryTitle" Text="This folder is empty" FontSize="16" FontWeight="SemiBold" Margin="0,10,0,0" HorizontalAlignment="Center"/><TextBlock x:Name="EmptyLibraryText" Text="Add a compatible JAR to continue." Style="{StaticResource Caption}" Margin="0,5,0,0"/></StackPanel>
+                        <StackPanel x:Name="EmptyLibraryPanel" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center"><TextBlock Text="✦" FontSize="26" Foreground="{DynamicResource Accent}" HorizontalAlignment="Center"/><TextBlock x:Name="EmptyLibraryTitle" Text="This folder is empty" FontSize="16" FontWeight="SemiBold" Margin="0,10,0,0" HorizontalAlignment="Center"/><TextBlock x:Name="EmptyLibraryText" Text="Add a compatible JAR to continue." Style="{StaticResource Caption}" Margin="0,5,0,0"/></StackPanel>
                         <Border x:Name="PackageDetailsDrawer" Grid.RowSpan="2" Width="370" HorizontalAlignment="Right" Background="{DynamicResource DrawerSurface}" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="1,0,0,0" Padding="22" Visibility="Collapsed" Panel.ZIndex="5">
                             <Grid DataContext="{Binding SelectedItem, ElementName=PackagesList}">
                                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="18"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -935,7 +936,7 @@
                     </Grid>
                 </Border>
                 <Border x:Name="DropTargetOverlay" Grid.RowSpan="5" Panel.ZIndex="20" Visibility="Collapsed" Background="{DynamicResource DropOverlaySurface}" CornerRadius="{DynamicResource CardRadius}" IsHitTestVisible="False">
-                    <Grid Margin="14"><Rectangle x:Name="DropTargetOutline" RadiusX="14" RadiusY="14" Stroke="#9D6BFF" StrokeThickness="2" StrokeDashArray="5,4"/><StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><Border x:Name="DropTargetIconFrame" Width="64" Height="64" Background="#241B3D" CornerRadius="18"><TextBlock Text="↓" Foreground="#B985FF" FontSize="32" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><TextBlock x:Name="DropTargetText" Text="Drop JAR files here" FontSize="18" FontWeight="SemiBold" Margin="0,14,0,0" HorizontalAlignment="Center"/><TextBlock x:Name="DropTargetHint" Text="Weave mods and Java agents are detected automatically." Foreground="#9295AA" Margin="0,6,0,0"/></StackPanel></Grid>
+                    <Grid Margin="14"><Rectangle x:Name="DropTargetOutline" RadiusX="14" RadiusY="14" Stroke="{DynamicResource FocusRing}" StrokeThickness="2" StrokeDashArray="5,4"/><StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"><Border x:Name="DropTargetIconFrame" Width="64" Height="64" Background="{DynamicResource AccentSoft}" CornerRadius="18"><TextBlock Text="↓" Foreground="{DynamicResource Accent}" FontSize="32" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><TextBlock x:Name="DropTargetText" Text="Drop JAR files here" FontSize="18" FontWeight="SemiBold" Margin="0,14,0,0" HorizontalAlignment="Center"/><TextBlock x:Name="DropTargetHint" Text="Weave mods and Java agents are detected automatically." Foreground="{DynamicResource TextMuted}" Margin="0,6,0,0"/></StackPanel></Grid>
                 </Border>
             </Grid>
 
@@ -975,8 +976,8 @@
                         <Border x:Name="CatalogDetailsDrawer" Width="340" HorizontalAlignment="Right" Background="{DynamicResource DrawerSurface}" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="1,0,0,0" Padding="22" Visibility="Collapsed" Panel.ZIndex="5">
                             <StackPanel DataContext="{Binding SelectedItem, ElementName=CatalogList}">
                                 <TextBlock Text="{Binding Name}" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap"/><TextBlock Text="{Binding Summary}" Foreground="{DynamicResource TextSecondary}" Margin="0,8,0,18" TextWrapping="Wrap"/>
-                                <TextBlock x:Name="CatalogCompatibilityLabel" Text="COMPATIBILITY" Foreground="#7F8298" FontSize="11" FontWeight="Bold"/><TextBlock Text="{Binding RiskLabel}" Foreground="#C9A0A8" Margin="0,5,0,14" TextWrapping="Wrap"/>
-                                <TextBlock x:Name="CatalogLicenseLabel" Text="LICENSE" Foreground="#7F8298" FontSize="11" FontWeight="Bold"/><TextBlock Text="{Binding LicenseLabel}" Foreground="#C4C5D2" Margin="0,5,0,0"/>
+                                <TextBlock x:Name="CatalogCompatibilityLabel" Text="COMPATIBILITY" Foreground="{DynamicResource TextMuted}" FontSize="11" FontWeight="Bold"/><TextBlock Text="{Binding RiskLabel}" Foreground="{DynamicResource Danger}" Margin="0,5,0,14" TextWrapping="Wrap"/>
+                                <TextBlock x:Name="CatalogLicenseLabel" Text="LICENSE" Foreground="{DynamicResource TextMuted}" FontSize="11" FontWeight="Bold"/><TextBlock Text="{Binding LicenseLabel}" Foreground="{DynamicResource TextSecondary}" Margin="0,5,0,0"/>
                             </StackPanel>
                         </Border>
                     </Grid>
@@ -988,7 +989,7 @@
             <Grid x:Name="DiagnosticsPage" Visibility="Collapsed" Margin="30,24,30,28">
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="18"/><RowDefinition/></Grid.RowDefinitions>
                 <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock x:Name="DiagnosticsTitle" Text="Diagnostics" Style="{StaticResource Heading}"/><TextBlock x:Name="DiagnosticsSubtitle" Text="Local Moonrise events." Style="{StaticResource Caption}" Margin="0,7,0,0"/></StackPanel><StackPanel Grid.Column="1" Orientation="Horizontal"><Button x:Name="CopyDiagnosticsButton" Content="Copy" Style="{StaticResource ButtonBase}" Margin="0,0,10,0" Click="CopyDiagnosticsButton_Click"/><Button x:Name="OpenLogsButton" Content="Open logs" Style="{StaticResource ButtonBase}" Click="OpenLogsButton_Click"/></StackPanel></Grid>
-                <Border Grid.Row="2" Style="{StaticResource Card}" Padding="8" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="1">
+                <Border Grid.Row="2" Style="{StaticResource Card}" Padding="8" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="0">
                     <ListBox x:Name="DiagnosticsList" Background="Transparent" Foreground="{DynamicResource TextSecondary}" BorderThickness="0" FontFamily="Cascadia Mono, Consolas" FontSize="12">
                         <ListBox.ItemContainerStyle>
                             <Style TargetType="ListBoxItem">
@@ -1040,7 +1041,7 @@
                                         <Setter Property="FocusVisualStyle" Value="{x:Null}"/><Setter Property="Template">
                                             <Setter.Value><ControlTemplate TargetType="ListBoxItem">
                                                 <Border x:Name="ThemeCard" Width="226" Padding="10" Background="{DynamicResource SurfaceSecondary}"
-                                                        BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="1" CornerRadius="{DynamicResource CardRadius}">
+                                                        BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="0" CornerRadius="{DynamicResource CardRadius}">
                                                     <ContentPresenter/>
                                                 </Border>
                                                 <ControlTemplate.Triggers>
@@ -1113,26 +1114,205 @@
             <TextBlock x:Name="HeroDescriptionText"/><TextBlock x:Name="HeroPackageSummaryText"/>
         </StackPanel>
 
+        <Grid x:Name="SupportOverlay" Grid.RowSpan="3" Panel.ZIndex="110" Background="{DynamicResource OverlaySurface}" Visibility="Collapsed">
+            <Border x:Name="SupportDialogPanel" Width="640" MaxHeight="780" Margin="24" Background="{DynamicResource SurfaceFloating}"
+                    BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="{DynamicResource PopupBorderThickness}" CornerRadius="{DynamicResource PopupRadius}"
+                    Padding="26" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5"
+                    AutomationProperties.Name="Support Moonrise">
+                <Border.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1"/></Border.RenderTransform>
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="24"/><RowDefinition/></Grid.RowDefinitions>
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="62"/><ColumnDefinition/><ColumnDefinition Width="40"/></Grid.ColumnDefinitions>
+                        <Border Width="44" Height="44" CornerRadius="13" Background="{DynamicResource AccentSoft}" HorizontalAlignment="Left">
+                            <Viewbox Width="22" Height="22"><Path Fill="{DynamicResource Danger}" Data="{StaticResource IconHeart}"/></Viewbox>
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock x:Name="SupportTitle" Text="Support Moonrise" FontSize="20" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}"/>
+                            <TextBlock x:Name="SupportSubtitle" Text="Moonrise is free and open source." Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                        </StackPanel>
+                        <Button x:Name="SupportCloseButton" Grid.Column="2" Style="{StaticResource SupportCloseButton}"
+                                Click="SupportCloseButton_Click" AutomationProperties.Name="Close support" ToolTip="Close support">
+                            <Canvas Width="16" Height="16" SnapsToDevicePixels="True">
+                                <Path Data="M4,4 L12,12 M12,4 L4,12" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                      StrokeThickness="2" Fill="Transparent" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                            </Canvas>
+                        </Button>
+                    </Grid>
+
+                    <Grid Grid.Row="2">
+                        <StackPanel x:Name="SupportLoadingPanel" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <ProgressBar Width="180" Height="4" IsIndeterminate="True"/>
+                            <TextBlock x:Name="SupportLoadingText" Text="Loading payment methods…" Foreground="{DynamicResource TextSecondary}" Margin="0,14,0,0" HorizontalAlignment="Center"/>
+                        </StackPanel>
+
+                        <Grid x:Name="SupportMethodsPanel" Visibility="Collapsed">
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="16"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                            <TextBlock x:Name="SupportIntroText" Text="If you enjoy the project, you can support its development." Foreground="{DynamicResource TextSecondary}" TextWrapping="Wrap"/>
+                            <Grid Grid.Row="2">
+                                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="12"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                <Button x:Name="SupportTelegramMethodButton" Style="{StaticResource ButtonBase}" Height="96" Padding="16" HorizontalContentAlignment="Stretch"
+                                        Click="SupportTelegramMethodButton_Click" AutomationProperties.Name="Telegram Stars">
+                                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="52"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                        <Border Width="42" Height="42" CornerRadius="21" Background="{DynamicResource SurfaceSecondary}" HorizontalAlignment="Left">
+                                            <Image Source="{StaticResource TelegramStarsIcon}" Width="30" Height="30"/>
+                                        </Border>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock x:Name="SupportTelegramMethodTitle" Text="Telegram Stars" FontWeight="SemiBold" FontSize="15"/>
+                                            <TextBlock x:Name="SupportTelegramMethodHint" Text="Fast checkout in Telegram" Foreground="{DynamicResource TextMuted}" FontSize="12" Margin="0,5,0,0"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Button>
+                                <Button x:Name="SupportCryptoMethodButton" Grid.Column="2" Style="{StaticResource ButtonBase}" Height="96" Padding="16" HorizontalContentAlignment="Stretch"
+                                        Click="SupportCryptoMethodButton_Click" AutomationProperties.Name="Cryptocurrency">
+                                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="52"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                        <Border Width="42" Height="42" CornerRadius="21" Background="{DynamicResource SurfaceSecondary}" HorizontalAlignment="Left">
+                                             <Image Source="{StaticResource CryptoWalletIcon}" Width="30" Height="30"/>
+                                        </Border>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock x:Name="SupportCryptoTitle" Text="Crypto" FontWeight="SemiBold" FontSize="15"/>
+                                            <TextBlock x:Name="SupportCryptoHint" Text="Pay from any crypto wallet" Foreground="{DynamicResource TextMuted}" FontSize="10" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Button>
+                            </Grid>
+                        </Grid>
+
+                        <Grid x:Name="SupportAmountPanel" Visibility="Collapsed">
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="18"/><RowDefinition Height="Auto"/><RowDefinition Height="20"/><RowDefinition Height="Auto"/><RowDefinition Height="8"/><RowDefinition Height="Auto"/><RowDefinition Height="8"/><RowDefinition Height="Auto"/><RowDefinition Height="22"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                            <TextBlock x:Name="SupportChooseAmountTitle" Text="Choose amount" FontSize="17" FontWeight="SemiBold"/>
+                            <WrapPanel x:Name="SupportPresetPanel" Grid.Row="2" HorizontalAlignment="Left"/>
+                            <TextBlock x:Name="SupportCustomAmountLabel" Grid.Row="4" Text="Custom amount" Foreground="{DynamicResource TextMuted}" FontSize="11" FontWeight="Bold"/>
+                            <TextBox x:Name="SupportCustomAmountTextBox" Grid.Row="6" Style="{StaticResource SupportAmountInput}"
+                                     GotKeyboardFocus="SupportCustomAmountTextBox_GotKeyboardFocus" LostKeyboardFocus="SupportCustomAmountTextBox_LostKeyboardFocus"
+                                     KeyDown="SupportCustomAmountTextBox_KeyDown" TextChanged="SupportCustomAmountTextBox_TextChanged"
+                                     AutomationProperties.Name="Custom support amount"/>
+                            <TextBlock x:Name="SupportAmountValidationText" Grid.Row="8" Foreground="{DynamicResource Danger}" FontSize="12" TextWrapping="Wrap" MinHeight="16"/>
+                            <StackPanel Grid.Row="10">
+                                <CheckBox x:Name="SupportTermsCheckBox" Style="{StaticResource MoonriseCheckBox}" Checked="SupportTermsCheckBox_Changed" Unchecked="SupportTermsCheckBox_Changed">
+                                    <TextBlock x:Name="SupportTermsText" Text="By continuing, you accept the support terms." TextWrapping="Wrap" Foreground="{DynamicResource TextSecondary}"/>
+                                </CheckBox>
+                                <TextBlock x:Name="SupportTermsHint" Text="Voluntary support does not unlock paid features or start recurring payments." Foreground="{DynamicResource TextMuted}" FontSize="11" Margin="32,6,0,0" TextWrapping="Wrap"/>
+                                <Grid Margin="0,18,0,0">
+                                    <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="8"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <Button x:Name="SupportBackToMethodsButton" Grid.Column="1" Content="Back" Style="{StaticResource SupportBackButton}" Click="SupportBackToMethodsButton_Click"/>
+                                    <Button x:Name="SupportContinueButton" Grid.Column="3" Content="Continue" Style="{StaticResource PrimaryButton}"
+                                            IsDefault="True" IsEnabled="False" Click="SupportContinueButton_Click" AutomationProperties.Name="Continue to checkout"/>
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid x:Name="SupportAssetPanel" Visibility="Collapsed">
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="14"/><RowDefinition/><RowDefinition Height="16"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                            <StackPanel>
+                                <TextBlock x:Name="SupportChooseAssetTitle" Text="Choose an asset" FontSize="17" FontWeight="SemiBold"/>
+                                <TextBlock x:Name="SupportChooseAssetHint" Text="The payment network is shown on the next screen." Foreground="{DynamicResource TextMuted}" FontSize="12" Margin="0,5,0,0"/>
+                            </StackPanel>
+                            <WrapPanel x:Name="SupportAssetButtons" Grid.Row="2" HorizontalAlignment="Center"/>
+                            <Button x:Name="SupportBackToAmountButton" Grid.Row="4" Content="Back" Style="{StaticResource SupportBackButton}" HorizontalAlignment="Left" Click="SupportBackToAmountButton_Click"/>
+                        </Grid>
+
+                        <Grid x:Name="SupportCheckoutPanel" Visibility="Collapsed">
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="16"/><RowDefinition/><RowDefinition Height="14"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock x:Name="SupportCheckoutMethodText" Text="Telegram Stars" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0" HorizontalAlignment="Center">
+                                    <TextBlock x:Name="SupportCheckoutAmountText" Text="100" FontSize="27" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" VerticalAlignment="Center"/>
+                                    <Image x:Name="SupportCheckoutStarsIcon" Source="{StaticResource TelegramStarsIcon}" Width="25" Height="25" Margin="7,1,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <StackPanel Grid.Row="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Border x:Name="SupportQrFrame" Width="248" Height="248" Background="White" CornerRadius="14" Padding="6" SnapsToDevicePixels="True">
+                                    <Image x:Name="SupportQrImage" Width="236" Height="236" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Stretch="Uniform" RenderOptions.BitmapScalingMode="NearestNeighbor" AutomationProperties.Name="Payment checkout QR code"/>
+                                </Border>
+                                <TextBlock x:Name="SupportScanText" Text="Scan with your phone" Foreground="{DynamicResource TextSecondary}" Margin="0,10,0,0" HorizontalAlignment="Center"/>
+                                <Button x:Name="SupportOpenTelegramButton" Content="Open Telegram" Style="{StaticResource PrimaryButton}" Width="280" Margin="0,18,0,0"
+                                        Click="SupportOpenTelegramButton_Click" AutomationProperties.Name="Open payment checkout"/>
+                                 <TextBlock x:Name="SupportOpenTelegramHint" Text="Continue securely in Telegram." Foreground="{DynamicResource TextMuted}" FontSize="12" Margin="0,6,0,0" TextAlignment="Center"/>
+                                 <StackPanel x:Name="SupportCryptoDetailsPanel" Visibility="Collapsed" Width="430" Margin="0,12,0,0">
+                                     <Button x:Name="SupportCopyAddressButton" Style="{StaticResource ButtonBase}" Height="54" Padding="13,7" HorizontalContentAlignment="Stretch" Click="SupportCopyAddressButton_Click">
+                                         <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                             <StackPanel><TextBlock x:Name="SupportAddressLabel" Text="Address" Foreground="{DynamicResource TextMuted}" FontSize="10"/><TextBlock x:Name="SupportAddressText" TextTrimming="CharacterEllipsis" Margin="0,3,0,0"/></StackPanel>
+                                             <TextBlock x:Name="SupportAddressCopyText" Grid.Column="1" Text="Copy" Foreground="{DynamicResource Accent}" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                                         </Grid>
+                                     </Button>
+                                     <Button x:Name="SupportCopyAmountButton" Style="{StaticResource ButtonBase}" Height="54" Padding="13,7" Margin="0,7,0,0" HorizontalContentAlignment="Stretch" Click="SupportCopyAmountButton_Click">
+                                         <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                             <StackPanel><TextBlock x:Name="SupportExactAmountLabel" Text="Amount" Foreground="{DynamicResource TextMuted}" FontSize="10"/><TextBlock x:Name="SupportExactAmountText" Margin="0,3,0,0"/></StackPanel>
+                                             <TextBlock x:Name="SupportAmountCopyText" Grid.Column="1" Text="Copy" Foreground="{DynamicResource Accent}" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                                         </Grid>
+                                     </Button>
+                                     <TextBlock x:Name="SupportNetworkWarningText" Text="Send funds only on the network shown above." Foreground="{DynamicResource Warning}" FontSize="11" TextWrapping="Wrap" TextAlignment="Center" Margin="0,9,0,0"/>
+                                 </StackPanel>
+                             </StackPanel>
+                            <StackPanel Grid.Row="4" HorizontalAlignment="Center" Opacity="0.86">
+                                <Grid HorizontalAlignment="Center">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="8"/><ColumnDefinition Width="9"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <Ellipse x:Name="SupportWaitingIndicator" Width="7" Height="7" Fill="{DynamicResource AccentPurple}" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="SupportWaitingText" Grid.Column="2" Text="Waiting for payment…" Foreground="{DynamicResource TextSecondary}" FontSize="13"/>
+                                </Grid>
+                                <ProgressBar x:Name="SupportWaitingProgress" Style="{StaticResource SupportWaitingProgress}" Width="220" Height="3"
+                                             Margin="0,9,0,0" IsIndeterminate="True" AutomationProperties.Name="Payment status activity"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <StackPanel x:Name="SupportSuccessPanel" Visibility="Collapsed" Opacity="1" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="430">
+                            <Border x:Name="SupportSuccessVisual" Width="76" Height="76" CornerRadius="38" Background="{DynamicResource AccentSoft}" RenderTransformOrigin="0.5,0.5">
+                                <Border.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1"/></Border.RenderTransform>
+                                <Grid>
+                                    <Viewbox Width="34" Height="34"><Path Data="{StaticResource IconHeart}" Fill="{DynamicResource Danger}"/></Viewbox>
+                                    <Image x:Name="SupportSuccessStarsIcon" Source="{StaticResource TelegramStarsIcon}" Width="17" Height="17" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,8,0"/>
+                                </Grid>
+                            </Border>
+                            <TextBlock x:Name="SupportThankYouTitle" Text="Thank you for your support!" FontSize="25" FontWeight="SemiBold" Margin="0,24,0,0" HorizontalAlignment="Center"/>
+                            <Border Margin="0,16,0,0" Padding="14,7" Background="{DynamicResource AccentSoft}" BorderBrush="{DynamicResource BorderStrong}" BorderThickness="1" CornerRadius="18">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock x:Name="SupportThankYouAmountText" Text="$1" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource Accent}" VerticalAlignment="Center"/>
+                                    <Image x:Name="SupportThankYouStarsIcon" Source="{StaticResource TelegramStarsIcon}" Width="20" Height="20" Margin="6,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
+                                </StackPanel>
+                            </Border>
+                            <TextBlock x:Name="SupportThankYouText" Text="Your support helps keep Moonrise free and moving forward."
+                                       Foreground="{DynamicResource TextPrimary}" Opacity="0.86" FontSize="14" LineHeight="22" MaxWidth="400"
+                                       Margin="0,20,0,0" TextAlignment="Center" TextWrapping="Wrap"/>
+                            <Button x:Name="SupportDoneButton" Content="Done" Style="{StaticResource PrimaryButton}" Width="160" HorizontalAlignment="Center"
+                                    Margin="0,28,0,0" Click="SupportCloseButton_Click" IsDefault="True"/>
+                        </StackPanel>
+
+                        <StackPanel x:Name="SupportTerminalPanel" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="470">
+                            <Border Width="58" Height="58" CornerRadius="29" Background="{DynamicResource AccentSoft}">
+                                <TextBlock x:Name="SupportTerminalGlyph" Text="!" FontSize="27" FontWeight="SemiBold" Foreground="{DynamicResource Warning}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock x:Name="SupportTerminalTitle" Text="This payment session expired." FontSize="20" FontWeight="SemiBold" Margin="0,16,0,0" TextAlignment="Center" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="SupportTerminalText" Text="Create a new payment to continue." Foreground="{DynamicResource TextMuted}" Margin="0,7,0,0" TextAlignment="Center" TextWrapping="Wrap"/>
+                            <Button x:Name="SupportCreateNewButton" Content="Create new payment" Style="{StaticResource PrimaryButton}"
+                                    Margin="0,22,0,0" HorizontalAlignment="Center" Click="SupportCreateNewButton_Click"/>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Grid>
+
         <ItemsControl x:Name="ToastHost" Grid.RowSpan="3" Panel.ZIndex="120" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,22,22" IsHitTestVisible="True">
             <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel VerticalAlignment="Bottom"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate><DataTemplate>
-                    <Border x:Name="ToastSurface" Background="{DynamicResource SurfaceFloating}" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="1" CornerRadius="{DynamicResource PopupRadius}" Padding="14,11" Width="330" Margin="0,6,0,0" AutomationProperties.Name="{Binding Title}" Loaded="ToastBorder_Loaded">
+                    <Border x:Name="ToastSurface" Background="{DynamicResource SurfaceFloating}" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="{DynamicResource PopupBorderThickness}" CornerRadius="{DynamicResource PopupRadius}" Padding="14,11" Width="330" Margin="0,6,0,0" AutomationProperties.Name="{Binding Title}" Loaded="ToastBorder_Loaded">
                     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="30"/><ColumnDefinition/><ColumnDefinition Width="32"/></Grid.ColumnDefinitions><Border Width="25" Height="25" CornerRadius="8" Background="{DynamicResource AccentSoft}" VerticalAlignment="Top"><TextBlock x:Name="ToastGlyph" Text="{Binding Glyph}" Foreground="{DynamicResource Accent}" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><StackPanel Grid.Column="1" Margin="8,0,4,0"><TextBlock Text="{Binding Title}" Foreground="{DynamicResource TextPrimary}" FontWeight="SemiBold" TextWrapping="Wrap"/><TextBlock Text="{Binding Message}" Foreground="{DynamicResource TextSecondary}" FontSize="12" Margin="0,3,0,0" TextWrapping="Wrap"/></StackPanel><Button Grid.Column="2" Content="×" Style="{StaticResource ButtonBase}" Width="30" Height="30" Padding="0" Tag="{Binding}" Click="ToastCloseButton_Click"/></Grid>
                 </Border>
             </DataTemplate></ItemsControl.ItemTemplate>
         </ItemsControl>
 
         <Grid x:Name="DeleteConfirmationOverlay" Grid.RowSpan="3" Panel.ZIndex="100" Background="{DynamicResource OverlaySurface}" Visibility="Collapsed">
-            <Border x:Name="DeleteDialogPanel" Width="470" Background="{DynamicResource SurfaceFloating}" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="1" CornerRadius="{DynamicResource PopupRadius}" Padding="24" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+            <Border x:Name="DeleteDialogPanel" Width="470" Background="{DynamicResource SurfaceFloating}" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="{DynamicResource PopupBorderThickness}" CornerRadius="{DynamicResource PopupRadius}" Padding="24" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
                 <Border.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1"/></Border.RenderTransform>
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="18"/><RowDefinition Height="Auto"/><RowDefinition Height="24"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="48"/><ColumnDefinition/></Grid.ColumnDefinitions>
-                        <Border Width="42" Height="42" CornerRadius="12" Background="#2A1921" HorizontalAlignment="Left">
+                        <Border Width="42" Height="42" CornerRadius="12" Background="{DynamicResource DangerSurface}" HorizontalAlignment="Left">
                             <Viewbox Width="21" Height="21">
                                 <Grid Width="24" Height="24">
-                                    <Path Data="M5,7 L6.2,20 C6.3,21 7,21.5 8,21.5 L16,21.5 C17,21.5 17.7,21 17.8,20 L19,7 M3,7 L21,7 M8,7 L8.8,3.8 C8.9,3.3 9.4,3 10,3 L14,3 C14.6,3 15.1,3.3 15.2,3.8 L16,7 M9.5,10.5 L10,18 M14.5,10.5 L14,18" Stroke="#FF8499" StrokeThickness="1.65" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent"/>
+                                    <Path Data="M5,7 L6.2,20 C6.3,21 7,21.5 8,21.5 L16,21.5 C17,21.5 17.7,21 17.8,20 L19,7 M3,7 L21,7 M8,7 L8.8,3.8 C8.9,3.3 9.4,3 10,3 L14,3 C14.6,3 15.1,3.3 15.2,3.8 L16,7 M9.5,10.5 L10,18 M14.5,10.5 L14,18" Stroke="{DynamicResource DangerForeground}" StrokeThickness="1.65" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Fill="Transparent"/>
                                 </Grid>
                             </Viewbox>
                         </Border>
@@ -1146,7 +1326,7 @@
                     </Border>
                     <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
                         <Button x:Name="DeleteConfirmationCancelButton" Content="Cancel" Style="{StaticResource ButtonBase}" MinWidth="104" Margin="0,0,10,0" Click="DeleteConfirmationCancelButton_Click"/>
-                        <Button x:Name="DeleteConfirmationConfirmButton" Content="Remove" Style="{StaticResource ButtonBase}" MinWidth="112" Background="#321B24" BorderBrush="#61303F" Foreground="#FFB3C0" Click="DeleteConfirmationConfirmButton_Click"/>
+                        <Button x:Name="DeleteConfirmationConfirmButton" Content="Remove" Style="{StaticResource ButtonBase}" MinWidth="112" Background="{DynamicResource DangerSurface}" BorderBrush="{DynamicResource DangerBorder}" Foreground="{DynamicResource DangerForeground}" Click="DeleteConfirmationConfirmButton_Click"/>
                     </StackPanel>
                 </Grid>
             </Border>

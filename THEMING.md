@@ -17,6 +17,13 @@ themes/
 
 Development/visual-QA runs use the equivalent `themes` directory under their isolated data root. Built-in themes are compiled into Moonrise and never require files in this directory.
 
+## Built-in themes
+
+- `standard` — **Moonrise Standard**, the restored original Moonrise presentation and the default for new settings.
+- `moonlight` — deeper navy surfaces with violet-blue gradients and soft depth.
+- `ember` — compact graphite surfaces with warm amber controls.
+- `porcelain` — complete light appearance with dark text and strong accessible controls.
+
 ## Complete example
 
 ```json
@@ -133,7 +140,7 @@ While a custom theme is selected, Moonrise watches its `theme.json` and supporte
 
 ## Failure and migration behavior
 
-Invalid JSON, unsupported schemas, unsafe paths, missing assets, and invalid supported values cannot crash startup. The pack is excluded and Moonlight is selected. Persisted legacy values such as `Obsidian` and `Aurora` therefore migrate safely to Moonlight when no matching built-in exists. Only the last successfully applied theme id is persisted.
+Invalid JSON, unsupported schemas, unsafe paths, missing assets, and invalid supported values cannot crash startup. The pack is excluded and Moonrise Standard is selected. Persisted legacy values such as `Obsidian` and `Aurora` therefore migrate safely to Moonrise Standard when no matching built-in exists. Only the last successfully applied theme id is persisted.
 
 ## Trust model
 
