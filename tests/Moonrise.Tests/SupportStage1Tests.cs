@@ -75,7 +75,7 @@ public sealed class SupportStage1Tests
         Assert.True(crypto.Enabled);
         Assert.Equal([1, 5, 10, 25], crypto.Presets);
         Assert.Equal(1, crypto.Custom.Min);
-        Assert.Null(crypto.Custom.Max);
+        Assert.Equal(1000000, crypto.Custom.Max);
         Assert.True(controller.SelectMethod("direct_crypto"));
         Assert.True(controller.TryResolveAmountSelection("5", CultureInfo.InvariantCulture, out var amount, out var selected));
         Assert.Equal(5, amount);
@@ -85,8 +85,28 @@ public sealed class SupportStage1Tests
         Assert.Null(selected);
         Assert.True(controller.TryResolveAmountSelection("5000", CultureInfo.InvariantCulture, out amount, out selected));
         Assert.Equal(5000, amount);
+        Assert.True(controller.TryResolveAmountSelection("3000000000", CultureInfo.InvariantCulture, out amount, out selected));
+        Assert.Equal(1000000, amount);
+        Assert.Null(selected);
         Assert.True(controller.TryResolveAmountSelection("5.25", CultureInfo.InvariantCulture, out amount, out selected));
         Assert.Equal(5.25m, amount);
+    }
+
+    [Fact]
+    public async Task DirectCryptoCheckoutClampsOversizedAmountBeforeApiCall()
+    {
+        var api = new FakeApi();
+        using var controller = new SupportFlowController(api);
+        await controller.LoadAsync();
+        Assert.True(controller.SelectMethod("direct_crypto"));
+
+        await controller.BeginCheckoutAsync(3000000000m, "en");
+        var asset = Assert.Single(controller.Method!.Assets!);
+        await controller.BeginDirectCryptoCheckoutAsync(asset);
+
+        Assert.Equal(1000000m, controller.Checkout!.Amount);
+        Assert.Equal(1000000m, api.LastCheckoutAmount);
+        controller.Close();
     }
 
     [Fact]
@@ -563,6 +583,8 @@ public sealed class SupportStage1Tests
         Assert.Throws<InvalidDataException>(() => SupportQrCodeService.CreatePng("crypto_pay", "https://example.test/invoice"));
         var directPng = SupportQrCodeService.CreatePng("direct_crypto", "bitcoin:bc1qexample?amount=0.001&label=Moonrise");
         Assert.Equal(new byte[] { 0x89, 0x50, 0x4E, 0x47 }, directPng[..4]);
+        var addressPng = SupportQrCodeService.CreatePng("direct_crypto", "bc1q" + new string('q', 38));
+        Assert.Equal(new byte[] { 0x89, 0x50, 0x4E, 0x47 }, addressPng[..4]);
     }
 
     [Fact]
@@ -612,7 +634,10 @@ public sealed class SupportStage1Tests
         Assert.Contains("DaiIcon", icons, StringComparison.Ordinal);
         Assert.Contains("ChainlinkIcon", icons, StringComparison.Ordinal);
         Assert.Contains("SupportCopyToast", xaml, StringComparison.Ordinal);
-        Assert.Contains("Скопировано", code, StringComparison.Ordinal);
+        Assert.Contains("VerticalAlignment=\"Bottom\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Адрес скопирован", code, StringComparison.Ordinal);
+        Assert.Contains("var qrPayload = crypto ? checkout.WalletAddress : checkout.CheckoutUrl", code, StringComparison.Ordinal);
+        Assert.Contains("for (var column = 0; column < 3; column++)", code, StringComparison.Ordinal);
         Assert.Contains("SupportAddressText.Text = checkout.WalletAddress", code, StringComparison.Ordinal);
         Assert.DoesNotContain("ShortAddress(checkout.WalletAddress)", code, StringComparison.Ordinal);
         Assert.DoesNotContain("SupportCopyAmountButton", xaml, StringComparison.Ordinal);
@@ -710,6 +735,7 @@ public sealed class SupportStage1Tests
         public string CheckoutUrl { get; init; } = "https://t.me/$invoice";
         public string StatusToken { get; init; } = "status-token";
         public int CheckoutCalls { get; private set; }
+        public decimal? LastCheckoutAmount { get; private set; }
         public int StatusCalls { get; private set; }
 
         public Task<SupportMethodsResponse> GetMethodsAsync(CancellationToken cancellationToken) => Task.FromResult(
@@ -717,13 +743,14 @@ public sealed class SupportStage1Tests
                 new SupportMethod("telegram_stars", true, "XTR", [50, 100, 250, 500],
                     new SupportCustomAmount(true, 1, 10000)),
                 new SupportMethod("direct_crypto", cryptoEnabled, "USD", [1, 5, 10, 25],
-                    new SupportCustomAmount(true, 1), null,
+                    new SupportCustomAmount(true, 1, 1000000), null,
                     [new SupportAsset("USDT", "Tether USD", "ethereum", "Ethereum (ERC-20)", 6, "token", true)])
             ]));
 
         public Task<SupportCheckoutResponse> CreateCheckoutAsync(string methodId, SupportCheckoutRequest request, CancellationToken cancellationToken)
         {
             CheckoutCalls++;
+            LastCheckoutAmount = request.Amount;
             if (CheckoutSteps.Count > 0)
                 return CheckoutSteps.Dequeue()(request, cancellationToken);
             var crypto = string.Equals(methodId, "direct_crypto", StringComparison.OrdinalIgnoreCase);
