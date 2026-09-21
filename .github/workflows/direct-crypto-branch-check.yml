@@ -19,6 +19,6 @@ jobs:
           dotnet-version: 8.0.x
           cache: true
           cache-dependency-path: "**/packages.lock.json"
-      - run: dotnet restore Moonrise.sln --locked-mode
+      - run: dotnet restore Moonrise.sln
       - run: dotnet build Moonrise.sln -c Release --no-restore
       - run: dotnet test Moonrise.sln -c Release --no-build
