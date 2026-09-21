@@ -1747,45 +1747,62 @@ public partial class MainWindow : Window
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
             };
+            var content = new Grid
+            {
+                Width = 156,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                ColumnDefinitions =
+                {
+                    new ColumnDefinition { Width = new GridLength(36) },
+                    new ColumnDefinition { Width = new GridLength(12) },
+                    new ColumnDefinition { Width = new GridLength(108) }
+                }
+            };
+            content.Children.Add(new Border
+            {
+                Width = 36,
+                Height = 36,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Center,
+                CornerRadius = new CornerRadius(18),
+                Background = (Brush)FindResource("SurfaceSecondary"),
+                Child = icon
+            });
+            var labels = new StackPanel
+            {
+                VerticalAlignment = VerticalAlignment.Center,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = asset.Asset,
+                        FontWeight = FontWeights.SemiBold,
+                        FontSize = 13,
+                        Foreground = (Brush)FindResource("TextPrimary")
+                    },
+                    new TextBlock
+                    {
+                        Text = asset.NetworkName,
+                        FontSize = 10,
+                        Foreground = (Brush)FindResource("TextMuted"),
+                        Margin = new Thickness(0, 3, 0, 0),
+                        TextTrimming = TextTrimming.CharacterEllipsis
+                    }
+                }
+            };
+            Grid.SetColumn(labels, 2);
+            content.Children.Add(labels);
+
             var button = new Button
             {
                 Tag = asset,
                 Height = 72,
                 Margin = new Thickness(5),
                 Padding = new Thickness(12, 8, 12, 8),
-                HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
                 Style = (Style)FindResource("ButtonBase"),
-                Content = new Grid
-                {
-                    ColumnDefinitions =
-                    {
-                        new ColumnDefinition { Width = new GridLength(42) },
-                        new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }
-                    },
-                    Children =
-                    {
-                        new Border
-                        {
-                            Width = 36,
-                            Height = 36,
-                            CornerRadius = new CornerRadius(18),
-                            Background = (Brush)FindResource("SurfaceSecondary"),
-                            Child = icon
-                        },
-                        new StackPanel
-                        {
-                            Margin = new Thickness(8, 0, 0, 0),
-                            VerticalAlignment = VerticalAlignment.Center,
-                            Children =
-                            {
-                                new TextBlock { Text = asset.Asset, FontWeight = FontWeights.SemiBold, FontSize = 13, Foreground = (Brush)FindResource("TextPrimary") },
-                                new TextBlock { Text = asset.NetworkName, FontSize = 10, Foreground = (Brush)FindResource("TextMuted"), Margin = new Thickness(0, 3, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis }
-                            }
-                        }
-                    }
-                }
+                Content = content
             };
-            Grid.SetColumn(((Grid)button.Content).Children[1], 1);
             Grid.SetRow(button, row);
             Grid.SetColumn(button, column);
             System.Windows.Automation.AutomationProperties.SetName(button, $"{asset.DisplayName}, {asset.NetworkName}");
