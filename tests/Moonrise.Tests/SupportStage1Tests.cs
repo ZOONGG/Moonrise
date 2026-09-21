@@ -65,6 +65,16 @@ public sealed class SupportStage1Tests
     public void CryptoCheckoutUrlAllowListIsStrict(string value, bool expected) =>
         Assert.Equal(expected, CheckoutUrlValidator.TryValidateCryptoPayCheckout(value, out _));
 
+    [Theory]
+    [InlineData("bitcoin:bc1qexample?amount=0.001&label=Moonrise", true)]
+    [InlineData("ethereum:0x1111111111111111111111111111111111111111@1?value=1000000000000000", true)]
+    [InlineData("solana:11111111111111111111111111111111?amount=1", true)]
+    [InlineData("tron:T111111111111111111111111111111111", false)]
+    [InlineData("https://example.test/pay", false)]
+    [InlineData("javascript:alert(1)", false)]
+    public void DirectCryptoPaymentUriAllowListIsStrict(string value, bool expected) =>
+        Assert.Equal(expected, CheckoutUrlValidator.TryValidateDirectCrypto(value, out _));
+
     [Fact]
     public async Task CryptoAvailabilityAndAmountsComeFromMethodsResponse()
     {
@@ -640,9 +650,12 @@ public sealed class SupportStage1Tests
         Assert.Contains("for (var column = 0; column < 3; column++)", code, StringComparison.Ordinal);
         Assert.Contains("SupportAddressText.Text = checkout.WalletAddress", code, StringComparison.Ordinal);
         Assert.DoesNotContain("ShortAddress(checkout.WalletAddress)", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("SupportCopyAmountButton", xaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("Открыть кошелёк", code, StringComparison.Ordinal);
-        Assert.Contains("crypto ? Visibility.Collapsed : Visibility.Visible", code, StringComparison.Ordinal);
+        Assert.Contains("SupportCopyAmountButton", xaml, StringComparison.Ordinal);
+        Assert.Contains("SupportCryptoAmountText", xaml, StringComparison.Ordinal);
+        Assert.Contains("Открыть в кошельке", code, StringComparison.Ordinal);
+        Assert.Contains("Сумма скопирована", code, StringComparison.Ordinal);
+        Assert.Contains("hasWalletDeepLink", code, StringComparison.Ordinal);
+        Assert.Contains("CheckoutUrlValidator.TryValidateDirectCrypto(checkout.PaymentUri, out _)", code, StringComparison.Ordinal);
         Assert.Contains("WaitingShimmerStoryboard", controls, StringComparison.Ordinal);
         Assert.Contains("SupportThankYouAmountText", xaml, StringComparison.Ordinal);
         Assert.Contains("SupportCryptoMethodButton", xaml, StringComparison.Ordinal);
