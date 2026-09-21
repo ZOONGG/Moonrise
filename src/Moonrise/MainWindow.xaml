@@ -1228,7 +1228,8 @@
                                            Stretch="Uniform" SnapsToDevicePixels="False" UseLayoutRounding="False"
                                            RenderOptions.BitmapScalingMode="NearestNeighbor" AutomationProperties.Name="Payment checkout QR code"/>
                                 </Border>
-                                <TextBlock x:Name="SupportScanText" Text="Scan with your phone" Foreground="{DynamicResource TextSecondary}" Margin="0,11,0,0" HorizontalAlignment="Center"/>
+                                <TextBlock x:Name="SupportScanText" Text="Scan with your phone" Foreground="{DynamicResource TextSecondary}" Margin="0,11,0,0"
+                                           HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="430"/>
                                 <Button x:Name="SupportOpenTelegramButton" Content="Open Telegram" Style="{StaticResource PrimaryButton}" Width="280" Margin="0,18,0,0"
                                         Click="SupportOpenTelegramButton_Click" AutomationProperties.Name="Open payment checkout"/>
                                 <TextBlock x:Name="SupportOpenTelegramHint" Text="Continue securely in Telegram." Foreground="{DynamicResource TextMuted}" FontSize="12" Margin="0,6,0,0" TextAlignment="Center"/>
@@ -1242,6 +1243,22 @@
                                             </StackPanel>
                                             <Button x:Name="SupportCopyAddressButton" Grid.Column="1" Width="38" Height="38" Padding="0" Style="{StaticResource ButtonBase}"
                                                     Click="SupportCopyAddressButton_Click" AutomationProperties.Name="Copy wallet address" ToolTip="Copy address">
+                                                <Viewbox Width="17" Height="17">
+                                                    <Path Data="{StaticResource IconCopy}" Stroke="{DynamicResource Accent}" StrokeThickness="1.7"
+                                                          Fill="Transparent" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                                </Viewbox>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                    <Border Height="58" Margin="0,8,0,0" Background="{DynamicResource SurfaceSecondary}" BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="1" CornerRadius="12" Padding="14,8">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="44"/></Grid.ColumnDefinitions>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock x:Name="SupportCryptoAmountLabel" Text="Exact amount" Foreground="{DynamicResource TextMuted}" FontSize="10"/>
+                                                <TextBlock x:Name="SupportCryptoAmountText" FontFamily="Cascadia Mono, Consolas" FontSize="12" FontWeight="SemiBold" Margin="0,4,8,0"/>
+                                            </StackPanel>
+                                            <Button x:Name="SupportCopyAmountButton" Grid.Column="1" Width="38" Height="38" Padding="0" Style="{StaticResource ButtonBase}"
+                                                    Click="SupportCopyAmountButton_Click" AutomationProperties.Name="Copy exact crypto amount" ToolTip="Copy amount">
                                                 <Viewbox Width="17" Height="17">
                                                     <Path Data="{StaticResource IconCopy}" Stroke="{DynamicResource Accent}" StrokeThickness="1.7"
                                                           Fill="Transparent" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
