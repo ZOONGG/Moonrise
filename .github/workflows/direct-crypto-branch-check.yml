@@ -1,0 +1,24 @@
+name: Direct crypto branch check
+
+on:
+  push:
+    branches:
+      - fix/direct-crypto-runtime-polish
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+      - run: dotnet restore Moonrise.sln --locked-mode
+      - run: dotnet build Moonrise.sln -c Release --no-restore
+      - run: dotnet test Moonrise.sln -c Release --no-build
