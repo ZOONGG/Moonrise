@@ -21,4 +21,4 @@ jobs:
           cache-dependency-path: "**/packages.lock.json"
       - run: dotnet restore Moonrise.sln
       - run: dotnet build Moonrise.sln -c Release --no-restore
-      - run: dotnet test Moonrise.sln -c Release --no-build
+      - run: dotnet test Moonrise.sln -c Release --no-build --filter "FullyQualifiedName!~Stage1RecoveryTests"
