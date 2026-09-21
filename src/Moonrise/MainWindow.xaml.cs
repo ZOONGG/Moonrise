@@ -109,6 +109,7 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _supportDialogCancellation;
     private bool _supportShowingMethods = true;
     private string? _renderedSupportCheckoutUrl;
+    private int _supportCopyToastGeneration;
     private string? _lastSupportDiagnosticKey;
 
     private IEnumerable<PackageInfo> _mods => _library.Packages.Where(item => item.Kind == PackageKind.WeaveMod);
@@ -1723,7 +1724,7 @@ public partial class MainWindow : Window
         SupportAssetButtons.Children.Clear();
         SupportAssetButtons.RowDefinitions.Clear();
         SupportAssetButtons.ColumnDefinitions.Clear();
-        for (var column = 0; column < 6; column++)
+        for (var column = 0; column < 3; column++)
             SupportAssetButtons.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
         var assets = (_supportFlow?.Method?.Assets ?? []).ToArray();
@@ -1735,15 +1736,7 @@ public partial class MainWindow : Window
         {
             var asset = assets[index];
             var row = index / 3;
-            var indexInRow = index % 3;
-            var remaining = assets.Length - row * 3;
-            var cardsInRow = Math.Min(3, remaining);
-            var column = cardsInRow switch
-            {
-                1 => 2,
-                2 => 1 + indexInRow * 2,
-                _ => indexInRow * 2
-            };
+            var column = index % 3;
 
             var icon = new Image
             {
@@ -1795,7 +1788,6 @@ public partial class MainWindow : Window
             Grid.SetColumn(((Grid)button.Content).Children[1], 1);
             Grid.SetRow(button, row);
             Grid.SetColumn(button, column);
-            Grid.SetColumnSpan(button, 2);
             System.Windows.Automation.AutomationProperties.SetName(button, $"{asset.DisplayName}, {asset.NetworkName}");
             button.Click += SupportAssetButton_Click;
             SupportAssetButtons.Children.Add(button);
@@ -1984,11 +1976,21 @@ public partial class MainWindow : Window
         SupportNetworkWarningText.Text = T(
             $"Сеть: {checkout.NetworkName ?? checkout.Network}. Отправляйте средства только в этой сети.",
             $"Network: {checkout.NetworkName ?? checkout.Network}. Send funds only on this network.");
-        if (string.Equals(_renderedSupportCheckoutUrl, checkout.CheckoutUrl, StringComparison.Ordinal))
+        // Direct-crypto QR codes intentionally contain only the receive address.
+        // Payment URIs remain available for explicit wallet-opening flows, but many
+        // exchange/wallet scanners reject BIP-21/EIP-681 payloads while accepting
+        // a plain address.
+        var qrPayload = crypto ? checkout.WalletAddress : checkout.CheckoutUrl;
+        if (string.IsNullOrWhiteSpace(qrPayload))
+        {
+            SupportQrImage.Source = null;
+            return;
+        }
+        if (string.Equals(_renderedSupportCheckoutUrl, qrPayload, StringComparison.Ordinal))
             return;
         try
         {
-            var png = SupportQrCodeService.CreatePng(checkout.Provider, checkout.CheckoutUrl);
+            var png = SupportQrCodeService.CreatePng(checkout.Provider, qrPayload);
             using var stream = new MemoryStream(png, writable: false);
             var image = new BitmapImage();
             image.BeginInit();
@@ -1997,7 +1999,7 @@ public partial class MainWindow : Window
             image.EndInit();
             image.Freeze();
             SupportQrImage.Source = image;
-            _renderedSupportCheckoutUrl = checkout.CheckoutUrl;
+            _renderedSupportCheckoutUrl = qrPayload;
         }
         catch (InvalidDataException)
         {
@@ -2036,18 +2038,21 @@ public partial class MainWindow : Window
     {
         if (_supportFlow?.Checkout?.WalletAddress is not { Length: > 0 } value)
             return;
+        var generation = ++_supportCopyToastGeneration;
         try
         {
             Clipboard.SetText(value);
-            SupportCopyToastText.Text = T("Скопировано", "Copied");
-            SupportCopyToast.IsOpen = true;
-            await Task.Delay(1250);
-            SupportCopyToast.IsOpen = false;
+            SupportCopyToastText.Text = T("Адрес скопирован", "Address copied");
+            SupportCopyToast.Visibility = Visibility.Visible;
+            await Task.Delay(1400);
+            if (generation == _supportCopyToastGeneration)
+                SupportCopyToast.Visibility = Visibility.Collapsed;
         }
         catch (ExternalException)
         {
-            SupportCopyToast.IsOpen = false;
-            // The full address remains available in the tooltip and QR if the clipboard is busy.
+            if (generation == _supportCopyToastGeneration)
+                SupportCopyToast.Visibility = Visibility.Collapsed;
+            // The full address remains visible even if the clipboard is temporarily busy.
         }
     }
 
@@ -2136,7 +2141,8 @@ public partial class MainWindow : Window
         _supportDialogCancellation = null;
         _supportFlow?.Close();
         SupportQrImage.Source = null;
-        SupportCopyToast.IsOpen = false;
+        _supportCopyToastGeneration++;
+        SupportCopyToast.Visibility = Visibility.Collapsed;
         _renderedSupportCheckoutUrl = null;
         SupportOverlay.IsHitTestVisible = false;
         var animation = new DoubleAnimation(SupportOverlay.Opacity, 0, TimeSpan.FromMilliseconds(MotionController.FastMilliseconds));
@@ -2163,7 +2169,8 @@ public partial class MainWindow : Window
     {
         _renderedSupportCheckoutUrl = null;
         SupportQrImage.Source = null;
-        SupportCopyToast.IsOpen = false;
+        _supportCopyToastGeneration++;
+        SupportCopyToast.Visibility = Visibility.Collapsed;
         SupportOpenTelegramButton.IsEnabled = false;
         SupportOpenTelegramButton.Visibility = Visibility.Collapsed;
         SupportOpenTelegramHint.Visibility = Visibility.Collapsed;
@@ -4209,7 +4216,7 @@ public partial class MainWindow : Window
                     true,
                     "USD",
                     [1, 5, 10, 25],
-                    new SupportCustomAmount(true, 1),
+                    new SupportCustomAmount(true, 1, 1000000),
                     null,
                     [new SupportAsset("USDT", "Tether USD", "ethereum", "Ethereum (ERC-20)", 6, "token", true)])
             ]));
