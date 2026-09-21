@@ -1957,10 +1957,14 @@ public partial class MainWindow : Window
             ? $"{checkout.CryptoAmount} {checkout.Asset}"
             : checkout.Amount.ToString("N0", SupportAmountCulture);
         SupportCheckoutStarsIcon.Visibility = crypto ? Visibility.Collapsed : Visibility.Visible;
-        SupportQrFrame.Width = crypto ? 272 : 248;
-        SupportQrFrame.Height = crypto ? 272 : 248;
-        SupportQrImage.MaxWidth = crypto ? 244 : 220;
-        SupportQrImage.MaxHeight = crypto ? 244 : 220;
+        SupportQrFrame.Width = crypto ? 220 : 248;
+        SupportQrFrame.Height = crypto ? 220 : 248;
+        SupportQrImage.MaxWidth = crypto ? 192 : 220;
+        SupportQrImage.MaxHeight = crypto ? 192 : 220;
+        SupportOpenTelegramButton.Height = crypto ? 42 : 50;
+        SupportOpenTelegramButton.Margin = crypto
+            ? new Thickness(0, 12, 0, 0)
+            : new Thickness(0, 18, 0, 0);
         var hasWalletDeepLink = crypto &&
             !string.IsNullOrWhiteSpace(checkout.PaymentUri) &&
             CheckoutUrlValidator.TryValidateDirectCrypto(checkout.PaymentUri, out _);
@@ -1971,16 +1975,10 @@ public partial class MainWindow : Window
             ? hasWalletDeepLink ? Visibility.Visible : Visibility.Collapsed
             : Visibility.Visible;
         SupportOpenTelegramButton.IsEnabled = !crypto || hasWalletDeepLink;
-        SupportOpenTelegramHint.Visibility = Visibility.Visible;
-        SupportOpenTelegramHint.Text = crypto
-            ? hasWalletDeepLink
-                ? T(
-                    "Если кошелёк не откроется, используйте QR или скопируйте адрес и сумму.",
-                    "If no wallet opens, use the QR code or copy the address and amount.")
-                : T(
-                    "Используйте QR или скопируйте адрес и точную сумму.",
-                    "Use the QR code or copy the address and exact amount.")
-            : T("Безопасно продолжите оплату в Telegram.", "Continue securely in Telegram.");
+        SupportOpenTelegramHint.Visibility = crypto ? Visibility.Collapsed : Visibility.Visible;
+        SupportOpenTelegramHint.Text = T(
+            "Безопасно продолжите оплату в Telegram.",
+            "Continue securely in Telegram.");
         SupportScanText.Text = crypto
             ? T(
                 "QR содержит адрес кошелька. Отправьте точную сумму, указанную ниже.",
