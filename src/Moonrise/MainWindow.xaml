@@ -1247,13 +1247,6 @@
                                                           Fill="Transparent" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
                                                 </Viewbox>
                                             </Button>
-                                            <Popup x:Name="SupportCopyToast" Grid.Column="1" PlacementTarget="{Binding ElementName=SupportCopyAddressButton}"
-                                                   Placement="Top" AllowsTransparency="True" StaysOpen="True" IsOpen="False">
-                                                <Border Background="{DynamicResource SurfaceFloating}" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="1"
-                                                        CornerRadius="8" Padding="10,6" Margin="0,0,0,6">
-                                                    <TextBlock x:Name="SupportCopyToastText" Text="Copied" Foreground="{DynamicResource TextPrimary}" FontSize="11"/>
-                                                </Border>
-                                            </Popup>
                                         </Grid>
                                     </Border>
                                     <TextBlock x:Name="SupportNetworkWarningText" Text="Send funds only on the network shown above." Foreground="{DynamicResource Warning}" FontSize="11"
@@ -1304,6 +1297,12 @@
                         </StackPanel>
                     </Grid>
                 </Grid>
+            </Border>
+            <Border x:Name="SupportCopyToast" Panel.ZIndex="30" Visibility="Collapsed" IsHitTestVisible="False"
+                    HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,28"
+                    Background="{DynamicResource SurfaceFloating}" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="1"
+                    CornerRadius="10" Padding="14,8">
+                <TextBlock x:Name="SupportCopyToastText" Text="Copied" Foreground="{DynamicResource TextPrimary}" FontSize="12" FontWeight="SemiBold"/>
             </Border>
         </Grid>
 
