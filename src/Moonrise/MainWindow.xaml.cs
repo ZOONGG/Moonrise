@@ -1961,28 +1961,19 @@ public partial class MainWindow : Window
         SupportQrFrame.Height = crypto ? 220 : 248;
         SupportQrImage.MaxWidth = crypto ? 192 : 220;
         SupportQrImage.MaxHeight = crypto ? 192 : 220;
-        SupportOpenTelegramButton.Height = crypto ? 42 : 50;
-        SupportOpenTelegramButton.Margin = crypto
-            ? new Thickness(0, 12, 0, 0)
-            : new Thickness(0, 18, 0, 0);
-        var hasWalletDeepLink = crypto &&
-            !string.IsNullOrWhiteSpace(checkout.PaymentUri) &&
-            CheckoutUrlValidator.TryValidateDirectCrypto(checkout.PaymentUri, out _);
-        SupportOpenTelegramButton.Content = crypto
-            ? T("Открыть в кошельке", "Open in wallet")
-            : T("Открыть Telegram", "Open Telegram");
-        SupportOpenTelegramButton.Visibility = crypto
-            ? hasWalletDeepLink ? Visibility.Visible : Visibility.Collapsed
-            : Visibility.Visible;
-        SupportOpenTelegramButton.IsEnabled = !crypto || hasWalletDeepLink;
+        SupportOpenTelegramButton.Height = 50;
+        SupportOpenTelegramButton.Margin = new Thickness(0, 18, 0, 0);
+        SupportOpenTelegramButton.Content = T("Открыть Telegram", "Open Telegram");
+        SupportOpenTelegramButton.Visibility = crypto ? Visibility.Collapsed : Visibility.Visible;
+        SupportOpenTelegramButton.IsEnabled = !crypto;
         SupportOpenTelegramHint.Visibility = crypto ? Visibility.Collapsed : Visibility.Visible;
         SupportOpenTelegramHint.Text = T(
             "Безопасно продолжите оплату в Telegram.",
             "Continue securely in Telegram.");
         SupportScanText.Text = crypto
             ? T(
-                "QR содержит адрес кошелька. Отправьте точную сумму, указанную ниже.",
-                "The QR contains the wallet address. Send the exact amount shown below.")
+                "QR содержит адрес кошелька. Отправьте сумму, указанную выше.",
+                "The QR contains the wallet address. Send the amount shown above.")
             : T("Отсканируйте телефоном", "Scan with your phone");
         SupportCryptoDetailsPanel.Visibility = crypto ? Visibility.Visible : Visibility.Collapsed;
         SupportAddressLabel.Text = T("Адрес кошелька", "Wallet address");
@@ -1992,15 +1983,6 @@ public partial class MainWindow : Window
             T("Копировать адрес кошелька", "Copy wallet address"));
         SupportAddressText.Text = checkout.WalletAddress ?? string.Empty;
         SupportAddressText.ToolTip = checkout.WalletAddress;
-        SupportCryptoAmountLabel.Text = T("Точная сумма", "Exact amount");
-        SupportCryptoAmountText.Text = crypto
-            ? $"{checkout.CryptoAmount} {checkout.Asset}"
-            : string.Empty;
-        SupportCryptoAmountText.ToolTip = crypto ? checkout.CryptoAmount : null;
-        SupportCopyAmountButton.ToolTip = T("Копировать сумму", "Copy amount");
-        System.Windows.Automation.AutomationProperties.SetName(
-            SupportCopyAmountButton,
-            T("Копировать точную сумму", "Copy exact crypto amount"));
         SupportNetworkWarningText.Text = T(
             $"Сеть: {checkout.NetworkName ?? checkout.Network}. Отправляйте средства только в этой сети.",
             $"Network: {checkout.NetworkName ?? checkout.Network}. Send funds only on this network.");
@@ -2040,19 +2022,14 @@ public partial class MainWindow : Window
     {
         if (_supportFlow?.TryGetActiveCheckout(out var activeCheckout) != true || activeCheckout is null)
             return;
-        var crypto = IsCryptoSupportMethod(activeCheckout.Provider);
-        var checkoutUrl = crypto ? activeCheckout.PaymentUri : activeCheckout.CheckoutUrl;
+        var checkoutUrl = activeCheckout.CheckoutUrl;
         if (string.IsNullOrWhiteSpace(checkoutUrl))
             return;
-
-        var safe = crypto
-            ? CheckoutUrlValidator.TryValidateDirectCrypto(checkoutUrl, out _)
-            : CheckoutUrlValidator.TryValidateCheckout(activeCheckout.Provider, checkoutUrl, out _);
-        if (!safe)
+        if (!CheckoutUrlValidator.TryValidateCheckout(activeCheckout.Provider, checkoutUrl, out _))
         {
             ShowToast(
                 ToastKind.Error,
-                crypto ? T("Не удалось открыть кошелёк", "Could not open wallet") : T("Не удалось открыть оплату", "Could not open checkout"),
+                T("Не удалось открыть оплату", "Could not open checkout"),
                 T("Сервис вернул небезопасную ссылку.", "The service returned an unsafe checkout link."));
             return;
         }
@@ -2065,12 +2042,8 @@ public partial class MainWindow : Window
         {
             ShowToast(
                 ToastKind.Error,
-                crypto ? T("Кошелёк не открылся", "Wallet did not open") : T("Не удалось открыть оплату", "Could not open checkout"),
-                crypto
-                    ? T(
-                        "Используйте QR или скопируйте адрес и точную сумму.",
-                        "Use the QR code or copy the address and exact amount.")
-                    : T("Повторите попытку позже.", "Please try again later."));
+                T("Не удалось открыть оплату", "Could not open checkout"),
+                T("Повторите попытку позже.", "Please try again later."));
         }
     }
 
@@ -2087,21 +2060,6 @@ public partial class MainWindow : Window
         {
             SupportCopyToast.Visibility = Visibility.Collapsed;
             // The full address remains visible even if the clipboard is temporarily busy.
-        }
-    }
-
-    private async void SupportCopyAmountButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (_supportFlow?.Checkout?.CryptoAmount is not { Length: > 0 } value)
-            return;
-        try
-        {
-            Clipboard.SetText(value);
-            await ShowSupportCopyToastAsync(T("Сумма скопирована", "Amount copied"));
-        }
-        catch (ExternalException)
-        {
-            SupportCopyToast.Visibility = Visibility.Collapsed;
         }
     }
 
