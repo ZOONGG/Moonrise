@@ -648,6 +648,11 @@ public sealed class SupportStage1Tests
         Assert.Contains("Адрес скопирован", code, StringComparison.Ordinal);
         Assert.Contains("var qrPayload = crypto ? checkout.WalletAddress : checkout.CheckoutUrl", code, StringComparison.Ordinal);
         Assert.Contains("for (var column = 0; column < 3; column++)", code, StringComparison.Ordinal);
+        Assert.Contains("Width = 156", code, StringComparison.Ordinal);
+        Assert.Contains("new ColumnDefinition { Width = new GridLength(36) }", code, StringComparison.Ordinal);
+        Assert.Contains("new ColumnDefinition { Width = new GridLength(12) }", code, StringComparison.Ordinal);
+        Assert.Contains("new ColumnDefinition { Width = new GridLength(108) }", code, StringComparison.Ordinal);
+        Assert.Contains("HorizontalContentAlignment = HorizontalAlignment.Left", code, StringComparison.Ordinal);
         Assert.Contains("SupportAddressText.Text = checkout.WalletAddress", code, StringComparison.Ordinal);
         Assert.DoesNotContain("ShortAddress(checkout.WalletAddress)", code, StringComparison.Ordinal);
         Assert.DoesNotContain("SupportCopyAmountButton", xaml, StringComparison.Ordinal);
