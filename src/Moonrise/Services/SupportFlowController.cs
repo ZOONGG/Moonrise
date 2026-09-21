@@ -107,6 +107,8 @@ public sealed class SupportFlowController : IDisposable
             if (!decimal.TryParse(customText, NumberStyles.Number, culture, out amount) ||
                 amount < method.Custom.Min || decimal.Round(amount, 2) != amount)
                 return false;
+            if (method.Custom.Max is { } directMaximum && amount > directMaximum)
+                amount = directMaximum;
             foreach (var preset in method.Presets)
             {
                 if (amount != preset)
@@ -151,6 +153,8 @@ public sealed class SupportFlowController : IDisposable
         if (Method is null)
             throw new ArgumentOutOfRangeException(nameof(amount));
         var direct = string.Equals(Method.Id, "direct_crypto", StringComparison.OrdinalIgnoreCase);
+        if (direct && Method.Custom.Max is { } directMaximum && amount > directMaximum)
+            amount = directMaximum;
         if (amount < Method.Custom.Min || decimal.Round(amount, direct ? 2 : 0) != amount ||
             (!direct && (Method.Custom.Max is not { } maximum || amount > maximum)))
             throw new ArgumentOutOfRangeException(nameof(amount));
