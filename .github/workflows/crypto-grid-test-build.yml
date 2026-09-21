@@ -1,0 +1,59 @@
+name: Crypto grid Windows test build
+
+on:
+  push:
+    branches:
+      - build/crypto-grid-test
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+  NUGET_PACKAGES: ${{ github.workspace }}\.nuget\packages
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+      - name: Restore
+        run: dotnet restore Moonrise.sln
+      - name: Build Release
+        run: dotnet build Moonrise.sln -c Release --no-restore
+      - name: Run support-safe tests
+        run: dotnet test Moonrise.sln -c Release --no-build --filter "FullyQualifiedName!~Stage1RecoveryTests"
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+      - name: Build installer and portable
+        shell: pwsh
+        run: |
+          ./tools/New-MoonriseRelease.ps1 `
+            -Version "0.0.${{ github.run_number }}" `
+            -OutputRoot "artifacts/release" `
+            -SkipRestore `
+            -SkipTests
+      - name: Installer smoke test
+        shell: pwsh
+        run: |
+          ./tools/Test-MoonriseInstaller.ps1 `
+            -SetupPath "artifacts/release/Moonrise-Setup-0.0.${{ github.run_number }}-x64.exe" `
+            -LaunchSmokeTest
+      - name: Upload test build
+        uses: actions/upload-artifact@v7
+        with:
+          name: Moonrise-Crypto-Grid-Test-${{ github.run_number }}
+          path: |
+            artifacts/release/Moonrise-Setup-*
+            artifacts/release/Moonrise-Portable-*
+            artifacts/release/*.sha256
+          if-no-files-found: error
+          retention-days: 7
