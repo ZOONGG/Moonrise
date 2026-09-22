@@ -1821,6 +1821,8 @@ public partial class MainWindow : Window
             "BNB" => "BnbIcon",
             "SOL" => "SolanaIcon",
             "TRX" => "TronIcon",
+            "LTC" => "LitecoinIcon",
+            "DOGE" => "DogecoinIcon",
             "DAI" => "DaiIcon",
             "LINK" => "ChainlinkIcon",
             _ => "CryptoMethodIcon"
