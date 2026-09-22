@@ -28,7 +28,7 @@
     <!-- Public endpoint only; no provider credentials are embedded. An explicit
          MoonriseSupportApiBaseUrl MSBuild property wins over the configuration-specific
          safe default and is stored as assembly metadata for single-file publishes. -->
-    <DefaultMoonriseSupportApiBaseUrl Condition="'$(Configuration)' == 'Release'">https://moonrise-backend-production.up.railway.app</DefaultMoonriseSupportApiBaseUrl>
+    <DefaultMoonriseSupportApiBaseUrl Condition="'$(Configuration)' == 'Release'">https://support-backend-production-8891.up.railway.app</DefaultMoonriseSupportApiBaseUrl>
     <DefaultMoonriseSupportApiBaseUrl Condition="'$(Configuration)' != 'Release'">http://127.0.0.1:8787</DefaultMoonriseSupportApiBaseUrl>
     <MoonriseSupportApiBaseUrl Condition="'$(MoonriseSupportApiBaseUrl)' == ''">$(DefaultMoonriseSupportApiBaseUrl)</MoonriseSupportApiBaseUrl>
   </PropertyGroup>
