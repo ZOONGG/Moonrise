@@ -188,7 +188,7 @@ public sealed class SupportStage1Tests
 #if DEBUG
         Assert.Equal("http://127.0.0.1:8787", endpoint);
 #else
-        Assert.Equal("https://moonrise-backend-production.up.railway.app", endpoint);
+        Assert.Equal("https://support-backend-production-8891.up.railway.app", endpoint);
 #endif
     }
 
