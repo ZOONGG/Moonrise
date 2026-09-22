@@ -188,7 +188,7 @@ public sealed class SupportStage1Tests
 #if DEBUG
         Assert.Equal("http://127.0.0.1:8787", endpoint);
 #else
-        Assert.Equal("https://moonrise-backend-production.up.railway.app", endpoint);
+        Assert.Equal("https://support-backend-production-8891.up.railway.app", endpoint);
 #endif
     }
 
@@ -641,6 +641,10 @@ public sealed class SupportStage1Tests
         Assert.Contains("BnbIcon", icons, StringComparison.Ordinal);
         Assert.Contains("SolanaIcon", icons, StringComparison.Ordinal);
         Assert.Contains("TronIcon", icons, StringComparison.Ordinal);
+        Assert.Contains("LitecoinIcon", icons, StringComparison.Ordinal);
+        Assert.Contains("DogecoinIcon", icons, StringComparison.Ordinal);
+        Assert.Contains("\"LTC\" => \"LitecoinIcon\"", code, StringComparison.Ordinal);
+        Assert.Contains("\"DOGE\" => \"DogecoinIcon\"", code, StringComparison.Ordinal);
         Assert.Contains("DaiIcon", icons, StringComparison.Ordinal);
         Assert.Contains("ChainlinkIcon", icons, StringComparison.Ordinal);
         Assert.Contains("SupportCopyToast", xaml, StringComparison.Ordinal);
