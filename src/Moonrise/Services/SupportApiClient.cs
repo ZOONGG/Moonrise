@@ -16,12 +16,13 @@ public interface ISupportApiClient
 
 public sealed class SupportApiClient(HttpClient httpClient, Uri baseUri) : ISupportApiClient
 {
+    private const string ProjectSupportPath = "v1/projects/moonrise/support";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly Uri _baseUri = baseUri;
 
     public async Task<SupportMethodsResponse> GetMethodsAsync(CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, BuildUri("v1/support/methods"));
+        using var request = new HttpRequestMessage(HttpMethod.Get, BuildUri($"{ProjectSupportPath}/methods"));
         using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
         return await ReadAsync<SupportMethodsResponse>(response, cancellationToken);
     }
@@ -33,9 +34,9 @@ public sealed class SupportApiClient(HttpClient httpClient, Uri baseUri) : ISupp
     {
         var route = methodId.ToLowerInvariant() switch
         {
-            "telegram_stars" => "v1/support/telegram-stars/checkout",
-            "crypto_pay" => "v1/support/crypto-pay/checkout",
-            "direct_crypto" => "v1/support/direct-crypto/checkout",
+            "telegram_stars" => $"{ProjectSupportPath}/telegram-stars/checkout",
+            "crypto_pay" => $"{ProjectSupportPath}/crypto-pay/checkout",
+            "direct_crypto" => $"{ProjectSupportPath}/direct-crypto/checkout",
             _ => throw new ArgumentOutOfRangeException(nameof(methodId))
         };
         using var request = new HttpRequestMessage(HttpMethod.Post, BuildUri(route))
@@ -61,7 +62,7 @@ public sealed class SupportApiClient(HttpClient httpClient, Uri baseUri) : ISupp
         string statusToken,
         CancellationToken cancellationToken)
     {
-        var path = $"v1/support/payments/{Uri.EscapeDataString(paymentIntentId)}/status";
+        var path = $"{ProjectSupportPath}/payments/{Uri.EscapeDataString(paymentIntentId)}/status";
         using var request = new HttpRequestMessage(HttpMethod.Get, BuildUri(path));
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", statusToken);
         using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
