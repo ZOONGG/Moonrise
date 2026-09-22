@@ -32,11 +32,11 @@ jobs:
         shell: powershell
         run: |
           $version = "0.0.${{ github.run_number }}"
-          ./tools/New-MoonriseRelease.ps1 -Version $version -Configuration Release -Runtime win-x64 -SkipRestore -SkipTests
+          ./tools/New-MoonriseRelease.ps1 -Version $version -OutputRoot release -SkipRestore -SkipTests
       - name: Installer smoke
         shell: powershell
         run: |
-          $setup = Get-ChildItem -Path artifacts/release -Filter "*Setup*.exe" | Select-Object -First 1
+          $setup = Get-ChildItem -Path release -Filter "*Setup*.exe" | Select-Object -First 1
           if (-not $setup) { throw "Setup executable not found" }
           & $setup.FullName /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /DIR="$env:RUNNER_TEMP\MoonriseSmoke"
           $exe = Join-Path "$env:RUNNER_TEMP\MoonriseSmoke" "Moonrise.exe"
@@ -47,7 +47,7 @@ jobs:
         with:
           name: Moonrise-Shared-Support-Test-${{ github.run_number }}
           path: |
-            artifacts/release/*.zip
-            artifacts/release/*Setup*.exe
-            artifacts/release/*.sha256
+            release/*.zip
+            release/*Setup*.exe
+            release/*.sha256
           retention-days: 7
