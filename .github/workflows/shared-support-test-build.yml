@@ -26,28 +26,24 @@ jobs:
       - name: Test
         run: dotnet test Moonrise.sln -c Release --no-build --filter "FullyQualifiedName!~Stage1RecoveryTests"
       - name: Install Inno Setup
-        shell: powershell
+        shell: pwsh
         run: choco install innosetup --no-progress -y
       - name: Create release artifacts
-        shell: powershell
+        shell: pwsh
         run: |
           $version = "0.0.${{ github.run_number }}"
-          ./tools/New-MoonriseRelease.ps1 -Version $version -OutputRoot release -SkipRestore -SkipTests
+          ./tools/New-MoonriseRelease.ps1 -Version $version -OutputRoot "artifacts/release" -SkipRestore -SkipTests
       - name: Installer smoke
-        shell: powershell
+        shell: pwsh
         run: |
-          $setup = Get-ChildItem -Path release -Filter "*Setup*.exe" | Select-Object -First 1
-          if (-not $setup) { throw "Setup executable not found" }
-          & $setup.FullName /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /DIR="$env:RUNNER_TEMP\MoonriseSmoke"
-          $exe = Join-Path "$env:RUNNER_TEMP\MoonriseSmoke" "Moonrise.exe"
-          if (-not (Test-Path $exe)) { throw "Installed Moonrise.exe not found" }
-          & $exe -LaunchSmokeTest
-          if ($LASTEXITCODE -ne 0) { throw "Launch smoke test failed with $LASTEXITCODE" }
+          ./tools/Test-MoonriseInstaller.ps1 `
+            -SetupPath "artifacts/release/Moonrise-Setup-0.0.${{ github.run_number }}-x64.exe" `
+            -LaunchSmokeTest
       - uses: actions/upload-artifact@v4
         with:
           name: Moonrise-Shared-Support-Test-${{ github.run_number }}
           path: |
-            release/*.zip
-            release/*Setup*.exe
-            release/*.sha256
+            artifacts/release/*.zip
+            artifacts/release/*Setup*.exe
+            artifacts/release/*.sha256
           retention-days: 7
