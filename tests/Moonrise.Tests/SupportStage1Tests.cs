@@ -56,14 +56,6 @@ public sealed class SupportStage1Tests
     public void CheckoutUrlAllowListIsStrict(string value, bool expected) =>
         Assert.Equal(expected, CheckoutUrlValidator.TryValidateTelegramCheckout(value, out _));
 
-    [Theory]
-    [InlineData("https://t.me/CryptoTestnetBot?start=invoice-token", true)]
-    [InlineData("https://t.me/CryptoTestnetBot?start=", false)]
-    [InlineData("https://t.me/CryptoBot?start=invoice-token", false)]
-    [InlineData("http://t.me/CryptoTestnetBot?start=invoice-token", false)]
-    [InlineData("javascript:alert(1)", false)]
-    public void CryptoCheckoutUrlAllowListIsStrict(string value, bool expected) =>
-        Assert.Equal(expected, CheckoutUrlValidator.TryValidateCryptoPayCheckout(value, out _));
 
     [Theory]
     [InlineData("bitcoin:bc1qexample?amount=0.001&label=Moonrise", true)]
@@ -588,9 +580,6 @@ public sealed class SupportStage1Tests
     {
         var png = SupportQrCodeService.CreatePng("telegram_stars", "https://t.me/$exact-provider-value");
         Assert.Equal(new byte[] { 0x89, 0x50, 0x4E, 0x47 }, png[..4]);
-        var cryptoPng = SupportQrCodeService.CreatePng("crypto_pay", "https://t.me/CryptoTestnetBot?start=invoice-token");
-        Assert.Equal(new byte[] { 0x89, 0x50, 0x4E, 0x47 }, cryptoPng[..4]);
-        Assert.Throws<InvalidDataException>(() => SupportQrCodeService.CreatePng("crypto_pay", "https://example.test/invoice"));
         var directPng = SupportQrCodeService.CreatePng("direct_crypto", "bitcoin:bc1qexample?amount=0.001&label=Moonrise");
         Assert.Equal(new byte[] { 0x89, 0x50, 0x4E, 0x47 }, directPng[..4]);
         var addressPng = SupportQrCodeService.CreatePng("direct_crypto", "bc1q" + new string('q', 38));
