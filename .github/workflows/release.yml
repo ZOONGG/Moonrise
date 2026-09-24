@@ -74,6 +74,7 @@ jobs:
             -SkipTests
 
       - name: Test installer lifecycle
+        timeout-minutes: 5
         shell: pwsh
         run: |
           ./tools/Test-MoonriseInstaller.ps1 `
