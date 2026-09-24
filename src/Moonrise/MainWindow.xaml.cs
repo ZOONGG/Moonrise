@@ -3184,31 +3184,59 @@ public partial class MainWindow : Window
                 var nativeBridgePath = _nativeBridgeDeployment.Ensure(_paths.NativeBridgeCachePath);
                 launchReport.Set("nativeBridgePath", nativeBridgePath);
                 launchReport.Set("nativeBridgeSha256", NativeBridgeDeploymentService.ExpectedSha256);
-                var packagePrimaryAgent = enabledMods.Count > 0
-                    ? legacyWeaveAdapterPath ?? weaveLoaderPath
-                    : enabledAgents[0].FullPath;
-                var packageAdditionalAgents = enabledMods.Count > 0
-                    ? (useLegacyWeave
-                        ? new[] { weaveLoaderPath }.Concat(enabledAgents.Select(item => item.FullPath)).ToArray()
-                        : enabledAgents.Select(item => item.FullPath).ToArray())
-                    : enabledAgents.Skip(1).Select(item => item.FullPath).ToArray();
-                var primaryAgent = bwhNetworkAgentPath ?? packagePrimaryAgent;
-                var additionalAgents = bwhNetworkAgentPath is null
-                    ? packageAdditionalAgents
-                    : new[] { packagePrimaryAgent }
-                        .Concat(packageAdditionalAgents)
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .ToArray();
+                var runtimePackages = enabledMods
+                    .Select(item => new PackageRuntimeDescriptor(
+                        item.PackageId,
+                        PackageKind.WeaveMod,
+                        item.FullPath))
+                    .Concat(enabledAgents.Select(item => new PackageRuntimeDescriptor(
+                        item.PackageId,
+                        PackageKind.JavaAgent,
+                        item.FullPath)))
+                    .ToArray();
+
+                var technicalAgents = new List<TechnicalLaunchAgentDescriptor>();
+                if (bwhNetworkAgentPath is not null)
+                {
+                    technicalAgents.Add(new TechnicalLaunchAgentDescriptor(
+                        "bwh-network",
+                        bwhNetworkAgentPath,
+                        LaunchAgentRole.NetworkAdapter));
+                }
+                if (legacyWeaveAdapterPath is not null)
+                {
+                    technicalAgents.Add(new TechnicalLaunchAgentDescriptor(
+                        LegacyWeaveDirectoryAdapterService.Id,
+                        legacyWeaveAdapterPath,
+                        LaunchAgentRole.CompatibilityAdapter));
+                }
+
+                var weaveMode = enabledMods.Count == 0
+                    ? WeaveRuntimeMode.Disabled
+                    : useLegacyWeave
+                        ? WeaveRuntimeMode.Legacy
+                        : WeaveRuntimeMode.Current;
+                var launchPlan = new LaunchPlanBuilder().Build(
+                    runtimePackages,
+                    weaveMode,
+                    weaveMode == WeaveRuntimeMode.Disabled ? null : weaveLoaderPath,
+                    technicalAgents: technicalAgents);
+                var bridgeProjection = Mnr3BridgeProjectionBuilder.Build(launchPlan);
+
+                launchReport.Set("launchPlanWeaveMode", launchPlan.WeaveMode.ToString());
+                launchReport.Set(
+                    "launchPlanAgentIds",
+                    launchPlan.Agents.Select(item => item.RuntimeId).ToArray());
                 launchReport.Set("bridgeConfigPath", launchSession.BridgeConfigPath);
                 var result = await Task.Run(() => _bridgeLauncher.Launch(
                     launcherPath,
-                    primaryAgent,
+                    bridgeProjection.PrimaryAgentPath,
                     enabledModsDirectory!,
                     nativeBridgePath,
                     launchSession.BridgeConfigPath,
                     launcherArgument: null,
                     hideLauncherWindow: backgroundLaunch,
-                    additionalAgentPaths: additionalAgents));
+                    additionalAgentPaths: bridgeProjection.AdditionalAgentPaths));
                 launcherProcessId = result.Process.Id;
                 bridgeReady = result.BridgeReady;
                 result.Process.Dispose();
