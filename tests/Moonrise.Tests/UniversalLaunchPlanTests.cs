@@ -136,6 +136,18 @@ public sealed class UniversalLaunchPlanTests
     }
 
     [Fact]
+    public void WeaveLoaderCannotAlsoBeLoadedAsPackageAgent()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new LaunchPlanBuilder().Build(
+                [Agent("agent-a", @"C:\runtime\weave.jar", null)],
+                WeaveRuntimeMode.Current,
+                @"c:\RUNTIME\weave.jar"));
+
+        Assert.Contains("Java-agent path", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void DuplicateJvmPropertyFailsClosed()
     {
         var exception = Assert.Throws<InvalidOperationException>(() =>
