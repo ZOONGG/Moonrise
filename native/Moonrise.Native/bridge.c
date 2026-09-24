@@ -153,6 +153,336 @@ static BOOL is_absolute_safe_path(const WCHAR *path)
            (path[2] == L'\\' || path[2] == L'/');
 }
 
+
+static WCHAR *next_config_field(WCHAR **cursor)
+{
+    if (cursor == NULL || *cursor == NULL)
+    {
+        return NULL;
+    }
+
+    WCHAR *field = *cursor;
+    WCHAR *tab = wcschr(field, L'\t');
+    if (tab == NULL)
+    {
+        *cursor = NULL;
+    }
+    else
+    {
+        *tab = L'\0';
+        *cursor = tab + 1;
+    }
+    return field;
+}
+
+static BOOL is_safe_mnr4_field(const WCHAR *value, BOOL allow_empty)
+{
+    if (value == NULL || (!allow_empty && value[0] == L'\0'))
+    {
+        return FALSE;
+    }
+    return wcschr(value, L'\r') == NULL &&
+           wcschr(value, L'\n') == NULL &&
+           wcschr(value, L'\t') == NULL &&
+           wcschr(value, L'"') == NULL;
+}
+
+static BOOL append_option_text(WCHAR *destination, size_t capacity, const WCHAR *value)
+{
+    size_t current = wcslen(destination);
+    size_t addition = wcslen(value);
+    if (current + addition + 1 > capacity)
+    {
+        SetLastError(ERROR_INSUFFICIENT_BUFFER);
+        return FALSE;
+    }
+    CopyMemory(
+        destination + current,
+        value,
+        (addition + 1) * sizeof(WCHAR));
+    return TRUE;
+}
+
+static BOOL append_option_space(WCHAR *destination, size_t capacity)
+{
+    if (destination[0] == L'\0')
+    {
+        return TRUE;
+    }
+    return append_option_text(destination, capacity, L" ");
+}
+
+static BOOL append_mnr4_argument(WCHAR *destination, size_t capacity, const WCHAR *argument)
+{
+    if (!append_option_space(destination, capacity))
+    {
+        return FALSE;
+    }
+
+    BOOL quote = wcschr(argument, L' ') != NULL;
+    if (quote && !append_option_text(destination, capacity, L"\""))
+    {
+        return FALSE;
+    }
+    if (!append_option_text(destination, capacity, argument))
+    {
+        return FALSE;
+    }
+    if (quote && !append_option_text(destination, capacity, L"\""))
+    {
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static BOOL append_mnr4_agent(
+    WCHAR *destination,
+    size_t capacity,
+    const WCHAR *path,
+    const WCHAR *agent_options)
+{
+    if (!append_option_space(destination, capacity) ||
+        !append_option_text(destination, capacity, L"-javaagent:\"") ||
+        !append_option_text(destination, capacity, path) ||
+        !append_option_text(destination, capacity, L"\""))
+    {
+        return FALSE;
+    }
+
+    if (agent_options != NULL && agent_options[0] != L'\0')
+    {
+        if (!append_option_text(destination, capacity, L"="))
+        {
+            return FALSE;
+        }
+        BOOL quote = wcschr(agent_options, L' ') != NULL;
+        if (quote && !append_option_text(destination, capacity, L"\""))
+        {
+            return FALSE;
+        }
+        if (!append_option_text(destination, capacity, agent_options))
+        {
+            return FALSE;
+        }
+        if (quote && !append_option_text(destination, capacity, L"\""))
+        {
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+static BOOL append_mnr4_property(
+    WCHAR *destination,
+    size_t capacity,
+    const WCHAR *name,
+    const WCHAR *value)
+{
+    if (!append_option_space(destination, capacity) ||
+        !append_option_text(destination, capacity, L"-D") ||
+        !append_option_text(destination, capacity, name) ||
+        !append_option_text(destination, capacity, L"="))
+    {
+        return FALSE;
+    }
+
+    BOOL quote = wcschr(value, L' ') != NULL;
+    if (quote && !append_option_text(destination, capacity, L"\""))
+    {
+        return FALSE;
+    }
+    if (!append_option_text(destination, capacity, value))
+    {
+        return FALSE;
+    }
+    if (quote && !append_option_text(destination, capacity, L"\""))
+    {
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static WCHAR *read_mnr4_options(WCHAR *cursor, size_t wide_length)
+{
+    WCHAR *mode_line = next_config_line(&cursor);
+    WCHAR *mode_cursor = mode_line;
+    WCHAR *mode_tag = next_config_field(&mode_cursor);
+    WCHAR *mode = next_config_field(&mode_cursor);
+    if (mode_tag == NULL || wcscmp(mode_tag, L"mode") != 0 ||
+        mode == NULL || mode_cursor != NULL ||
+        !is_safe_mnr4_field(mode, FALSE))
+    {
+        SetLastError(ERROR_INVALID_DATA);
+        return NULL;
+    }
+
+    BOOL weave_disabled = wcscmp(mode, L"Disabled") == 0;
+    if (!weave_disabled &&
+        wcscmp(mode, L"Current") != 0 &&
+        wcscmp(mode, L"Legacy") != 0 &&
+        wcscmp(mode, L"Custom") != 0)
+    {
+        SetLastError(ERROR_INVALID_DATA);
+        return NULL;
+    }
+
+    WCHAR *mods_line = next_config_line(&cursor);
+    WCHAR *mods_cursor = mods_line;
+    WCHAR *mods_tag = next_config_field(&mods_cursor);
+    WCHAR *mods_path = next_config_field(&mods_cursor);
+    if (mods_tag == NULL || wcscmp(mods_tag, L"mods") != 0 ||
+        mods_path == NULL || mods_cursor != NULL ||
+        !is_absolute_safe_path(mods_path))
+    {
+        SetLastError(ERROR_INVALID_DATA);
+        return NULL;
+    }
+
+    DWORD mods_attributes = GetFileAttributesW(mods_path);
+    if (mods_attributes == INVALID_FILE_ATTRIBUTES ||
+        (mods_attributes & FILE_ATTRIBUTE_DIRECTORY) == 0)
+    {
+        SetLastError(ERROR_PATH_NOT_FOUND);
+        return NULL;
+    }
+
+    size_t options_capacity = (wide_length + 1) * 8 + 1024;
+    WCHAR *options = HeapAlloc(
+        GetProcessHeap(),
+        HEAP_ZERO_MEMORY,
+        options_capacity * sizeof(WCHAR));
+    if (options == NULL)
+    {
+        return NULL;
+    }
+
+    if (!weave_disabled)
+    {
+        if (!append_option_text(options, options_capacity, L"-Dweave.mods.directory=\"") ||
+            !append_option_text(options, options_capacity, mods_path) ||
+            !append_option_text(options, options_capacity, L"\"") ||
+            !append_option_text(options, options_capacity, L" -Dweave.api.minecraft.enabled=true") ||
+            !append_option_text(options, options_capacity, L" -Dweave.dump.bytecode.enabled=false"))
+        {
+            goto invalid_options;
+        }
+    }
+
+    size_t weave_loader_count = 0;
+    WCHAR *line;
+    while ((line = next_config_line(&cursor)) != NULL)
+    {
+        if (line[0] == L'\0')
+        {
+            continue;
+        }
+
+        WCHAR *field_cursor = line;
+        WCHAR *tag = next_config_field(&field_cursor);
+        if (tag == NULL)
+        {
+            goto invalid_data;
+        }
+
+        if (wcscmp(tag, L"agent") == 0)
+        {
+            WCHAR *path = next_config_field(&field_cursor);
+            WCHAR *agent_options = next_config_field(&field_cursor);
+            WCHAR *runtime_id = next_config_field(&field_cursor);
+            WCHAR *role = next_config_field(&field_cursor);
+            if (path == NULL || agent_options == NULL || runtime_id == NULL || role == NULL ||
+                field_cursor != NULL ||
+                !is_absolute_safe_path(path) ||
+                !is_safe_mnr4_field(agent_options, TRUE) ||
+                !is_safe_mnr4_field(runtime_id, FALSE) ||
+                !is_safe_mnr4_field(role, FALSE))
+            {
+                goto invalid_data;
+            }
+
+            DWORD attributes = GetFileAttributesW(path);
+            if (attributes == INVALID_FILE_ATTRIBUTES ||
+                (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0)
+            {
+                SetLastError(ERROR_FILE_NOT_FOUND);
+                goto invalid_options;
+            }
+
+            BOOL is_weave_loader = wcscmp(role, L"WeaveLoader") == 0;
+            if (!is_weave_loader &&
+                wcscmp(role, L"NetworkAdapter") != 0 &&
+                wcscmp(role, L"CompatibilityAdapter") != 0 &&
+                wcscmp(role, L"PackageAgent") != 0)
+            {
+                goto invalid_data;
+            }
+            if (is_weave_loader)
+            {
+                weave_loader_count++;
+                if (weave_disabled || weave_loader_count > 1)
+                {
+                    goto invalid_data;
+                }
+            }
+
+            if (!append_mnr4_agent(options, options_capacity, path, agent_options))
+            {
+                goto invalid_options;
+            }
+        }
+        else if (wcscmp(tag, L"arg") == 0)
+        {
+            WCHAR *argument = next_config_field(&field_cursor);
+            if (argument == NULL || field_cursor != NULL ||
+                !is_safe_mnr4_field(argument, FALSE) ||
+                _wcsnicmp(argument, L"-javaagent:", 11) == 0 ||
+                wcsncmp(argument, L"-D", 2) == 0)
+            {
+                goto invalid_data;
+            }
+            if (!append_mnr4_argument(options, options_capacity, argument))
+            {
+                goto invalid_options;
+            }
+        }
+        else if (wcscmp(tag, L"prop") == 0)
+        {
+            WCHAR *name = next_config_field(&field_cursor);
+            WCHAR *value = next_config_field(&field_cursor);
+            if (name == NULL || value == NULL || field_cursor != NULL ||
+                !is_safe_mnr4_field(name, FALSE) ||
+                !is_safe_mnr4_field(value, TRUE) ||
+                wcschr(name, L'=') != NULL)
+            {
+                goto invalid_data;
+            }
+            if (!append_mnr4_property(options, options_capacity, name, value))
+            {
+                goto invalid_options;
+            }
+        }
+        else
+        {
+            goto invalid_data;
+        }
+    }
+
+    if ((!weave_disabled && weave_loader_count != 1) ||
+        (weave_disabled && weave_loader_count != 0))
+    {
+        goto invalid_data;
+    }
+
+    return options;
+
+invalid_data:
+    SetLastError(ERROR_INVALID_DATA);
+invalid_options:
+    SecureZeroMemory(options, options_capacity * sizeof(WCHAR));
+    HeapFree(GetProcessHeap(), 0, options);
+    return NULL;
+}
+
 static WCHAR *read_bridge_options(void)
 {
     WCHAR path[32768];
@@ -235,6 +565,18 @@ static WCHAR *read_bridge_options(void)
 
     WCHAR *cursor = wide_buffer;
     WCHAR *header = next_config_line(&cursor);
+    if (header != NULL && wcscmp(header, L"MNR4") == 0)
+    {
+        WCHAR *options = read_mnr4_options(cursor, (size_t)wide_length);
+        if (options == NULL)
+        {
+            safe_log("bridge-config-mnr4-invalid", GetCurrentProcessId(), GetLastError());
+        }
+        SecureZeroMemory(wide_buffer, ((size_t)wide_length + 1) * sizeof(WCHAR));
+        HeapFree(GetProcessHeap(), 0, wide_buffer);
+        return options;
+    }
+
     WCHAR *agent_path = next_config_line(&cursor);
     WCHAR *mods_path = next_config_line(&cursor);
     if (header == NULL || wcscmp(header, L"MNR3") != 0 ||
