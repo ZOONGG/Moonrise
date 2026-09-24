@@ -14,11 +14,28 @@ public sealed record PackageRuntimeDescriptor(
     string Path,
     string? AgentOptions = null);
 
+public enum LaunchAgentRole
+{
+    NetworkAdapter,
+    CompatibilityAdapter,
+    WeaveLoader,
+    PackageAgent
+}
+
+public sealed record TechnicalLaunchAgentDescriptor(
+    string RuntimeId,
+    string Path,
+    LaunchAgentRole Role,
+    string? AgentOptions = null);
+
 public sealed record LaunchAgent(
     string Path,
     string? Options,
-    string? PackageId,
-    bool IsWeaveLoader);
+    string RuntimeId,
+    LaunchAgentRole Role)
+{
+    public bool IsWeaveLoader => Role == LaunchAgentRole.WeaveLoader;
+}
 
 public sealed record LaunchJvmProperty(string Name, string Value);
 
