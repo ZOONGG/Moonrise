@@ -83,6 +83,38 @@ public sealed class NativeBridgeConfigurationTests
         }
     }
 
+
+    [Theory]
+    [InlineData("bad\"option")]
+    [InlineData("bad\toption")]
+    [InlineData("bad\noption")]
+    public void LaunchPlanBuilder_RejectsUnsafeAgentOptions(string option)
+    {
+        var plan = new LaunchPlan(
+            WeaveRuntimeMode.Disabled,
+            [],
+            [new LaunchAgent(@"C:\packages\agent.jar", option, "agent-a", LaunchAgentRole.PackageAgent)],
+            [],
+            []);
+
+        Assert.Throws<ArgumentException>(() =>
+            NativeBridgeConfigurationBuilder.BuildLaunchPlan(plan, @"C:\runtime\mods"));
+    }
+
+    [Fact]
+    public void LaunchPlanBuilder_RejectsQuotedJvmPropertyValues()
+    {
+        var plan = new LaunchPlan(
+            WeaveRuntimeMode.Disabled,
+            [],
+            [],
+            [],
+            [new LaunchJvmProperty("example.mode", "bad\"value")]);
+
+        Assert.Throws<ArgumentException>(() =>
+            NativeBridgeConfigurationBuilder.BuildLaunchPlan(plan, @"C:\runtime\mods"));
+    }
+
     [Fact]
     public void LaunchPlanBuilder_RejectsTabInRuntimePath()
     {
