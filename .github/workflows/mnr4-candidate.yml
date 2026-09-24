@@ -50,76 +50,8 @@ jobs:
         run: |
           $path = "src/Moonrise/Services/NativeBridgeLauncher.cs"
           $source = Get-Content $path -Raw
-          $old = @'
-      public NativeBridgeLaunchResult Launch(
-          string lunarExecutable,
-          LaunchPlan launchPlan,
-          string enabledModsDirectory,
-          string nativeBridgePath,
-          string bridgeConfigPath,
-          string? launcherArgument = null,
-          bool hideLauncherWindow = false)
-      {
-          ArgumentNullException.ThrowIfNull(launchPlan);
-          var projection = Mnr3BridgeProjectionBuilder.Build(launchPlan);
-          return Launch(
-              lunarExecutable,
-              projection.PrimaryAgentPath,
-              enabledModsDirectory,
-              nativeBridgePath,
-              bridgeConfigPath,
-              launcherArgument,
-              hideLauncherWindow,
-              projection.AdditionalAgentPaths);
-      }
-'@
-          $new = @'
-      public NativeBridgeLaunchResult Launch(
-          string lunarExecutable,
-          LaunchPlan launchPlan,
-          string enabledModsDirectory,
-          string nativeBridgePath,
-          string bridgeConfigPath,
-          string? launcherArgument = null,
-          bool hideLauncherWindow = false)
-      {
-          ArgumentNullException.ThrowIfNull(launchPlan);
-          ValidatePath(lunarExecutable, nameof(lunarExecutable));
-          ValidatePath(enabledModsDirectory, nameof(enabledModsDirectory));
-          ValidatePath(nativeBridgePath, nameof(nativeBridgePath));
-          ValidatePath(bridgeConfigPath, nameof(bridgeConfigPath));
-          ValidateArgument(launcherArgument, nameof(launcherArgument));
-
-          if (launchPlan.Agents.Count == 0)
-              throw new InvalidOperationException("A bridged launch requires at least one Java agent.");
-
-          foreach (var agent in launchPlan.Agents)
-          {
-              ValidatePath(agent.Path, nameof(launchPlan));
-              if (!File.Exists(agent.Path))
-                  throw new FileNotFoundException("A launch-plan Java agent was not found.", agent.Path);
-          }
-
-          if (!File.Exists(lunarExecutable))
-              throw new FileNotFoundException("Lunar Client executable was not found.", lunarExecutable);
-          if (!Directory.Exists(enabledModsDirectory))
-              throw new DirectoryNotFoundException(enabledModsDirectory);
-          if (!File.Exists(nativeBridgePath))
-              throw new FileNotFoundException("Native process bridge was not found.", nativeBridgePath);
-
-          BridgeConfigurationFile.WriteAtomic(
-              bridgeConfigPath,
-              launchPlan,
-              enabledModsDirectory);
-
-          return LaunchWithInjectedBridge(
-              lunarExecutable,
-              nativeBridgePath,
-              Path.GetFullPath(bridgeConfigPath),
-              launcherArgument,
-              hideLauncherWindow);
-      }
-'@
+          $old = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("ICAgIHB1YmxpYyBOYXRpdmVCcmlkZ2VMYXVuY2hSZXN1bHQgTGF1bmNoKAogICAgICAgIHN0cmluZyBsdW5hckV4ZWN1dGFibGUsCiAgICAgICAgTGF1bmNoUGxhbiBsYXVuY2hQbGFuLAogICAgICAgIHN0cmluZyBlbmFibGVkTW9kc0RpcmVjdG9yeSwKICAgICAgICBzdHJpbmcgbmF0aXZlQnJpZGdlUGF0aCwKICAgICAgICBzdHJpbmcgYnJpZGdlQ29uZmlnUGF0aCwKICAgICAgICBzdHJpbmc/IGxhdW5jaGVyQXJndW1lbnQgPSBudWxsLAogICAgICAgIGJvb2wgaGlkZUxhdW5jaGVyV2luZG93ID0gZmFsc2UpCiAgICB7CiAgICAgICAgQXJndW1lbnROdWxsRXhjZXB0aW9uLlRocm93SWZOdWxsKGxhdW5jaFBsYW4pOwogICAgICAgIHZhciBwcm9qZWN0aW9uID0gTW5yM0JyaWRnZVByb2plY3Rpb25CdWlsZGVyLkJ1aWxkKGxhdW5jaFBsYW4pOwogICAgICAgIHJldHVybiBMYXVuY2goCiAgICAgICAgICAgIGx1bmFyRXhlY3V0YWJsZSwKICAgICAgICAgICAgcHJvamVjdGlvbi5QcmltYXJ5QWdlbnRQYXRoLAogICAgICAgICAgICBlbmFibGVkTW9kc0RpcmVjdG9yeSwKICAgICAgICAgICAgbmF0aXZlQnJpZGdlUGF0aCwKICAgICAgICAgICAgYnJpZGdlQ29uZmlnUGF0aCwKICAgICAgICAgICAgbGF1bmNoZXJBcmd1bWVudCwKICAgICAgICAgICAgaGlkZUxhdW5jaGVyV2luZG93LAogICAgICAgICAgICBwcm9qZWN0aW9uLkFkZGl0aW9uYWxBZ2VudFBhdGhzKTsKICAgIH0K"))
+          $new = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("ICAgIHB1YmxpYyBOYXRpdmVCcmlkZ2VMYXVuY2hSZXN1bHQgTGF1bmNoKAogICAgICAgIHN0cmluZyBsdW5hckV4ZWN1dGFibGUsCiAgICAgICAgTGF1bmNoUGxhbiBsYXVuY2hQbGFuLAogICAgICAgIHN0cmluZyBlbmFibGVkTW9kc0RpcmVjdG9yeSwKICAgICAgICBzdHJpbmcgbmF0aXZlQnJpZGdlUGF0aCwKICAgICAgICBzdHJpbmcgYnJpZGdlQ29uZmlnUGF0aCwKICAgICAgICBzdHJpbmc/IGxhdW5jaGVyQXJndW1lbnQgPSBudWxsLAogICAgICAgIGJvb2wgaGlkZUxhdW5jaGVyV2luZG93ID0gZmFsc2UpCiAgICB7CiAgICAgICAgQXJndW1lbnROdWxsRXhjZXB0aW9uLlRocm93SWZOdWxsKGxhdW5jaFBsYW4pOwogICAgICAgIFZhbGlkYXRlUGF0aChsdW5hckV4ZWN1dGFibGUsIG5hbWVvZihsdW5hckV4ZWN1dGFibGUpKTsKICAgICAgICBWYWxpZGF0ZVBhdGgoZW5hYmxlZE1vZHNEaXJlY3RvcnksIG5hbWVvZihlbmFibGVkTW9kc0RpcmVjdG9yeSkpOwogICAgICAgIFZhbGlkYXRlUGF0aChuYXRpdmVCcmlkZ2VQYXRoLCBuYW1lb2YobmF0aXZlQnJpZGdlUGF0aCkpOwogICAgICAgIFZhbGlkYXRlUGF0aChicmlkZ2VDb25maWdQYXRoLCBuYW1lb2YoYnJpZGdlQ29uZmlnUGF0aCkpOwogICAgICAgIFZhbGlkYXRlQXJndW1lbnQobGF1bmNoZXJBcmd1bWVudCwgbmFtZW9mKGxhdW5jaGVyQXJndW1lbnQpKTsKCiAgICAgICAgaWYgKGxhdW5jaFBsYW4uQWdlbnRzLkNvdW50ID09IDApCiAgICAgICAgICAgIHRocm93IG5ldyBJbnZhbGlkT3BlcmF0aW9uRXhjZXB0aW9uKCJBIGJyaWRnZWQgbGF1bmNoIHJlcXVpcmVzIGF0IGxlYXN0IG9uZSBKYXZhIGFnZW50LiIpOwoKICAgICAgICBmb3JlYWNoICh2YXIgYWdlbnQgaW4gbGF1bmNoUGxhbi5BZ2VudHMpCiAgICAgICAgewogICAgICAgICAgICBWYWxpZGF0ZVBhdGgoYWdlbnQuUGF0aCwgbmFtZW9mKGxhdW5jaFBsYW4pKTsKICAgICAgICAgICAgaWYgKCFGaWxlLkV4aXN0cyhhZ2VudC5QYXRoKSkKICAgICAgICAgICAgICAgIHRocm93IG5ldyBGaWxlTm90Rm91bmRFeGNlcHRpb24oIkEgbGF1bmNoLXBsYW4gSmF2YSBhZ2VudCB3YXMgbm90IGZvdW5kLiIsIGFnZW50LlBhdGgpOwogICAgICAgIH0KCiAgICAgICAgaWYgKCFGaWxlLkV4aXN0cyhsdW5hckV4ZWN1dGFibGUpKQogICAgICAgICAgICB0aHJvdyBuZXcgRmlsZU5vdEZvdW5kRXhjZXB0aW9uKCJMdW5hciBDbGllbnQgZXhlY3V0YWJsZSB3YXMgbm90IGZvdW5kLiIsIGx1bmFyRXhlY3V0YWJsZSk7CiAgICAgICAgaWYgKCFEaXJlY3RvcnkuRXhpc3RzKGVuYWJsZWRNb2RzRGlyZWN0b3J5KSkKICAgICAgICAgICAgdGhyb3cgbmV3IERpcmVjdG9yeU5vdEZvdW5kRXhjZXB0aW9uKGVuYWJsZWRNb2RzRGlyZWN0b3J5KTsKICAgICAgICBpZiAoIUZpbGUuRXhpc3RzKG5hdGl2ZUJyaWRnZVBhdGgpKQogICAgICAgICAgICB0aHJvdyBuZXcgRmlsZU5vdEZvdW5kRXhjZXB0aW9uKCJOYXRpdmUgcHJvY2VzcyBicmlkZ2Ugd2FzIG5vdCBmb3VuZC4iLCBuYXRpdmVCcmlkZ2VQYXRoKTsKCiAgICAgICAgQnJpZGdlQ29uZmlndXJhdGlvbkZpbGUuV3JpdGVBdG9taWMoCiAgICAgICAgICAgIGJyaWRnZUNvbmZpZ1BhdGgsCiAgICAgICAgICAgIGxhdW5jaFBsYW4sCiAgICAgICAgICAgIGVuYWJsZWRNb2RzRGlyZWN0b3J5KTsKCiAgICAgICAgcmV0dXJuIExhdW5jaFdpdGhJbmplY3RlZEJyaWRnZSgKICAgICAgICAgICAgbHVuYXJFeGVjdXRhYmxlLAogICAgICAgICAgICBuYXRpdmVCcmlkZ2VQYXRoLAogICAgICAgICAgICBQYXRoLkdldEZ1bGxQYXRoKGJyaWRnZUNvbmZpZ1BhdGgpLAogICAgICAgICAgICBsYXVuY2hlckFyZ3VtZW50LAogICAgICAgICAgICBoaWRlTGF1bmNoZXJXaW5kb3cpOwogICAgfQo="))
           if (-not $source.Contains($old)) {
             throw "Expected MNR3 LaunchPlan projection block was not found."
           }
