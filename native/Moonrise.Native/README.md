@@ -20,16 +20,17 @@ The bridge:
 - does not change global or user environment variables;
 - rejects a missing, empty, relative, invalid, or missing
   `MOONRISE_BRIDGE_CONFIG` path without falling back to a DLL-adjacent file;
-- reads only the launch-specific `MNR3` configuration containing the Weave
-  agent, enabled-mod directory, and enabled Java-agent paths;
+- reads launch-specific `MNR3` or structured `MNR4` configuration;
+- MNR4 carries the Weave mode, ordered agent paths/options/roles, explicit JVM
+  arguments and JVM properties;
 - writes PID/error-code-only diagnostics to
   `%LOCALAPPDATA%\Moonrise\logs\native-bridge.log`.
 
 MinHook is used under its BSD 2-Clause license.
 
-The bridge uses the private `MNR3` wire protocol between the managed launcher
-and the injected process hook. It contains only local launch paths and has no
-legacy fallback.
+The bridge accepts the private `MNR3` wire protocol for compatibility and the
+structured `MNR4` LaunchPlan protocol. Both formats contain only local launch
+configuration and do not read Lunar authentication state.
 
 ## Reproducible build
 

@@ -3191,6 +3191,7 @@ public partial class MainWindow : Window
                     useLegacyWeave,
                     legacyWeaveAdapterPath,
                     bwhNetworkAgentPath);
+                launchReport.Set("bridgeProtocol", "MNR4");
                 launchReport.Set("launchPlanWeaveMode", launchPlan.WeaveMode.ToString());
                 launchReport.Set(
                     "launchPlanAgents",

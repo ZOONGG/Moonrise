@@ -19,16 +19,47 @@ public sealed class NativeBridgeLauncher
         bool hideLauncherWindow = false)
     {
         ArgumentNullException.ThrowIfNull(launchPlan);
-        var projection = Mnr3BridgeProjectionBuilder.Build(launchPlan);
-        return Launch(
-            lunarExecutable,
-            projection.PrimaryAgentPath,
-            enabledModsDirectory,
-            nativeBridgePath,
+        ValidatePath(lunarExecutable, nameof(lunarExecutable));
+        ValidatePath(enabledModsDirectory, nameof(enabledModsDirectory));
+        ValidatePath(nativeBridgePath, nameof(nativeBridgePath));
+        ValidatePath(bridgeConfigPath, nameof(bridgeConfigPath));
+        ValidateArgument(launcherArgument, nameof(launcherArgument));
+
+        if (launchPlan.Agents.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "A bridge launch plan must contain at least one Java agent.");
+        }
+
+        foreach (var agent in launchPlan.Agents)
+        {
+            ValidatePath(agent.Path, nameof(launchPlan));
+            if (!File.Exists(agent.Path))
+            {
+                throw new FileNotFoundException(
+                    $"Launch agent '{agent.RuntimeId}' was not found.",
+                    agent.Path);
+            }
+        }
+
+        if (!File.Exists(lunarExecutable))
+            throw new FileNotFoundException("Lunar Client executable was not found.", lunarExecutable);
+        if (!Directory.Exists(enabledModsDirectory))
+            throw new DirectoryNotFoundException(enabledModsDirectory);
+        if (!File.Exists(nativeBridgePath))
+            throw new FileNotFoundException("Native process bridge was not found.", nativeBridgePath);
+
+        BridgeConfigurationFile.WriteAtomic(
             bridgeConfigPath,
+            launchPlan,
+            enabledModsDirectory);
+
+        return LaunchWithInjectedBridge(
+            lunarExecutable,
+            nativeBridgePath,
+            Path.GetFullPath(bridgeConfigPath),
             launcherArgument,
-            hideLauncherWindow,
-            projection.AdditionalAgentPaths);
+            hideLauncherWindow);
     }
 
     public const string BridgeConfigEnvironmentVariable = "MOONRISE_BRIDGE_CONFIG";
