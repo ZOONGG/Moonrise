@@ -23,6 +23,52 @@ public sealed class CurrentLaunchPlanFactoryTests
     }
 
     [Fact]
+    public void CurrentLaunchPlanProjectsToByteEquivalentLegacyMnr3Configuration()
+    {
+        var plan = new CurrentLaunchPlanFactory().Create(
+            [Package("mod", PackageKind.WeaveMod, @"C:\packages\mod.jar")],
+            [
+                Package("agent-a", PackageKind.JavaAgent, @"C:\packages\a.jar"),
+                Package("agent-b", PackageKind.JavaAgent, @"C:\packages\b.jar")
+            ],
+            @"C:\runtime\weave-current.jar",
+            useLegacyWeave: false);
+
+        var projection = Mnr3BridgeProjectionBuilder.Build(plan);
+        var fromPlan = NativeBridgeConfigurationBuilder.Build(
+            projection.PrimaryAgentPath,
+            @"C:\runtime\mods",
+            projection.AdditionalAgentPaths);
+        var legacy = NativeBridgeConfigurationBuilder.Build(
+            @"C:\runtime\weave-current.jar",
+            @"C:\runtime\mods",
+            [@"C:\packages\a.jar", @"C:\packages\b.jar"]);
+
+        Assert.Equal(legacy, fromPlan);
+    }
+
+    [Fact]
+    public void CurrentBwhPlanMatchesExistingNetworkAdapterLoaderAgentOrder()
+    {
+        var plan = new CurrentLaunchPlanFactory().Create(
+            [Package("bwh", PackageKind.WeaveMod, @"C:\packages\bwh.jar")],
+            [Package("agent", PackageKind.JavaAgent, @"C:\packages\agent.jar")],
+            @"C:\runtime\weave-current.jar",
+            useLegacyWeave: false,
+            networkAdapterPath: @"C:\runtime\bwh-network.jar");
+
+        Assert.Equal(
+            ["moonrise-bwh-network-adapter", "weave-loader-current", "agent"],
+            plan.Agents.Select(item => item.RuntimeId).ToArray());
+
+        var projection = Mnr3BridgeProjectionBuilder.Build(plan);
+        Assert.Equal(@"C:\runtime\bwh-network.jar", projection.PrimaryAgentPath);
+        Assert.Equal(
+            [@"C:\runtime\weave-current.jar", @"C:\packages\agent.jar"],
+            projection.AdditionalAgentPaths);
+    }
+
+    [Fact]
     public void LegacyBwhPlanMatchesExistingNetworkAdapterLegacyAdapterLoaderAgentOrder()
     {
         var plan = new CurrentLaunchPlanFactory().Create(

@@ -9,6 +9,28 @@ namespace Moonrise.Services;
 
 public sealed class NativeBridgeLauncher
 {
+    public NativeBridgeLaunchResult Launch(
+        string lunarExecutable,
+        LaunchPlan launchPlan,
+        string enabledModsDirectory,
+        string nativeBridgePath,
+        string bridgeConfigPath,
+        string? launcherArgument = null,
+        bool hideLauncherWindow = false)
+    {
+        ArgumentNullException.ThrowIfNull(launchPlan);
+        var projection = Mnr3BridgeProjectionBuilder.Build(launchPlan);
+        return Launch(
+            lunarExecutable,
+            projection.PrimaryAgentPath,
+            enabledModsDirectory,
+            nativeBridgePath,
+            bridgeConfigPath,
+            launcherArgument,
+            hideLauncherWindow,
+            projection.AdditionalAgentPaths);
+    }
+
     public const string BridgeConfigEnvironmentVariable = "MOONRISE_BRIDGE_CONFIG";
     private const uint CreateSuspended = 0x00000004;
     private const uint CreateUnicodeEnvironment = 0x00000400;
