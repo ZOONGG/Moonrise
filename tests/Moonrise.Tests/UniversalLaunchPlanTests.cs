@@ -21,7 +21,8 @@ public sealed class UniversalLaunchPlanTests
         Assert.Equal(
             [@"C:\packages\a.jar", @"C:\packages\b.jar"],
             plan.Agents.Select(item => item.Path).ToArray());
-        Assert.Equal(["alpha=1", "beta=two"], plan.Agents.Select(item => item.Options).ToArray());
+        Assert.Equal("alpha=1", plan.Agents[0].Options);
+        Assert.Equal("beta=two", plan.Agents[1].Options);
         Assert.All(plan.Agents, item => Assert.False(item.IsWeaveLoader));
     }
 
