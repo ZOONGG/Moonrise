@@ -23,6 +23,31 @@ public sealed class CurrentLaunchPlanFactoryTests
     }
 
     [Fact]
+    public void CurrentLaunchPlanProjectsToByteEquivalentLegacyMnr3Configuration()
+    {
+        var plan = new CurrentLaunchPlanFactory().Create(
+            [Package("mod", PackageKind.WeaveMod, @"C:\packages\mod.jar")],
+            [
+                Package("agent-a", PackageKind.JavaAgent, @"C:\packages\a.jar"),
+                Package("agent-b", PackageKind.JavaAgent, @"C:\packages\b.jar")
+            ],
+            @"C:\runtime\weave-current.jar",
+            useLegacyWeave: false);
+
+        var projection = Mnr3BridgeProjectionBuilder.Build(plan);
+        var fromPlan = NativeBridgeConfigurationBuilder.Build(
+            projection.PrimaryAgentPath,
+            @"C:\runtime\mods",
+            projection.AdditionalAgentPaths);
+        var legacy = NativeBridgeConfigurationBuilder.Build(
+            @"C:\runtime\weave-current.jar",
+            @"C:\runtime\mods",
+            [@"C:\packages\a.jar", @"C:\packages\b.jar"]);
+
+        Assert.Equal(legacy, fromPlan);
+    }
+
+    [Fact]
     public void CurrentBwhPlanMatchesExistingNetworkAdapterLoaderAgentOrder()
     {
         var plan = new CurrentLaunchPlanFactory().Create(
