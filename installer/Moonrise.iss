@@ -101,6 +101,11 @@ begin
       Result := True;
       Exit;
     end;
+
+  { Uninstall may relaunch itself from a temporary copy. GetCmdTail preserves the
+    complete uninstall command line, including that hand-off. Keep the exact
+    ParamStr check above and use the raw tail as a fallback for our private flag. }
+  Result := Pos(Uppercase(Parameter), Uppercase(GetCmdTail)) > 0;
 end;
 
 function InitializeUninstall(): Boolean;
@@ -117,6 +122,7 @@ begin
   if UninstallSilent then
   begin
     RemoveUserData := CommandLineHasParameter('/REMOVEUSERDATA');
+    Log(Format('Moonrise silent uninstall: RemoveUserData=%d', [Ord(RemoveUserData)]));
     Exit;
   end;
 
@@ -183,5 +189,10 @@ end;
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if (CurUninstallStep = usPostUninstall) and RemoveUserData then
-    DelTree(ExpandConstant('{#UserDataDir}'), True, True, True);
+  begin
+    if DelTree(ExpandConstant('{#UserDataDir}'), True, True, True) then
+      Log('Moonrise user data removed.')
+    else
+      Log('Moonrise user data could not be removed completely.');
+  end;
 end;

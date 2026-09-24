@@ -27,15 +27,38 @@ if ($TestUserDataDeletion -and $dataExisted) {
 
 New-Item -ItemType Directory -Path $testRoot | Out-Null
 try {
+    function Invoke-ProcessWithTimeout {
+        param(
+            [Parameter(Mandatory)]
+            [string]$FilePath,
+            [string[]]$ArgumentList = @(),
+            [Parameter(Mandatory)]
+            [string]$Stage,
+            [int]$TimeoutSeconds = 60
+        )
+
+        Write-Output "[installer-smoke] $Stage"
+        $process = Start-Process -FilePath $FilePath -ArgumentList $ArgumentList -PassThru
+        if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+            try {
+                Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            }
+            catch {
+            }
+            throw "$Stage timed out after $TimeoutSeconds seconds."
+        }
+        return $process
+    }
+
     function Install-Moonrise {
-        $process = Start-Process -FilePath $setup -ArgumentList @(
+        $process = Invoke-ProcessWithTimeout -FilePath $setup -Stage "Install Moonrise" -TimeoutSeconds 90 -ArgumentList @(
             "/VERYSILENT",
             "/CURRENTUSER",
             "/NORESTART",
             "/SUPPRESSMSGBOXES",
             "/DIR=$installDirectory",
             "/TASKS="
-        ) -Wait -PassThru
+        )
         if ($process.ExitCode -ne 0) {
             throw "Installer exited with code $($process.ExitCode)."
         }
@@ -60,6 +83,7 @@ try {
         if ($PortableLaunchIsolation) {
             New-Item -ItemType File -Path $portableMarker | Out-Null
         }
+        Write-Output "[installer-smoke] Launch installed Moonrise"
         $application = Start-Process -FilePath $executable -WorkingDirectory $installDirectory -PassThru
         Start-Sleep -Seconds 5
         if ($application.HasExited) {
@@ -67,7 +91,10 @@ try {
         }
         $null = $application.CloseMainWindow()
         if (-not $application.WaitForExit(5000)) {
-            Stop-Process -Id $application.Id
+            Stop-Process -Id $application.Id -Force
+            if (-not $application.WaitForExit(10000)) {
+                throw "Moonrise did not exit after the launch smoke test."
+            }
         }
         if ($PortableLaunchIsolation -and (Test-Path -LiteralPath $portableMarker)) {
             Remove-Item -LiteralPath $portableMarker -Force
@@ -93,18 +120,32 @@ try {
         throw "Upgrade removed Moonrise user data."
     }
 
-    $uninstall = Start-Process -FilePath $uninstaller -ArgumentList @(
+    $uninstall = Invoke-ProcessWithTimeout -FilePath $uninstaller -Stage "Normal uninstall" -TimeoutSeconds 90 -ArgumentList @(
         "/VERYSILENT",
         "/NORESTART",
         "/SUPPRESSMSGBOXES"
-    ) -Wait -PassThru
+    )
     if ($uninstall.ExitCode -ne 0) {
         throw "Uninstaller exited with code $($uninstall.ExitCode)."
     }
     if (Test-Path -LiteralPath $installDirectory) {
-        $remaining = @(Get-ChildItem -LiteralPath $installDirectory -Force -ErrorAction SilentlyContinue)
+        # Inno Setup may keep unins000.exe alive briefly while its self-delete helper
+        # finishes. Wait for the directory to become empty instead of treating that
+        # normal hand-off as leaked application data.
+        $cleanupDeadline = [DateTimeOffset]::UtcNow.AddSeconds(10)
+        do {
+            $remaining = @(Get-ChildItem -LiteralPath $installDirectory -Force -Recurse -ErrorAction SilentlyContinue)
+            if ($remaining.Count -eq 0) {
+                break
+            }
+            Start-Sleep -Milliseconds 250
+        } while ([DateTimeOffset]::UtcNow -lt $cleanupDeadline)
+
         if ($remaining.Count -gt 0) {
-            throw "Uninstaller left application files in $installDirectory."
+            $remainingList = ($remaining | ForEach-Object {
+                $_.FullName.Substring($installDirectory.Length).TrimStart('\')
+            }) -join ", "
+            throw "Uninstaller left application files in ${installDirectory}: $remainingList"
         }
     }
     if (-not (Test-Path -LiteralPath $sentinel)) {
@@ -117,17 +158,30 @@ try {
     if ($TestUserDataDeletion) {
         Install-Moonrise
         $uninstaller = Join-Path $installDirectory "unins000.exe"
-        $uninstall = Start-Process -FilePath $uninstaller -ArgumentList @(
+        $uninstall = Invoke-ProcessWithTimeout -FilePath $uninstaller -Stage "Data-removal uninstall" -TimeoutSeconds 90 -ArgumentList @(
             "/VERYSILENT",
             "/NORESTART",
             "/SUPPRESSMSGBOXES",
             "/REMOVEUSERDATA"
-        ) -Wait -PassThru
+        )
         if ($uninstall.ExitCode -ne 0) {
             throw "Data-removal uninstall exited with code $($uninstall.ExitCode)."
         }
         if (Test-Path -LiteralPath $dataRoot) {
-            throw "Optional uninstall data removal did not remove $dataRoot."
+            $dataCleanupDeadline = [DateTimeOffset]::UtcNow.AddSeconds(10)
+            do {
+                Start-Sleep -Milliseconds 250
+                if (-not (Test-Path -LiteralPath $dataRoot)) {
+                    break
+                }
+            } while ([DateTimeOffset]::UtcNow -lt $dataCleanupDeadline)
+        }
+        if (Test-Path -LiteralPath $dataRoot) {
+            $remainingData = @(Get-ChildItem -LiteralPath $dataRoot -Force -Recurse -ErrorAction SilentlyContinue)
+            $remainingDataList = ($remainingData | ForEach-Object {
+                $_.FullName.Substring($dataRoot.Length).TrimStart('\')
+            }) -join ", "
+            throw "Optional uninstall data removal did not remove ${dataRoot}: $remainingDataList"
         }
     }
     else {
