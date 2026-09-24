@@ -29,8 +29,8 @@ public sealed class NativeBridgeConfigurationTests
             WeaveRuntimeMode.Current,
             [@"C:\packages\mod-a.jar"],
             [
-                new LaunchAgent(@"C:\runtime\weave.jar", null, null, true),
-                new LaunchAgent(@"C:\packages\agent.jar", "mode=strict", "agent-a", false)
+                new LaunchAgent(@"C:\runtime\weave.jar", null, "weave-loader-current", LaunchAgentRole.WeaveLoader),
+                new LaunchAgent(@"C:\packages\agent.jar", "mode=strict", "agent-a", LaunchAgentRole.PackageAgent)
             ],
             ["-Xmx4G", "-XX:+UseG1GC"],
             [
@@ -46,8 +46,8 @@ public sealed class NativeBridgeConfigurationTests
             "MNR4\n" +
             "mode\tCurrent\n" +
             "mods\tC:\\runtime\\mods\n" +
-            "agent\tC:\\runtime\\weave.jar\t\t\t1\n" +
-            "agent\tC:\\packages\\agent.jar\tmode=strict\tagent-a\t0\n" +
+            "agent\tC:\\runtime\\weave.jar\t\tweave-loader-current\tWeaveLoader\n" +
+            "agent\tC:\\packages\\agent.jar\tmode=strict\tagent-a\tPackageAgent\n" +
             "arg\t-Xmx4G\n" +
             "arg\t-XX:+UseG1GC\n" +
             "prop\tmoonrise.test\tone\n" +
@@ -65,7 +65,7 @@ public sealed class NativeBridgeConfigurationTests
             var plan = new LaunchPlan(
                 WeaveRuntimeMode.Disabled,
                 [],
-                [new LaunchAgent(@"C:\packages\agent.jar", "mode=strict", "agent-a", false)],
+                [new LaunchAgent(@"C:\packages\agent.jar", "mode=strict", "agent-a", LaunchAgentRole.PackageAgent)],
                 ["-Xmx2G"],
                 [new LaunchJvmProperty("moonrise.test", "1")]);
 
@@ -73,7 +73,7 @@ public sealed class NativeBridgeConfigurationTests
 
             var text = File.ReadAllText(output);
             Assert.StartsWith("MNR4\nmode\tDisabled\n", text, StringComparison.Ordinal);
-            Assert.Contains("agent\tC:\\packages\\agent.jar\tmode=strict\tagent-a\t0\n", text, StringComparison.Ordinal);
+            Assert.Contains("agent\tC:\\packages\\agent.jar\tmode=strict\tagent-a\tPackageAgent\n", text, StringComparison.Ordinal);
             Assert.DoesNotContain(".tmp", string.Join("|", Directory.EnumerateFiles(Path.GetDirectoryName(output)!, "*", SearchOption.TopDirectoryOnly)));
         }
         finally
@@ -89,7 +89,7 @@ public sealed class NativeBridgeConfigurationTests
         var plan = new LaunchPlan(
             WeaveRuntimeMode.Disabled,
             [],
-            [new LaunchAgent("C:\\packages\\bad\tagent.jar", null, "agent-a", false)],
+            [new LaunchAgent("C:\\packages\\bad\tagent.jar", null, "agent-a", LaunchAgentRole.PackageAgent)],
             [],
             []);
 
@@ -103,7 +103,7 @@ public sealed class NativeBridgeConfigurationTests
         var plan = new LaunchPlan(
             WeaveRuntimeMode.Disabled,
             [],
-            [new LaunchAgent(@"C:\packages\agent.jar", "bad\toption", "agent-a", false)],
+            [new LaunchAgent(@"C:\packages\agent.jar", "bad\toption", "agent-a", LaunchAgentRole.PackageAgent)],
             [],
             []);
 
