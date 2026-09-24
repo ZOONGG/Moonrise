@@ -142,14 +142,14 @@ public sealed class LaunchPlanBuilder
     private static void ValidateRuntimeId(string runtimeId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(runtimeId);
-        if (runtimeId.IndexOfAny(['\0', '\r', '\n', '\t']) >= 0)
+        if (runtimeId.IndexOfAny(['\0', '\r', '\n', '\t', '"']) >= 0)
             throw new ArgumentException("Runtime ID contains unsafe characters.", nameof(runtimeId));
     }
 
     private static void ValidatePackageId(string packageId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
-        if (packageId.IndexOfAny(['\0', '\r', '\n', '\t']) >= 0)
+        if (packageId.IndexOfAny(['\0', '\r', '\n', '\t', '"']) >= 0)
             throw new ArgumentException("Package ID contains unsafe characters.", nameof(packageId));
     }
 
@@ -165,7 +165,7 @@ public sealed class LaunchPlanBuilder
     {
         if (string.IsNullOrWhiteSpace(value))
             return null;
-        if (value.IndexOfAny(['\0', '\r', '\n', '\t']) >= 0)
+        if (value.IndexOfAny(['\0', '\r', '\n', '\t', '"']) >= 0)
             throw new ArgumentException("Java-agent options contain unsafe characters.", nameof(value));
         return value;
     }
@@ -192,8 +192,8 @@ public sealed class LaunchPlanBuilder
     {
         ArgumentNullException.ThrowIfNull(property);
         if (string.IsNullOrWhiteSpace(property.Name) ||
-            property.Name.IndexOfAny(['\0', '\r', '\n', '\t', '=']) >= 0 ||
-            property.Value.IndexOfAny(['\0', '\r', '\n', '\t']) >= 0)
+            property.Name.IndexOfAny(['\0', '\r', '\n', '\t', '"', '=']) >= 0 ||
+            property.Value.IndexOfAny(['\0', '\r', '\n', '\t', '"']) >= 0)
         {
             throw new ArgumentException("JVM property contains unsafe characters.", nameof(property));
         }
