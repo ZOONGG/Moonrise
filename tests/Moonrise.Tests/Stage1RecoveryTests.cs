@@ -91,6 +91,7 @@ public sealed class Stage1RecoveryTests
     }
 
     [Fact]
+    [Trait("Category", "PrivateAssets")]
     public void RecoveryAssets_ImportAndLaunchCopiesRemainByteForByteUnchanged()
     {
         Assert.Equal(Stage1RecoveryPackageService.Veyra.Sha256, Hash(Stage1RecoveryPackageService.Veyra.SourcePath));
@@ -117,8 +118,20 @@ public sealed class Stage1RecoveryTests
     [Fact]
     public void RecoverySelection_IncludesOnlyEnabledRecoveryPackages()
     {
-        var veyra = Package(Stage1RecoveryPackageService.Veyra);
-        var cosmetics = Package(Stage1RecoveryPackageService.Cosmetics);
+        var veyraDefinition = new RecoveryPackageDefinition(
+            "veyra",
+            @"C:\fixtures\Veyra.jar",
+            "Veyra.jar",
+            new string('B', 64),
+            PackageKind.WeaveMod);
+        var cosmeticsDefinition = new RecoveryPackageDefinition(
+            "moonrise-cosmetics",
+            @"C:\fixtures\Moonrise-Cosmetics.jar",
+            "Moonrise-Cosmetics.jar",
+            new string('C', 64),
+            PackageKind.JavaAgent);
+        var veyra = Package(veyraDefinition);
+        var cosmetics = Package(cosmeticsDefinition);
         var unrelated = new PackageInfo
         {
             FileName = "BWH.jar",
@@ -130,8 +143,8 @@ public sealed class Stage1RecoveryTests
             IsEnabled = true
         };
         var set = new RecoveryPackageSet(
-            Stage1RecoveryPackageService.Veyra,
-            Stage1RecoveryPackageService.Cosmetics,
+            veyraDefinition,
+            cosmeticsDefinition,
             veyra,
             cosmetics);
 
