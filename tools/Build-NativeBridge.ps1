@@ -59,7 +59,7 @@ $quotedSources = ($sources | ForEach-Object { '"' + $_ + '"' }) -join " "
 $commands = @(
     "@echo off",
     ('call "{0}" >nul' -f $vcvars),
-    ('cl /nologo /LD /O2 /GL /GS /guard:cf /DUNICODE /D_UNICODE /W4 /WX /MT /I"{0}" /I"{1}" /I"{2}" {3} /link /LTCG /DYNAMICBASE /NXCOMPAT /OUT:"{4}" /PDB:"{5}"' -f $includeRoot, $includeSrc, $includeHde, $quotedSources, $out, $pdb),
+    ('cl /nologo /LD /O2 /GL /GS /guard:cf /DUNICODE /D_UNICODE /D_CRT_SECURE_NO_WARNINGS /W4 /WX /wd4201 /wd4244 /wd4310 /MT /I"{0}" /I"{1}" /I"{2}" {3} /link /LTCG /DYNAMICBASE /NXCOMPAT /OUT:"{4}" /PDB:"{5}"' -f $includeRoot, $includeSrc, $includeHde, $quotedSources, $out, $pdb),
     "if errorlevel 1 exit /b %errorlevel%",
     ('dumpbin /headers "{0}" > "{1}"' -f $out, $headersPath)
 )
