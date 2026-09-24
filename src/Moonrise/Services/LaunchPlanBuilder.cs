@@ -14,6 +14,14 @@ public sealed class LaunchPlanBuilder
         ArgumentNullException.ThrowIfNull(packages);
 
         var enabled = packages.ToArray();
+        var unsupported = enabled.FirstOrDefault(item =>
+            item.Kind is not (PackageKind.WeaveMod or PackageKind.JavaAgent));
+        if (unsupported is not null)
+        {
+            throw new InvalidOperationException(
+                $"Package '{unsupported.PackageId}' has unsupported runtime kind '{unsupported.Kind}'.");
+        }
+
         var mods = enabled
             .Where(item => item.Kind == PackageKind.WeaveMod)
             .Select(item => NormalizePath(item.Path))
