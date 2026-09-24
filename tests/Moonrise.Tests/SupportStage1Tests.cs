@@ -81,6 +81,42 @@ public sealed class SupportStage1Tests
         Assert.False(assets[9].PaymentUri);
     }
 
+    [Fact]
+    public async Task ApiClientPreservesAllElevenBackendAssetsInPublishedOrder()
+    {
+        const string body = """
+        {"methods":[
+          {"id":"telegram_stars","enabled":true,"currency":"XTR","presets":[50,100,250,500],"custom":{"enabled":true,"min":1,"max":10000}},
+          {"id":"direct_crypto","enabled":true,"currency":"USD","presets":[1,5,10,25],"custom":{"enabled":true,"min":1,"max":1000000},"assets":[
+            {"asset":"BTC","displayName":"Bitcoin","network":"bitcoin","networkName":"Bitcoin","decimals":8,"type":"native","paymentUri":true},
+            {"asset":"ETH","displayName":"Ethereum","network":"ethereum","networkName":"Ethereum","decimals":18,"type":"native","paymentUri":true},
+            {"asset":"USDT","displayName":"Tether USD","network":"ethereum","networkName":"Ethereum (ERC-20)","decimals":6,"type":"token","paymentUri":true},
+            {"asset":"USDC","displayName":"USD Coin","network":"ethereum","networkName":"Ethereum (ERC-20)","decimals":6,"type":"token","paymentUri":true},
+            {"asset":"SOL","displayName":"Solana","network":"solana","networkName":"Solana","decimals":9,"type":"native","paymentUri":true},
+            {"asset":"DOGE","displayName":"Dogecoin","network":"dogecoin","networkName":"Dogecoin","decimals":8,"type":"native","paymentUri":true},
+            {"asset":"LTC","displayName":"Litecoin","network":"litecoin","networkName":"Litecoin","decimals":8,"type":"native","paymentUri":true},
+            {"asset":"BNB","displayName":"BNB","network":"bsc","networkName":"BNB Smart Chain","decimals":18,"type":"native","paymentUri":true},
+            {"asset":"LINK","displayName":"Chainlink","network":"ethereum","networkName":"Ethereum (ERC-20)","decimals":18,"type":"token","paymentUri":true},
+            {"asset":"TRX","displayName":"TRON","network":"tron","networkName":"Tron","decimals":6,"type":"native","paymentUri":false},
+            {"asset":"DAI","displayName":"Dai","network":"ethereum","networkName":"Ethereum (ERC-20)","decimals":18,"type":"token","paymentUri":true}
+          ]}
+        ]}
+        """;
+        using var http = new HttpClient(new DelegateHandler((_, _) =>
+            Task.FromResult(Json(HttpStatusCode.OK, body))));
+        var client = new SupportApiClient(http, BaseUri);
+
+        var methods = await client.GetMethodsAsync(default);
+        var crypto = Assert.Single(methods.Methods, method => method.Id == "direct_crypto");
+        var assets = Assert.IsAssignableFrom<IReadOnlyList<SupportAsset>>(crypto.Assets);
+        Assert.Equal(
+            ["BTC", "ETH", "USDT", "USDC", "SOL", "DOGE", "LTC", "BNB", "LINK", "TRX", "DAI"],
+            assets.Select(asset => asset.Asset).ToArray());
+        Assert.Equal("dogecoin", assets[5].Network);
+        Assert.Equal("litecoin", assets[6].Network);
+        Assert.False(assets[9].PaymentUri);
+    }
+
     [Theory]
     [InlineData("https://t.me/$valid-invoice", true)]
     [InlineData("https://T.ME/$valid", true)]
