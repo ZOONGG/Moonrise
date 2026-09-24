@@ -791,7 +791,7 @@ public sealed class SupportStage1Tests
                 new SupportMethod("telegram_stars", true, "XTR", [50, 100, 250, 500],
                     new SupportCustomAmount(true, 1, 10000)),
                 new SupportMethod("direct_crypto", cryptoEnabled, "USD", [1, 5, 10, 25],
-                    new SupportCustomAmount(true, 1, 1000000), null,
+                    new SupportCustomAmount(true, 1, 1000000),
                     [new SupportAsset("USDT", "Tether USD", "ethereum", "Ethereum (ERC-20)", 6, "token", true)])
             ]));
 
@@ -805,7 +805,7 @@ public sealed class SupportStage1Tests
             return Task.FromResult(new SupportCheckoutResponse(
                 $"pi-{CheckoutCalls}", methodId, crypto ? "USDT" : "XTR", request.Amount,
                 crypto ? null : CheckoutUrl,
-                DateTimeOffset.UtcNow.AddMinutes(30), StatusToken, null,
+                DateTimeOffset.UtcNow.AddMinutes(30), StatusToken,
                 crypto ? request.Amount : null,
                 crypto ? request.Asset?.Asset : null,
                 crypto ? request.Asset?.Network : null,
