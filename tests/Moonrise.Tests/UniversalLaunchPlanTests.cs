@@ -107,6 +107,75 @@ public sealed class UniversalLaunchPlanTests
         Assert.Equal(["one", "two"], plan.JvmProperties.Select(item => item.Value).ToArray());
     }
 
+    [Fact]
+    public void DuplicatePackageIdFailsClosed()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new LaunchPlanBuilder().Build(
+                [
+                    Agent("same", @"C:\packages\a.jar", null),
+                    Agent("SAME", @"C:\packages\b.jar", null)
+                ],
+                WeaveRuntimeMode.Disabled));
+
+        Assert.Contains("appears more than once", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void DuplicateRuntimePathFailsClosed()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new LaunchPlanBuilder().Build(
+                [
+                    Agent("agent-a", @"C:\packages\agent.jar", null),
+                    Agent("agent-b", @"c:\PACKAGES\agent.jar", null)
+                ],
+                WeaveRuntimeMode.Disabled));
+
+        Assert.Contains("runtime path", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void DuplicateJvmPropertyFailsClosed()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new LaunchPlanBuilder().Build(
+                [],
+                WeaveRuntimeMode.Disabled,
+                jvmProperties:
+                [
+                    new LaunchJvmProperty("moonrise.mode", "one"),
+                    new LaunchJvmProperty("MOONRISE.MODE", "two")
+                ]));
+
+        Assert.Contains("property", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("-javaagent:C:\\packages\\agent.jar")]
+    [InlineData("-Dmoonrise.test=1")]
+    public void StructuredJvmChannelsCannotBeSmuggledThroughRawArguments(string argument)
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new LaunchPlanBuilder().Build(
+                [],
+                WeaveRuntimeMode.Disabled,
+                jvmArguments: [argument]));
+
+        Assert.Contains("structured", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AgentOptionsRejectProtocolSeparators()
+    {
+        var exception = Assert.Throws<ArgumentException>(() =>
+            new LaunchPlanBuilder().Build(
+                [Agent("agent-a", @"C:\packages\agent.jar", "mode\tstrict")],
+                WeaveRuntimeMode.Disabled));
+
+        Assert.Contains("unsafe", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static PackageRuntimeDescriptor Agent(string id, string path, string? options) =>
         new(id, PackageKind.JavaAgent, path, options);
 
