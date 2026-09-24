@@ -56,6 +56,20 @@ public sealed class NativeBridgeConfigurationTests
     }
 
     [Fact]
+    public void LaunchPlanBuilder_RejectsTabInRuntimePath()
+    {
+        var plan = new LaunchPlan(
+            WeaveRuntimeMode.Disabled,
+            [],
+            [new LaunchAgent("C:\\packages\\bad\tagent.jar", null, "agent-a", false)],
+            [],
+            []);
+
+        Assert.Throws<ArgumentException>(() =>
+            NativeBridgeConfigurationBuilder.BuildLaunchPlan(plan, @"C:\runtime\mods"));
+    }
+
+    [Fact]
     public void LaunchPlanBuilder_RejectsTabsAndLineBreaksInFields()
     {
         var plan = new LaunchPlan(
