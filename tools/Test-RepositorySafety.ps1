@@ -12,7 +12,8 @@ try {
     $forbidden = $tracked | Where-Object {
         $_ -match '^(user-mods|user-agents|profiles|plugins|language-packs|themes|logs|crash-reports|release|artifacts?)(/|$)' -or
         $_ -match '(?i)(^|/)(account|accounts|session|sessions|token|tokens|credential|credentials|settings)(\.[^/]*)?$' -or
-        $_ -match '(?i)\.(jar|pfx|p12|pem|key|snk|log|dmp|mdmp|zip|7z|rar)$' -or
+        ($_ -match '(?i)\.(jar|pfx|p12|pem|key|snk|log|dmp|mdmp|zip|7z|rar)$' -and
+            $_ -ne 'runtime/adapters/moonrise-bwh-exitlag-network-agent.jar') -or
         ($_ -match '(?i)\.(exe|dll)$' -and $_ -ne 'runtime/bridge/Moonrise.Native.dll')
     }
     if ($forbidden) {

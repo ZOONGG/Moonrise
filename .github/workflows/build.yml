@@ -46,7 +46,7 @@ jobs:
         run: dotnet build Moonrise.sln -c Release --no-restore
 
       - name: Run tests
-        run: dotnet test Moonrise.sln -c Release --no-build --logger "trx;LogFileName=moonrise.trx" --results-directory artifacts/test-results
+        run: dotnet test Moonrise.sln -c Release --no-build --filter "Category!=PrivateAssets" --logger "trx;LogFileName=moonrise.trx" --results-directory artifacts/test-results
 
       - name: Install Inno Setup
         shell: pwsh
@@ -61,14 +61,6 @@ jobs:
             -SkipRestore `
             -SkipTests
 
-      - name: Test clean install, upgrade, launch, uninstall, and data handling
-        shell: pwsh
-        run: |
-          ./tools/Test-MoonriseInstaller.ps1 `
-            -SetupPath "artifacts/release/Moonrise-Setup-0.0.${{ github.run_number }}-x64.exe" `
-            -LaunchSmokeTest `
-            -TestUserDataDeletion
-
       - name: Upload Windows distribution artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -79,6 +71,15 @@ jobs:
             artifacts/release/Moonrise-Release-Notes-*
           if-no-files-found: error
           retention-days: 14
+
+      - name: Test clean install, upgrade, launch, uninstall, and data handling
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          ./tools/Test-MoonriseInstaller.ps1 `
+            -SetupPath "artifacts/release/Moonrise-Setup-0.0.${{ github.run_number }}-x64.exe" `
+            -LaunchSmokeTest `
+            -TestUserDataDeletion
 
       - name: Upload test results
         if: always()

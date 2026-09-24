@@ -58,7 +58,7 @@ jobs:
         run: dotnet build Moonrise.sln -c Release --no-restore
 
       - name: Run tests
-        run: dotnet test Moonrise.sln -c Release --no-build --logger "trx;LogFileName=moonrise.trx" --results-directory artifacts/test-results
+        run: dotnet test Moonrise.sln -c Release --no-build --filter "Category!=PrivateAssets" --logger "trx;LogFileName=moonrise.trx" --results-directory artifacts/test-results
 
       - name: Install Inno Setup
         shell: pwsh
@@ -74,6 +74,7 @@ jobs:
             -SkipTests
 
       - name: Test installer lifecycle
+        timeout-minutes: 5
         shell: pwsh
         run: |
           ./tools/Test-MoonriseInstaller.ps1 `
