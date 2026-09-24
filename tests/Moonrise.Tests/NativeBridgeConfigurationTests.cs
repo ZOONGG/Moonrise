@@ -56,6 +56,34 @@ public sealed class NativeBridgeConfigurationTests
     }
 
     [Fact]
+    public void LaunchPlanWriter_WritesMnr4Atomically()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"moonrise-bridge-config-{Guid.NewGuid():N}");
+        try
+        {
+            var output = Path.Combine(root, "session", "bridge.cfg");
+            var plan = new LaunchPlan(
+                WeaveRuntimeMode.Disabled,
+                [],
+                [new LaunchAgent(@"C:\packages\agent.jar", "mode=strict", "agent-a", false)],
+                ["-Xmx2G"],
+                [new LaunchJvmProperty("moonrise.test", "1")]);
+
+            BridgeConfigurationFile.WriteAtomic(output, plan, @"C:\runtime\mods");
+
+            var text = File.ReadAllText(output);
+            Assert.StartsWith("MNR4\nmode\tDisabled\n", text, StringComparison.Ordinal);
+            Assert.Contains("agent\tC:\\packages\\agent.jar\tmode=strict\tagent-a\t0\n", text, StringComparison.Ordinal);
+            Assert.DoesNotContain(".tmp", string.Join("|", Directory.EnumerateFiles(Path.GetDirectoryName(output)!, "*", SearchOption.TopDirectoryOnly)));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void LaunchPlanBuilder_RejectsTabInRuntimePath()
     {
         var plan = new LaunchPlan(
