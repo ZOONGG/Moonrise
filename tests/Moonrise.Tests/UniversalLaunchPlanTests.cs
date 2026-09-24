@@ -62,6 +62,34 @@ public sealed class UniversalLaunchPlanTests
     }
 
     [Fact]
+    public void CustomWeave_UsesTheExplicitLoaderPath()
+    {
+        var plan = new LaunchPlanBuilder().Build(
+            [],
+            WeaveRuntimeMode.Custom,
+            @"C:\custom\my-weave-loader.jar");
+
+        var loader = Assert.Single(plan.Agents);
+        Assert.True(loader.IsWeaveLoader);
+        Assert.Equal(@"C:\custom\my-weave-loader.jar", loader.Path);
+        Assert.Equal(WeaveRuntimeMode.Custom, plan.WeaveMode);
+    }
+
+    [Fact]
+    public void UnsupportedRuntimeKindFailsClosed()
+    {
+        var package = new PackageRuntimeDescriptor(
+            "unknown",
+            PackageKind.Unclassified,
+            @"C:\packages\unknown.jar");
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new LaunchPlanBuilder().Build([package], WeaveRuntimeMode.Disabled));
+
+        Assert.Contains("unsupported runtime kind", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void JvmArgumentsAndPropertiesRemainOrderedAndExplicit()
     {
         var plan = new LaunchPlanBuilder().Build(
