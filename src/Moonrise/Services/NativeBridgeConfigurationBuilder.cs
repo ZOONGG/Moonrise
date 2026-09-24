@@ -108,11 +108,33 @@ public static class BridgeConfigurationFile
 {
     public static void WriteAtomic(
         string bridgeConfigPath,
+        LaunchPlan plan,
+        string compatibilityDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(bridgeConfigPath);
+        ArgumentNullException.ThrowIfNull(plan);
+        WriteAtomicContent(
+            bridgeConfigPath,
+            NativeBridgeConfigurationBuilder.BuildLaunchPlan(plan, compatibilityDirectory));
+    }
+
+    public static void WriteAtomic(
+        string bridgeConfigPath,
         string primaryAgentPath,
         string enabledModsDirectory,
         IReadOnlyList<string>? additionalAgentPaths = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(bridgeConfigPath);
+        WriteAtomicContent(
+            bridgeConfigPath,
+            NativeBridgeConfigurationBuilder.Build(
+                primaryAgentPath,
+                enabledModsDirectory,
+                additionalAgentPaths));
+    }
+
+    private static void WriteAtomicContent(string bridgeConfigPath, string content)
+    {
         var fullPath = Path.GetFullPath(bridgeConfigPath);
         var configDirectory = Path.GetDirectoryName(fullPath)
             ?? throw new InvalidOperationException("Unable to determine bridge configuration directory.");
@@ -133,10 +155,7 @@ public static class BridgeConfigurationFile
                        stream,
                        new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
             {
-                writer.Write(NativeBridgeConfigurationBuilder.Build(
-                    primaryAgentPath,
-                    enabledModsDirectory,
-                    additionalAgentPaths));
+                writer.Write(content);
                 writer.Flush();
                 stream.Flush(flushToDisk: true);
             }
