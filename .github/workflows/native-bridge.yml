@@ -1,0 +1,62 @@
+name: Native bridge candidate
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "native/Moonrise.Native/**"
+      - "tools/Build-NativeBridge.ps1"
+      - ".github/workflows/native-bridge.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "native/Moonrise.Native/**"
+      - "tools/Build-NativeBridge.ps1"
+      - ".github/workflows/native-bridge.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-native:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build x64 native bridge
+        shell: pwsh
+        run: |
+          ./tools/Build-NativeBridge.ps1 -OutputPath "artifacts/native/Moonrise.Native.dll"
+
+      - name: Verify MNR4 source contract
+        shell: pwsh
+        run: |
+          $source = Get-Content "native/Moonrise.Native/bridge.c" -Raw
+          foreach ($needle in @("MNR4", "read_mnr4_options", "append_mnr4_agent", "append_mnr4_argument", "append_mnr4_property")) {
+            if (-not $source.Contains($needle)) {
+              throw "Native bridge source is missing required MNR4 contract marker: $needle"
+            }
+          }
+
+      - name: Record candidate hash
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash -Algorithm SHA256 "artifacts/native/Moonrise.Native.dll").Hash
+          $size = (Get-Item "artifacts/native/Moonrise.Native.dll").Length
+          "SHA256=$hash" | Set-Content "artifacts/native/Moonrise.Native.sha256.txt"
+          "SIZE=$size" | Add-Content "artifacts/native/Moonrise.Native.sha256.txt"
+          Get-Content "artifacts/native/Moonrise.Native.sha256.txt"
+
+      - name: Upload native bridge candidate
+        uses: actions/upload-artifact@v7
+        with:
+          name: Moonrise-NativeBridge-${{ github.run_number }}
+          path: |
+            artifacts/native/Moonrise.Native.dll
+            artifacts/native/Moonrise.Native.sha256.txt
+          if-no-files-found: error
+          retention-days: 14
