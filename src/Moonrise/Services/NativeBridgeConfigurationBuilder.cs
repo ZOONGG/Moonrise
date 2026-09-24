@@ -95,7 +95,7 @@ public static class NativeBridgeConfigurationBuilder
     private static string NormalizePath(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        if (path.IndexOfAny(['\0', '\r', '\n', '"']) >= 0)
+        if (path.IndexOfAny(['\0', '\r', '\n', '\t', '"']) >= 0)
         {
             throw new ArgumentException("The path contains unsafe characters.", nameof(path));
         }
