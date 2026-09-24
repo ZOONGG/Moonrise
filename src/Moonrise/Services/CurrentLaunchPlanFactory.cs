@@ -9,14 +9,28 @@ public sealed class CurrentLaunchPlanFactory
     public LaunchPlan Create(
         IReadOnlyList<PackageInfo> weaveMods,
         IReadOnlyList<PackageInfo> javaAgents,
-        string weaveLoaderPath,
+        string? weaveLoaderPath,
         bool useLegacyWeave,
         string? legacyWeaveAdapterPath = null,
         string? networkAdapterPath = null)
     {
         ArgumentNullException.ThrowIfNull(weaveMods);
         ArgumentNullException.ThrowIfNull(javaAgents);
-        ArgumentException.ThrowIfNullOrWhiteSpace(weaveLoaderPath);
+
+        if (weaveMods.Count > 0 && string.IsNullOrWhiteSpace(weaveLoaderPath))
+        {
+            throw new InvalidOperationException(
+                "Weave mods require an explicit Weave loader path.");
+        }
+
+        if (weaveMods.Count == 0 &&
+            (useLegacyWeave ||
+             !string.IsNullOrWhiteSpace(legacyWeaveAdapterPath) ||
+             !string.IsNullOrWhiteSpace(networkAdapterPath)))
+        {
+            throw new InvalidOperationException(
+                "Technical Weave adapters cannot be loaded when no Weave mods are enabled.");
+        }
 
         if (!useLegacyWeave && !string.IsNullOrWhiteSpace(legacyWeaveAdapterPath))
         {
@@ -64,7 +78,7 @@ public sealed class CurrentLaunchPlanFactory
         return _builder.Build(
             packages,
             weaveMode,
-            weaveMode == WeaveRuntimeMode.Disabled ? null : weaveLoaderPath,
+            weaveMode == WeaveRuntimeMode.Disabled ? null : weaveLoaderPath!,
             technicalAgents: technicalAgents);
     }
 }
