@@ -79,6 +79,15 @@ public sealed class LaunchPlanBuilder
                 IsWeaveLoader: false));
         }
 
+        var duplicateAgentPath = agents
+            .GroupBy(item => item.Path, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicateAgentPath is not null)
+        {
+            throw new InvalidOperationException(
+                $"Java-agent path '{duplicateAgentPath.Key}' appears more than once in the launch plan.");
+        }
+
         var arguments = (jvmArguments ?? [])
             .Select(NormalizeArgument)
             .ToArray();
