@@ -11,7 +11,6 @@ public sealed record SupportMethod(
     [property: JsonPropertyName("currency")] string Currency,
     [property: JsonPropertyName("presets")] IReadOnlyList<int> Presets,
     [property: JsonPropertyName("custom")] SupportCustomAmount Custom,
-    [property: JsonPropertyName("acceptedAssets")] IReadOnlyList<string>? AcceptedAssets = null,
     [property: JsonPropertyName("assets")] IReadOnlyList<SupportAsset>? Assets = null);
 
 public sealed record SupportAsset(
@@ -43,7 +42,6 @@ public sealed record SupportCheckoutResponse(
     [property: JsonPropertyName("checkoutUrl")] string? CheckoutUrl,
     [property: JsonPropertyName("expiresAt")] DateTimeOffset ExpiresAt,
     [property: JsonPropertyName("statusToken")] string StatusToken,
-    [property: JsonPropertyName("acceptedAssets")] IReadOnlyList<string>? AcceptedAssets = null,
     [property: JsonPropertyName("usdAmount"), JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)] decimal? UsdAmount = null,
     [property: JsonPropertyName("asset")] string? Asset = null,
     [property: JsonPropertyName("network")] string? Network = null,

@@ -4253,7 +4253,6 @@ public partial class MainWindow : Window
                     "USD",
                     [1, 5, 10, 25],
                     new SupportCustomAmount(true, 1, 1000000),
-                    null,
                     [new SupportAsset("USDT", "Tether USD", "ethereum", "Ethereum (ERC-20)", 6, "token", true)])
             ]));
 
@@ -4269,7 +4268,6 @@ public partial class MainWindow : Window
                 crypto ? null : "https://t.me/$moonrise-visual-qa",
                 DateTimeOffset.UtcNow.AddMinutes(30),
                 "visual-qa-memory-only-token",
-                null,
                 crypto ? request.Amount : null,
                 crypto ? "USDT" : null,
                 crypto ? "ethereum" : null,
