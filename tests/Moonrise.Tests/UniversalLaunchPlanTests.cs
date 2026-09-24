@@ -45,8 +45,11 @@ public sealed class UniversalLaunchPlanTests
         Assert.Equal(3, plan.Agents.Count);
         Assert.True(plan.Agents[0].IsWeaveLoader);
         Assert.Equal(@"C:\runtime\Weave-Loader-Agent.jar", plan.Agents[0].Path);
-        Assert.Equal("agent-a", plan.Agents[1].PackageId);
-        Assert.Equal("agent-b", plan.Agents[2].PackageId);
+        Assert.Equal("agent-a", plan.Agents[1].RuntimeId);
+        Assert.Equal("agent-b", plan.Agents[2].RuntimeId);
+        Assert.Equal(LaunchAgentRole.WeaveLoader, plan.Agents[0].Role);
+        Assert.Equal(LaunchAgentRole.PackageAgent, plan.Agents[1].Role);
+        Assert.Equal(LaunchAgentRole.PackageAgent, plan.Agents[2].Role);
         Assert.Equal("mode=strict", plan.Agents[2].Options);
     }
 
@@ -186,6 +189,80 @@ public sealed class UniversalLaunchPlanTests
                 WeaveRuntimeMode.Disabled));
 
         Assert.Contains("unsafe", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TechnicalAgentsRunBeforeWeaveAndPackageAgentsInCallerOrder()
+    {
+        var plan = new LaunchPlanBuilder().Build(
+            [Agent("package-agent", @"C:\packages\package-agent.jar", null)],
+            WeaveRuntimeMode.Legacy,
+            @"C:\runtime\weave-legacy.jar",
+            technicalAgents:
+            [
+                new TechnicalLaunchAgentDescriptor(
+                    "network",
+                    @"C:\runtime\network.jar",
+                    LaunchAgentRole.NetworkAdapter),
+                new TechnicalLaunchAgentDescriptor(
+                    "legacy-adapter",
+                    @"C:\runtime\legacy-adapter.jar",
+                    LaunchAgentRole.CompatibilityAdapter)
+            ]);
+
+        Assert.Equal(
+            ["network", "legacy-adapter", "weave-loader-legacy", "package-agent"],
+            plan.Agents.Select(item => item.RuntimeId).ToArray());
+        Assert.Equal(
+            [
+                LaunchAgentRole.NetworkAdapter,
+                LaunchAgentRole.CompatibilityAdapter,
+                LaunchAgentRole.WeaveLoader,
+                LaunchAgentRole.PackageAgent
+            ],
+            plan.Agents.Select(item => item.Role).ToArray());
+    }
+
+    [Theory]
+    [InlineData(LaunchAgentRole.WeaveLoader)]
+    [InlineData(LaunchAgentRole.PackageAgent)]
+    public void TechnicalAgentCannotClaimReservedRole(LaunchAgentRole role)
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new LaunchPlanBuilder().Build(
+                [],
+                WeaveRuntimeMode.Disabled,
+                technicalAgents:
+                [
+                    new TechnicalLaunchAgentDescriptor(
+                        "bad",
+                        @"C:\runtime\bad.jar",
+                        role)
+                ]));
+
+        Assert.Contains("unsupported role", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void DuplicateTechnicalRuntimeIdFailsClosed()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new LaunchPlanBuilder().Build(
+                [],
+                WeaveRuntimeMode.Disabled,
+                technicalAgents:
+                [
+                    new TechnicalLaunchAgentDescriptor(
+                        "same",
+                        @"C:\runtime\a.jar",
+                        LaunchAgentRole.NetworkAdapter),
+                    new TechnicalLaunchAgentDescriptor(
+                        "SAME",
+                        @"C:\runtime\b.jar",
+                        LaunchAgentRole.CompatibilityAdapter)
+                ]));
+
+        Assert.Contains("runtime ID", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     private static PackageRuntimeDescriptor Agent(string id, string path, string? options) =>
