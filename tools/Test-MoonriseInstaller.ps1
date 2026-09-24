@@ -168,7 +168,20 @@ try {
             throw "Data-removal uninstall exited with code $($uninstall.ExitCode)."
         }
         if (Test-Path -LiteralPath $dataRoot) {
-            throw "Optional uninstall data removal did not remove $dataRoot."
+            $dataCleanupDeadline = [DateTimeOffset]::UtcNow.AddSeconds(10)
+            do {
+                Start-Sleep -Milliseconds 250
+                if (-not (Test-Path -LiteralPath $dataRoot)) {
+                    break
+                }
+            } while ([DateTimeOffset]::UtcNow -lt $dataCleanupDeadline)
+        }
+        if (Test-Path -LiteralPath $dataRoot) {
+            $remainingData = @(Get-ChildItem -LiteralPath $dataRoot -Force -Recurse -ErrorAction SilentlyContinue)
+            $remainingDataList = ($remainingData | ForEach-Object {
+                $_.FullName.Substring($dataRoot.Length).TrimStart('\')
+            }) -join ", "
+            throw "Optional uninstall data removal did not remove ${dataRoot}: $remainingDataList"
         }
     }
     else {
