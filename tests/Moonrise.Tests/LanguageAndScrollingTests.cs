@@ -118,15 +118,10 @@ public sealed class LanguageAndScrollingTests
 
     private static void Pump(int milliseconds)
     {
-        var dispatcher = Dispatcher.CurrentDispatcher;
         var frame = new DispatcherFrame();
-        using var timer = new System.Threading.Timer(
-            _ => dispatcher.BeginInvoke(
-                DispatcherPriority.Send,
-                new Action(() => frame.Continue = false)),
-            null,
-            milliseconds,
-            Timeout.Infinite);
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(milliseconds) };
+        timer.Tick += (_, _) => { timer.Stop(); frame.Continue = false; };
+        timer.Start();
         Dispatcher.PushFrame(frame);
     }
 
@@ -136,7 +131,7 @@ public sealed class LanguageAndScrollingTests
         var thread = new Thread(() => { try { action(); } catch (Exception exception) { error = exception; } });
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
-        Assert.True(thread.Join(TimeSpan.FromSeconds(20)), "WPF scroll test timed out.");
+        Assert.True(thread.Join(TimeSpan.FromSeconds(10)), "WPF scroll test timed out.");
         if (error is not null) ExceptionDispatchInfo.Capture(error).Throw();
     }
 
