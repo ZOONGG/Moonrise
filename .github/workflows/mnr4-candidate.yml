@@ -1,0 +1,180 @@
+name: MNR4 runtime candidate
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/mnr4-candidate.yml"
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+  NUGET_PACKAGES: ${{ github.workspace }}\.nuget\packages
+
+jobs:
+  candidate:
+    runs-on: windows-latest
+    timeout-minutes: 35
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+          cache: true
+          cache-dependency-path: "**/packages.lock.json"
+
+      - name: Build MNR4 native bridge into ephemeral workspace
+        shell: pwsh
+        run: |
+          ./tools/Build-NativeBridge.ps1 -OutputPath "runtime/bridge/Moonrise.Native.dll"
+          $hash = (Get-FileHash -Algorithm SHA256 "runtime/bridge/Moonrise.Native.dll").Hash
+          Write-Output "MNR4 bridge SHA-256: $hash"
+
+          $deploymentPath = "src/Moonrise/Services/NativeBridgeDeploymentService.cs"
+          $deployment = Get-Content $deploymentPath -Raw
+          $deployment = [regex]::Replace(
+            $deployment,
+            'ExpectedSha256 = "[0-9A-F]+";',
+            ('ExpectedSha256 = "' + $hash + '";'))
+          Set-Content $deploymentPath $deployment -Encoding utf8
+
+      - name: Switch LaunchPlan path to MNR4 only inside this job
+        shell: pwsh
+        run: |
+          $path = "src/Moonrise/Services/NativeBridgeLauncher.cs"
+          $source = Get-Content $path -Raw
+          $old = @'
+      public NativeBridgeLaunchResult Launch(
+          string lunarExecutable,
+          LaunchPlan launchPlan,
+          string enabledModsDirectory,
+          string nativeBridgePath,
+          string bridgeConfigPath,
+          string? launcherArgument = null,
+          bool hideLauncherWindow = false)
+      {
+          ArgumentNullException.ThrowIfNull(launchPlan);
+          var projection = Mnr3BridgeProjectionBuilder.Build(launchPlan);
+          return Launch(
+              lunarExecutable,
+              projection.PrimaryAgentPath,
+              enabledModsDirectory,
+              nativeBridgePath,
+              bridgeConfigPath,
+              launcherArgument,
+              hideLauncherWindow,
+              projection.AdditionalAgentPaths);
+      }
+'@
+          $new = @'
+      public NativeBridgeLaunchResult Launch(
+          string lunarExecutable,
+          LaunchPlan launchPlan,
+          string enabledModsDirectory,
+          string nativeBridgePath,
+          string bridgeConfigPath,
+          string? launcherArgument = null,
+          bool hideLauncherWindow = false)
+      {
+          ArgumentNullException.ThrowIfNull(launchPlan);
+          ValidatePath(lunarExecutable, nameof(lunarExecutable));
+          ValidatePath(enabledModsDirectory, nameof(enabledModsDirectory));
+          ValidatePath(nativeBridgePath, nameof(nativeBridgePath));
+          ValidatePath(bridgeConfigPath, nameof(bridgeConfigPath));
+          ValidateArgument(launcherArgument, nameof(launcherArgument));
+
+          if (launchPlan.Agents.Count == 0)
+              throw new InvalidOperationException("A bridged launch requires at least one Java agent.");
+
+          foreach (var agent in launchPlan.Agents)
+          {
+              ValidatePath(agent.Path, nameof(launchPlan));
+              if (!File.Exists(agent.Path))
+                  throw new FileNotFoundException("A launch-plan Java agent was not found.", agent.Path);
+          }
+
+          if (!File.Exists(lunarExecutable))
+              throw new FileNotFoundException("Lunar Client executable was not found.", lunarExecutable);
+          if (!Directory.Exists(enabledModsDirectory))
+              throw new DirectoryNotFoundException(enabledModsDirectory);
+          if (!File.Exists(nativeBridgePath))
+              throw new FileNotFoundException("Native process bridge was not found.", nativeBridgePath);
+
+          BridgeConfigurationFile.WriteAtomic(
+              bridgeConfigPath,
+              launchPlan,
+              enabledModsDirectory);
+
+          return LaunchWithInjectedBridge(
+              lunarExecutable,
+              nativeBridgePath,
+              Path.GetFullPath(bridgeConfigPath),
+              launcherArgument,
+              hideLauncherWindow);
+      }
+'@
+          if (-not $source.Contains($old)) {
+            throw "Expected MNR3 LaunchPlan projection block was not found."
+          }
+          $source = $source.Replace($old, $new)
+          Set-Content $path $source -Encoding utf8
+
+      - name: Verify ephemeral candidate diff
+        shell: pwsh
+        run: |
+          git diff -- src/Moonrise/Services/NativeBridgeLauncher.cs src/Moonrise/Services/NativeBridgeDeploymentService.cs runtime/bridge/Moonrise.Native.dll
+          if (-not (git diff -- src/Moonrise/Services/NativeBridgeLauncher.cs | Select-String "BridgeConfigurationFile.WriteAtomic")) {
+            throw "MNR4 runtime switch is missing from ephemeral candidate."
+          }
+
+      - name: Restore
+        run: dotnet restore Moonrise.sln --locked-mode
+
+      - name: Build
+        run: dotnet build Moonrise.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test Moonrise.sln -c Release --no-build --filter "Category!=PrivateAssets"
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build MNR4 Setup and Portable candidate
+        shell: pwsh
+        run: |
+          ./tools/New-MoonriseRelease.ps1 `
+            -Version "0.0.${{ github.run_number }}" `
+            -OutputRoot "artifacts/mnr4-candidate" `
+            -SkipRestore `
+            -SkipTests
+
+      - name: Record candidate metadata
+        shell: pwsh
+        run: |
+          $bridgeHash = (Get-FileHash -Algorithm SHA256 "runtime/bridge/Moonrise.Native.dll").Hash
+          @(
+            "source_commit=${{ github.sha }}"
+            "protocol=MNR4"
+            "bridge_sha256=$bridgeHash"
+            "runtime_change_committed=false"
+            "purpose=real Lunar smoke test only"
+          ) | Set-Content "artifacts/mnr4-candidate/MNR4-CANDIDATE.txt" -Encoding ascii
+
+      - name: Upload MNR4 candidate
+        uses: actions/upload-artifact@v7
+        with:
+          name: Moonrise-MNR4-Candidate-${{ github.run_number }}
+          path: |
+            artifacts/mnr4-candidate/Moonrise-Setup-*
+            artifacts/mnr4-candidate/Moonrise-Portable-*
+            artifacts/mnr4-candidate/MNR4-CANDIDATE.txt
+          if-no-files-found: error
+          retention-days: 14
