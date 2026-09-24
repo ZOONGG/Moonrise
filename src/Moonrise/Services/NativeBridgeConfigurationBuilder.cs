@@ -84,7 +84,7 @@ public static class NativeBridgeConfigurationBuilder
     {
         if (value is null)
             return null;
-        if (value.IndexOfAny(['\0', '\r', '\n', '\t']) >= 0)
+        if (value.IndexOfAny(['\0', '\r', '\n', '\t', '"']) >= 0)
             throw new ArgumentException("Bridge configuration field contains unsafe characters.", nameof(value));
         return value;
     }
