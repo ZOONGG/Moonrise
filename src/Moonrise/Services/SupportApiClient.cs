@@ -35,7 +35,6 @@ public sealed class SupportApiClient(HttpClient httpClient, Uri baseUri) : ISupp
         var route = methodId.ToLowerInvariant() switch
         {
             "telegram_stars" => $"{ProjectSupportPath}/telegram-stars/checkout",
-            "crypto_pay" => $"{ProjectSupportPath}/crypto-pay/checkout",
             "direct_crypto" => $"{ProjectSupportPath}/direct-crypto/checkout",
             _ => throw new ArgumentOutOfRangeException(nameof(methodId))
         };
