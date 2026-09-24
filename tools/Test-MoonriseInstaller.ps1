@@ -91,7 +91,10 @@ try {
         }
         $null = $application.CloseMainWindow()
         if (-not $application.WaitForExit(5000)) {
-            Stop-Process -Id $application.Id
+            Stop-Process -Id $application.Id -Force
+            if (-not $application.WaitForExit(10000)) {
+                throw "Moonrise did not exit after the launch smoke test."
+            }
         }
         if ($PortableLaunchIsolation -and (Test-Path -LiteralPath $portableMarker)) {
             Remove-Item -LiteralPath $portableMarker -Force
@@ -126,9 +129,12 @@ try {
         throw "Uninstaller exited with code $($uninstall.ExitCode)."
     }
     if (Test-Path -LiteralPath $installDirectory) {
-        $remaining = @(Get-ChildItem -LiteralPath $installDirectory -Force -ErrorAction SilentlyContinue)
+        $remaining = @(Get-ChildItem -LiteralPath $installDirectory -Force -Recurse -ErrorAction SilentlyContinue)
         if ($remaining.Count -gt 0) {
-            throw "Uninstaller left application files in $installDirectory."
+            $remainingList = ($remaining | ForEach-Object {
+                $_.FullName.Substring($installDirectory.Length).TrimStart('\')
+            }) -join ", "
+            throw "Uninstaller left application files in $installDirectory: $remainingList"
         }
     }
     if (-not (Test-Path -LiteralPath $sentinel)) {
