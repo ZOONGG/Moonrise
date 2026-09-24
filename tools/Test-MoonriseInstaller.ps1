@@ -134,7 +134,7 @@ try {
             $remainingList = ($remaining | ForEach-Object {
                 $_.FullName.Substring($installDirectory.Length).TrimStart('\')
             }) -join ", "
-            throw "Uninstaller left application files in $installDirectory: $remainingList"
+            throw "Uninstaller left application files in ${installDirectory}: $remainingList"
         }
     }
     if (-not (Test-Path -LiteralPath $sentinel)) {
