@@ -72,12 +72,13 @@ public sealed class SupportStage1Tests
 
         var methods = await client.GetMethodsAsync(default);
         var crypto = Assert.Single(methods.Methods, method => method.Id == "direct_crypto");
+        var assets = Assert.IsAssignableFrom<IReadOnlyList<SupportAsset>>(crypto.Assets);
         Assert.Equal(
             ["BTC", "ETH", "USDT", "USDC", "SOL", "DOGE", "LTC", "BNB", "LINK", "TRX", "DAI"],
-            crypto.Assets!.Select(asset => asset.Asset).ToArray());
-        Assert.Equal("dogecoin", crypto.Assets[5].Network);
-        Assert.Equal("litecoin", crypto.Assets[6].Network);
-        Assert.False(crypto.Assets[9].PaymentUri);
+            assets.Select(asset => asset.Asset).ToArray());
+        Assert.Equal("dogecoin", assets[5].Network);
+        Assert.Equal("litecoin", assets[6].Network);
+        Assert.False(assets[9].PaymentUri);
     }
 
     [Theory]
