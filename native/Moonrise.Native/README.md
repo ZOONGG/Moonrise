@@ -20,16 +20,18 @@ The bridge:
 - does not change global or user environment variables;
 - rejects a missing, empty, relative, invalid, or missing
   `MOONRISE_BRIDGE_CONFIG` path without falling back to a DLL-adjacent file;
-- reads only the launch-specific `MNR3` configuration containing the Weave
-  agent, enabled-mod directory, and enabled Java-agent paths;
+- reads launch-specific `MNR3` or structured `MNR4` configuration;
+- MNR4 carries the Weave mode, ordered agent paths/options/roles, explicit JVM
+  arguments and JVM properties;
 - writes PID/error-code-only diagnostics to
   `%LOCALAPPDATA%\Moonrise\logs\native-bridge.log`.
 
 MinHook is used under its BSD 2-Clause license.
 
-The bridge uses the private `MNR3` wire protocol between the managed launcher
-and the injected process hook. It contains only local launch paths and has no
-legacy fallback.
+The bridge accepts the private `MNR3` wire protocol for compatibility and the
+structured `MNR4` LaunchPlan protocol used by the runtime test candidate.
+Both formats contain only local launch configuration; neither reads Lunar
+authentication state.
 
 ## Reproducible build
 
@@ -45,4 +47,8 @@ Run from PowerShell on a machine with Visual Studio 2022 or Build Tools and the 
 
 The script locates `vcvars64.bat`, checks out the exact MinHook commit, compiles the bridge and MinHook sources, verifies the output is an x64 PE image, and prints its SHA-256. CI compiles this verification artifact on every main/PR build.
 
-The verification build does **not** automatically replace `runtime/bridge/Moonrise.Native.dll`. Runtime binary replacement remains an explicit reviewed step because `NativeBridgeDeploymentService.ExpectedSha256` pins the production artifact.
+CI verification builds do **not** automatically replace `runtime/bridge/Moonrise.Native.dll`.
+Runtime binary replacement remains an explicit reviewed step because
+`NativeBridgeDeploymentService.ExpectedSha256` pins the shipped artifact. The
+MNR4 test-candidate branch intentionally contains a reviewed source-built DLL
+and matching pin; it must pass a real Lunar smoke test before merge.
