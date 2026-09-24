@@ -44,6 +44,7 @@ public sealed class NativeBridgeConfigurationTests
 
         Assert.Equal(
             "MNR4\n" +
+            "mode\tCurrent\n" +
             "mods\tC:\\runtime\\mods\n" +
             "agent\tC:\\runtime\\weave.jar\t\t\t1\n" +
             "agent\tC:\\packages\\agent.jar\tmode=strict\tagent-a\t0\n" +
