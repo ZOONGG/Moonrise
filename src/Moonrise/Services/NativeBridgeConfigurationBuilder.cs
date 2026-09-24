@@ -51,7 +51,7 @@ public static class NativeBridgeConfigurationBuilder
                 path,
                 options ?? string.Empty,
                 packageId ?? string.Empty,
-                agent.IsWeaveLoader ? "1" : "0");
+                agent.Role.ToString());
         }
 
         foreach (var argument in plan.JvmArguments)
