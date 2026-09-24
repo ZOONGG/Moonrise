@@ -1,0 +1,48 @@
+name: Sync MNR4 native candidate
+
+on:
+  push:
+    branches:
+      - feat/native-mnr4-launchplan
+    paths:
+      - ".github/workflows/sync-mnr4-native-candidate.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/native-mnr4-launchplan
+
+      - name: Build candidate native bridge
+        shell: pwsh
+        run: ./tools/Build-NativeBridge.ps1 -OutputPath "runtime/bridge/Moonrise.Native.dll"
+
+      - name: Pin candidate bridge hash
+        shell: pwsh
+        run: |
+          $bridge = "runtime/bridge/Moonrise.Native.dll"
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $bridge).Hash
+          $path = "src/Moonrise/Services/NativeBridgeDeploymentService.cs"
+          $text = Get-Content -LiteralPath $path -Raw
+          $updated = [regex]::Replace(
+            $text,
+            'public const string ExpectedSha256 = "[0-9A-F]{64}";',
+            ('public const string ExpectedSha256 = "' + $hash + '";'))
+          if ($updated -eq $text) { throw "ExpectedSha256 pin was not updated." }
+          Set-Content -LiteralPath $path -Value $updated -Encoding utf8NoBOM
+          Write-Output "Pinned candidate bridge: $hash"
+
+      - name: Commit candidate binary and hash
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add runtime/bridge/Moonrise.Native.dll src/Moonrise/Services/NativeBridgeDeploymentService.cs
+          git commit -m "build(native): pin MNR4 test candidate"
+          git push origin HEAD:feat/native-mnr4-launchplan
