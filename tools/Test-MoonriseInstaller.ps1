@@ -129,7 +129,18 @@ try {
         throw "Uninstaller exited with code $($uninstall.ExitCode)."
     }
     if (Test-Path -LiteralPath $installDirectory) {
-        $remaining = @(Get-ChildItem -LiteralPath $installDirectory -Force -Recurse -ErrorAction SilentlyContinue)
+        # Inno Setup may keep unins000.exe alive briefly while its self-delete helper
+        # finishes. Wait for the directory to become empty instead of treating that
+        # normal hand-off as leaked application data.
+        $cleanupDeadline = [DateTimeOffset]::UtcNow.AddSeconds(10)
+        do {
+            $remaining = @(Get-ChildItem -LiteralPath $installDirectory -Force -Recurse -ErrorAction SilentlyContinue)
+            if ($remaining.Count -eq 0) {
+                break
+            }
+            Start-Sleep -Milliseconds 250
+        } while ([DateTimeOffset]::UtcNow -lt $cleanupDeadline)
+
         if ($remaining.Count -gt 0) {
             $remainingList = ($remaining | ForEach-Object {
                 $_.FullName.Substring($installDirectory.Length).TrimStart('\')
