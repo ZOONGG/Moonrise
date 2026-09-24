@@ -3184,31 +3184,30 @@ public partial class MainWindow : Window
                 var nativeBridgePath = _nativeBridgeDeployment.Ensure(_paths.NativeBridgeCachePath);
                 launchReport.Set("nativeBridgePath", nativeBridgePath);
                 launchReport.Set("nativeBridgeSha256", NativeBridgeDeploymentService.ExpectedSha256);
-                var packagePrimaryAgent = enabledMods.Count > 0
-                    ? legacyWeaveAdapterPath ?? weaveLoaderPath
-                    : enabledAgents[0].FullPath;
-                var packageAdditionalAgents = enabledMods.Count > 0
-                    ? (useLegacyWeave
-                        ? new[] { weaveLoaderPath }.Concat(enabledAgents.Select(item => item.FullPath)).ToArray()
-                        : enabledAgents.Select(item => item.FullPath).ToArray())
-                    : enabledAgents.Skip(1).Select(item => item.FullPath).ToArray();
-                var primaryAgent = bwhNetworkAgentPath ?? packagePrimaryAgent;
-                var additionalAgents = bwhNetworkAgentPath is null
-                    ? packageAdditionalAgents
-                    : new[] { packagePrimaryAgent }
-                        .Concat(packageAdditionalAgents)
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .ToArray();
+                var launchPlan = new CurrentLaunchPlanFactory().Create(
+                    enabledMods,
+                    enabledAgents,
+                    enabledMods.Count > 0 ? weaveLoaderPath : null,
+                    useLegacyWeave,
+                    legacyWeaveAdapterPath,
+                    bwhNetworkAgentPath);
+                launchReport.Set("launchPlanWeaveMode", launchPlan.WeaveMode.ToString());
+                launchReport.Set(
+                    "launchPlanAgents",
+                    launchPlan.Agents.Select(item => new
+                    {
+                        item.RuntimeId,
+                        Role = item.Role.ToString()
+                    }).ToArray());
                 launchReport.Set("bridgeConfigPath", launchSession.BridgeConfigPath);
                 var result = await Task.Run(() => _bridgeLauncher.Launch(
                     launcherPath,
-                    primaryAgent,
+                    launchPlan,
                     enabledModsDirectory!,
                     nativeBridgePath,
                     launchSession.BridgeConfigPath,
                     launcherArgument: null,
-                    hideLauncherWindow: backgroundLaunch,
-                    additionalAgentPaths: additionalAgents));
+                    hideLauncherWindow: backgroundLaunch));
                 launcherProcessId = result.Process.Id;
                 bridgeReady = result.BridgeReady;
                 result.Process.Dispose();
