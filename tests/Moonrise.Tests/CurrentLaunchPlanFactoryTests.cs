@@ -23,6 +23,27 @@ public sealed class CurrentLaunchPlanFactoryTests
     }
 
     [Fact]
+    public void CurrentBwhPlanMatchesExistingNetworkAdapterLoaderAgentOrder()
+    {
+        var plan = new CurrentLaunchPlanFactory().Create(
+            [Package("bwh", PackageKind.WeaveMod, @"C:\packages\bwh.jar")],
+            [Package("agent", PackageKind.JavaAgent, @"C:\packages\agent.jar")],
+            @"C:\runtime\weave-current.jar",
+            useLegacyWeave: false,
+            networkAdapterPath: @"C:\runtime\bwh-network.jar");
+
+        Assert.Equal(
+            ["moonrise-bwh-network-adapter", "weave-loader-current", "agent"],
+            plan.Agents.Select(item => item.RuntimeId).ToArray());
+
+        var projection = Mnr3BridgeProjectionBuilder.Build(plan);
+        Assert.Equal(@"C:\runtime\bwh-network.jar", projection.PrimaryAgentPath);
+        Assert.Equal(
+            [@"C:\runtime\weave-current.jar", @"C:\packages\agent.jar"],
+            projection.AdditionalAgentPaths);
+    }
+
+    [Fact]
     public void LegacyBwhPlanMatchesExistingNetworkAdapterLegacyAdapterLoaderAgentOrder()
     {
         var plan = new CurrentLaunchPlanFactory().Create(
