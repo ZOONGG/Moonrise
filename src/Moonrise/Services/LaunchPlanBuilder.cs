@@ -9,7 +9,8 @@ public sealed class LaunchPlanBuilder
         WeaveRuntimeMode weaveMode,
         string? weaveLoaderPath = null,
         IEnumerable<string>? jvmArguments = null,
-        IEnumerable<LaunchJvmProperty>? jvmProperties = null)
+        IEnumerable<LaunchJvmProperty>? jvmProperties = null,
+        IEnumerable<TechnicalLaunchAgentDescriptor>? technicalAgents = null)
     {
         ArgumentNullException.ThrowIfNull(packages);
 
@@ -58,6 +59,21 @@ public sealed class LaunchPlanBuilder
         }
 
         var agents = new List<LaunchAgent>();
+        foreach (var technical in technicalAgents ?? [])
+        {
+            ValidateRuntimeId(technical.RuntimeId);
+            if (technical.Role is not (LaunchAgentRole.NetworkAdapter or LaunchAgentRole.CompatibilityAdapter))
+            {
+                throw new InvalidOperationException(
+                    $"Technical launch agent '{technical.RuntimeId}' has unsupported role '{technical.Role}'.");
+            }
+            agents.Add(new LaunchAgent(
+                NormalizePath(technical.Path),
+                NormalizeOption(technical.AgentOptions),
+                technical.RuntimeId,
+                technical.Role));
+        }
+
         if (weaveMode != WeaveRuntimeMode.Disabled)
         {
             if (string.IsNullOrWhiteSpace(weaveLoaderPath))
@@ -66,8 +82,8 @@ public sealed class LaunchPlanBuilder
             agents.Add(new LaunchAgent(
                 NormalizePath(weaveLoaderPath),
                 Options: null,
-                PackageId: null,
-                IsWeaveLoader: true));
+                RuntimeId: WeaveRuntimeId(weaveMode),
+                Role: LaunchAgentRole.WeaveLoader));
         }
 
         foreach (var item in normalizedPaths.Where(item => item.Package.Kind == PackageKind.JavaAgent))
@@ -76,7 +92,7 @@ public sealed class LaunchPlanBuilder
                 item.Path,
                 NormalizeOption(item.Package.AgentOptions),
                 item.Package.PackageId,
-                IsWeaveLoader: false));
+                LaunchAgentRole.PackageAgent));
         }
 
         var duplicateAgentPath = agents
@@ -86,6 +102,15 @@ public sealed class LaunchPlanBuilder
         {
             throw new InvalidOperationException(
                 $"Java-agent path '{duplicateAgentPath.Key}' appears more than once in the launch plan.");
+        }
+
+        var duplicateRuntimeId = agents
+            .GroupBy(item => item.RuntimeId, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicateRuntimeId is not null)
+        {
+            throw new InvalidOperationException(
+                $"Launch-agent runtime ID '{duplicateRuntimeId.Key}' appears more than once in the launch plan.");
         }
 
         var arguments = (jvmArguments ?? [])
@@ -104,6 +129,21 @@ public sealed class LaunchPlanBuilder
         }
 
         return new LaunchPlan(weaveMode, mods, agents, arguments, properties);
+    }
+
+    private static string WeaveRuntimeId(WeaveRuntimeMode mode) => mode switch
+    {
+        WeaveRuntimeMode.Current => "weave-loader-current",
+        WeaveRuntimeMode.Legacy => "weave-loader-legacy",
+        WeaveRuntimeMode.Custom => "weave-loader-custom",
+        _ => throw new InvalidOperationException("Disabled Weave runtime does not have a loader ID.")
+    };
+
+    private static void ValidateRuntimeId(string runtimeId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(runtimeId);
+        if (runtimeId.IndexOfAny(['\0', '\r', '\n', '\t']) >= 0)
+            throw new ArgumentException("Runtime ID contains unsafe characters.", nameof(runtimeId));
     }
 
     private static void ValidatePackageId(string packageId)
