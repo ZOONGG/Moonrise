@@ -63,7 +63,7 @@ public sealed class CurrentLaunchPlanFactoryTests
                 Package("agent-a", PackageKind.JavaAgent, @"C:\packages\a.jar"),
                 Package("agent-b", PackageKind.JavaAgent, @"C:\packages\b.jar")
             ],
-            @"C:\runtime\unused-weave.jar",
+            weaveLoaderPath: null,
             useLegacyWeave: false);
 
         Assert.Equal(WeaveRuntimeMode.Disabled, plan.WeaveMode);
@@ -71,6 +71,19 @@ public sealed class CurrentLaunchPlanFactoryTests
         Assert.Equal(
             ["agent-a", "agent-b"],
             plan.Agents.Select(item => item.RuntimeId).ToArray());
+    }
+
+    [Fact]
+    public void WeaveModsRequireLoaderButAgentOnlyLaunchDoesNot()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new CurrentLaunchPlanFactory().Create(
+                [Package("mod", PackageKind.WeaveMod, @"C:\packages\mod.jar")],
+                [],
+                weaveLoaderPath: null,
+                useLegacyWeave: false));
+
+        Assert.Contains("loader path", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
