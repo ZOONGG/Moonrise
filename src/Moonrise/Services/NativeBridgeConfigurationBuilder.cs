@@ -1,4 +1,5 @@
 using System.Text;
+using Moonrise.Models;
 
 namespace Moonrise.Services;
 
@@ -27,6 +28,64 @@ public static class NativeBridgeConfigurationBuilder
         }
 
         return builder.ToString();
+    }
+
+    public static string BuildLaunchPlan(
+        LaunchPlan plan,
+        string compatibilityDirectory)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+
+        var builder = new StringBuilder("MNR4\n");
+        AppendTaggedLine(builder, "mods", NormalizePath(compatibilityDirectory));
+
+        foreach (var agent in plan.Agents)
+        {
+            var path = NormalizePath(agent.Path);
+            var options = NormalizeField(agent.Options);
+            var packageId = NormalizeField(agent.PackageId);
+            AppendTaggedLine(
+                builder,
+                "agent",
+                path,
+                options ?? string.Empty,
+                packageId ?? string.Empty,
+                agent.IsWeaveLoader ? "1" : "0");
+        }
+
+        foreach (var argument in plan.JvmArguments)
+            AppendTaggedLine(builder, "arg", NormalizeField(argument) ?? string.Empty);
+
+        foreach (var property in plan.JvmProperties)
+        {
+            AppendTaggedLine(
+                builder,
+                "prop",
+                NormalizeField(property.Name) ?? string.Empty,
+                NormalizeField(property.Value) ?? string.Empty);
+        }
+
+        return builder.ToString();
+    }
+
+    private static void AppendTaggedLine(
+        StringBuilder builder,
+        string tag,
+        params string[] fields)
+    {
+        builder.Append(tag);
+        foreach (var field in fields)
+            builder.Append('\t').Append(field);
+        builder.Append('\n');
+    }
+
+    private static string? NormalizeField(string? value)
+    {
+        if (value is null)
+            return null;
+        if (value.IndexOfAny(['\0', '\r', '\n', '\t']) >= 0)
+            throw new ArgumentException("Bridge configuration field contains unsafe characters.", nameof(value));
+        return value;
     }
 
     private static void AppendLine(StringBuilder builder, string value) =>
