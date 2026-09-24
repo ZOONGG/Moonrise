@@ -37,6 +37,7 @@ public static class NativeBridgeConfigurationBuilder
         ArgumentNullException.ThrowIfNull(plan);
 
         var builder = new StringBuilder("MNR4\n");
+        AppendTaggedLine(builder, "mode", plan.WeaveMode.ToString());
         AppendTaggedLine(builder, "mods", NormalizePath(compatibilityDirectory));
 
         foreach (var agent in plan.Agents)
