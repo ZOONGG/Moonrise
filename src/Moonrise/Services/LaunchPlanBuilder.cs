@@ -22,9 +22,33 @@ public sealed class LaunchPlanBuilder
                 $"Package '{unsupported.PackageId}' has unsupported runtime kind '{unsupported.Kind}'.");
         }
 
-        var mods = enabled
-            .Where(item => item.Kind == PackageKind.WeaveMod)
-            .Select(item => NormalizePath(item.Path))
+        foreach (var package in enabled)
+            ValidatePackageId(package.PackageId);
+
+        var duplicatePackageId = enabled
+            .GroupBy(item => item.PackageId, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicatePackageId is not null)
+        {
+            throw new InvalidOperationException(
+                $"Package '{duplicatePackageId.Key}' appears more than once in the launch plan.");
+        }
+
+        var normalizedPaths = enabled
+            .Select(item => (Package: item, Path: NormalizePath(item.Path)))
+            .ToArray();
+        var duplicatePath = normalizedPaths
+            .GroupBy(item => item.Path, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicatePath is not null)
+        {
+            throw new InvalidOperationException(
+                $"Runtime path '{duplicatePath.Key}' appears more than once in the launch plan.");
+        }
+
+        var mods = normalizedPaths
+            .Where(item => item.Package.Kind == PackageKind.WeaveMod)
+            .Select(item => item.Path)
             .ToArray();
 
         if (weaveMode == WeaveRuntimeMode.Disabled && mods.Length > 0)
@@ -46,13 +70,22 @@ public sealed class LaunchPlanBuilder
                 IsWeaveLoader: true));
         }
 
-        foreach (var package in enabled.Where(item => item.Kind == PackageKind.JavaAgent))
+        foreach (var item in normalizedPaths.Where(item => item.Package.Kind == PackageKind.JavaAgent))
         {
             agents.Add(new LaunchAgent(
-                NormalizePath(package.Path),
-                NormalizeOption(package.AgentOptions),
-                package.PackageId,
+                item.Path,
+                NormalizeOption(item.Package.AgentOptions),
+                item.Package.PackageId,
                 IsWeaveLoader: false));
+        }
+
+        var duplicateAgentPath = agents
+            .GroupBy(item => item.Path, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicateAgentPath is not null)
+        {
+            throw new InvalidOperationException(
+                $"Java-agent path '{duplicateAgentPath.Key}' appears more than once in the launch plan.");
         }
 
         var arguments = (jvmArguments ?? [])
@@ -61,14 +94,29 @@ public sealed class LaunchPlanBuilder
         var properties = (jvmProperties ?? [])
             .Select(NormalizeProperty)
             .ToArray();
+        var duplicateProperty = properties
+            .GroupBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicateProperty is not null)
+        {
+            throw new InvalidOperationException(
+                $"JVM property '{duplicateProperty.Key}' appears more than once in the launch plan.");
+        }
 
         return new LaunchPlan(weaveMode, mods, agents, arguments, properties);
+    }
+
+    private static void ValidatePackageId(string packageId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageId);
+        if (packageId.IndexOfAny(['\0', '\r', '\n', '\t']) >= 0)
+            throw new ArgumentException("Package ID contains unsafe characters.", nameof(packageId));
     }
 
     private static string NormalizePath(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        if (path.IndexOfAny(['\0', '\r', '\n', '"']) >= 0)
+        if (path.IndexOfAny(['\0', '\r', '\n', '\t', '"']) >= 0)
             throw new ArgumentException("Runtime path contains unsafe characters.", nameof(path));
         return System.IO.Path.GetFullPath(path);
     }
@@ -77,7 +125,7 @@ public sealed class LaunchPlanBuilder
     {
         if (string.IsNullOrWhiteSpace(value))
             return null;
-        if (value.IndexOfAny(['\0', '\r', '\n']) >= 0)
+        if (value.IndexOfAny(['\0', '\r', '\n', '\t']) >= 0)
             throw new ArgumentException("Java-agent options contain unsafe characters.", nameof(value));
         return value;
     }
@@ -85,8 +133,18 @@ public sealed class LaunchPlanBuilder
     private static string NormalizeArgument(string value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
-        if (value.IndexOfAny(['\0', '\r', '\n']) >= 0)
+        if (value.IndexOfAny(['\0', '\r', '\n', '\t']) >= 0)
             throw new ArgumentException("JVM argument contains unsafe characters.", nameof(value));
+        if (value.StartsWith("-javaagent:", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Java agents must be expressed through structured launch agents, not raw JVM arguments.");
+        }
+        if (value.StartsWith("-D", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "JVM properties must be expressed through structured launch properties, not raw JVM arguments.");
+        }
         return value;
     }
 
@@ -94,8 +152,8 @@ public sealed class LaunchPlanBuilder
     {
         ArgumentNullException.ThrowIfNull(property);
         if (string.IsNullOrWhiteSpace(property.Name) ||
-            property.Name.IndexOfAny(['\0', '\r', '\n', '=']) >= 0 ||
-            property.Value.IndexOfAny(['\0', '\r', '\n']) >= 0)
+            property.Name.IndexOfAny(['\0', '\r', '\n', '\t', '=']) >= 0 ||
+            property.Value.IndexOfAny(['\0', '\r', '\n', '\t']) >= 0)
         {
             throw new ArgumentException("JVM property contains unsafe characters.", nameof(property));
         }
