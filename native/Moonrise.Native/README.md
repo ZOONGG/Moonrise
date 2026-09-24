@@ -30,3 +30,19 @@ MinHook is used under its BSD 2-Clause license.
 The bridge uses the private `MNR3` wire protocol between the managed launcher
 and the injected process hook. It contains only local launch paths and has no
 legacy fallback.
+
+## Reproducible build
+
+The bridge is built for Windows x64 with MSVC and MinHook v1.3.4 pinned to commit:
+
+`c3fcafdc10146beb5919319d0683e44e3c30d537`
+
+Run from PowerShell on a machine with Visual Studio 2022 or Build Tools and the C++ x64 workload:
+
+```powershell
+./tools/Build-NativeBridge.ps1
+```
+
+The script locates `vcvars64.bat`, checks out the exact MinHook commit, compiles the bridge and MinHook sources, verifies the output is an x64 PE image, and prints its SHA-256. CI compiles this verification artifact on every main/PR build.
+
+The verification build does **not** automatically replace `runtime/bridge/Moonrise.Native.dll`. Runtime binary replacement remains an explicit reviewed step because `NativeBridgeDeploymentService.ExpectedSha256` pins the production artifact.
