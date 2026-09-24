@@ -42,6 +42,7 @@
     <EmbeddedResource Include="..\..\assets\languages\*.template.json" LogicalName="Moonrise.LanguageTemplates.%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\..\assets\languages\README.md" LogicalName="Moonrise.LanguageTemplates.README.md" />
     <PackageReference Include="Microsoft.NET.ILLink.Tasks" Version="8.0.31" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" Version="8.0.31" PrivateAssets="all" />
     <PackageReference Include="NSec.Cryptography" Version="25.4.0" />
     <Using Remove="System.Drawing" />
     <Using Remove="System.Windows.Forms" />
