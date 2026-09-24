@@ -39,6 +39,17 @@ jobs:
           MOONRISE_PRIVATE_PATTERNS: ${{ secrets.PRIVATE_NAME_PATTERNS }}
         run: ./tools/Test-RepositorySafety.ps1
 
+      - name: Verify native bridge builds from source
+        shell: pwsh
+        run: ./tools/Build-NativeBridge.ps1 -OutputPath "artifacts/native/Moonrise.Native.dll"
+
+      - name: Upload native bridge verification artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Moonrise-Native-Bridge-${{ github.run_number }}
+          path: artifacts/native/Moonrise.Native.dll
+          if-no-files-found: error
+          retention-days: 7
       - name: Restore locked dependencies
         run: dotnet restore Moonrise.sln --locked-mode
 
