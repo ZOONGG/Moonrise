@@ -44,13 +44,13 @@ public static class NativeBridgeConfigurationBuilder
         {
             var path = NormalizePath(agent.Path);
             var options = NormalizeField(agent.Options);
-            var packageId = NormalizeField(agent.PackageId);
+            var runtimeId = NormalizeField(agent.RuntimeId);
             AppendTaggedLine(
                 builder,
                 "agent",
                 path,
                 options ?? string.Empty,
-                packageId ?? string.Empty,
+                runtimeId ?? string.Empty,
                 agent.Role.ToString());
         }
 
