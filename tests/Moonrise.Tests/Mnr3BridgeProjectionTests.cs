@@ -113,6 +113,28 @@ public sealed class Mnr3BridgeProjectionTests
             Mnr3BridgeProjectionBuilder.Build(withProperty));
     }
 
+    [Fact]
+    public void NativeBridgeLaunchPlanOverloadFailsBeforeCreateProcessForUnsupportedOptions()
+    {
+        var plan = new LaunchPlanBuilder().Build(
+            [new PackageRuntimeDescriptor(
+                "agent-a",
+                PackageKind.JavaAgent,
+                @"C:\packages\a.jar",
+                "mode=strict")],
+            WeaveRuntimeMode.Disabled);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new NativeBridgeLauncher().Launch(
+                @"C:\unused\Lunar Client.exe",
+                plan,
+                @"C:\unused\mods",
+                @"C:\unused\Moonrise.Native.dll",
+                @"C:\unused\bridge-config.txt"));
+
+        Assert.Contains("options", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static PackageRuntimeDescriptor Agent(string id, string path) =>
         new(id, PackageKind.JavaAgent, path);
 }
