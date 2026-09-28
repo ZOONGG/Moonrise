@@ -69,6 +69,32 @@ public sealed class CurrentLaunchPlanFactoryTests
     }
 
     [Fact]
+    public void LegacyWeavePlanMatchesExistingDirectoryAdapterLoaderAgentOrder()
+    {
+        var plan = new CurrentLaunchPlanFactory().Create(
+            [Package("legacy-mod", PackageKind.WeaveMod, @"C:\packages\legacy.jar")],
+            [Package("agent", PackageKind.JavaAgent, @"C:\packages\agent.jar")],
+            @"C:\runtime\weave-legacy.jar",
+            useLegacyWeave: true,
+            legacyWeaveAdapterPath: @"C:\runtime\legacy-directory.jar");
+
+        Assert.Equal(WeaveRuntimeMode.Legacy, plan.WeaveMode);
+        Assert.Equal(
+            [
+                LegacyWeaveDirectoryAdapterService.Id,
+                "weave-loader-legacy",
+                "agent"
+            ],
+            plan.Agents.Select(item => item.RuntimeId).ToArray());
+
+        var projection = Mnr3BridgeProjectionBuilder.Build(plan);
+        Assert.Equal(@"C:\runtime\legacy-directory.jar", projection.PrimaryAgentPath);
+        Assert.Equal(
+            [@"C:\runtime\weave-legacy.jar", @"C:\packages\agent.jar"],
+            projection.AdditionalAgentPaths);
+    }
+
+    [Fact]
     public void LegacyBwhPlanMatchesExistingNetworkAdapterLegacyAdapterLoaderAgentOrder()
     {
         var plan = new CurrentLaunchPlanFactory().Create(
