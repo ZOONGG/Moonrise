@@ -37,7 +37,7 @@ try {
             [int]$TimeoutSeconds = 60
         )
 
-        Write-Output "[installer-smoke] $Stage"
+        Write-Host "[installer-smoke] $Stage"
         $process = Start-Process -FilePath $FilePath -ArgumentList $ArgumentList -PassThru
         if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
             try {
@@ -64,7 +64,7 @@ try {
         }
     }
 
-    Install-Moonrise
+    Write-Host "[installer-smoke] Clean install complete"
     $executable = Join-Path $installDirectory "Moonrise.exe"
     $uninstaller = Join-Path $installDirectory "unins000.exe"
     foreach ($required in @($executable, $uninstaller, (Join-Path $installDirectory "runtime\bridge\Moonrise.Native.dll"))) {
@@ -89,12 +89,10 @@ try {
         if ($application.HasExited) {
             throw "Moonrise exited during the post-install launch smoke test with code $($application.ExitCode)."
         }
-        $null = $application.CloseMainWindow()
-        if (-not $application.WaitForExit(5000)) {
-            Stop-Process -Id $application.Id -Force
-            if (-not $application.WaitForExit(10000)) {
-                throw "Moonrise did not exit after the launch smoke test."
-            }
+        Write-Host "[installer-smoke] Stop launched Moonrise"
+        Stop-Process -Id $application.Id -Force -ErrorAction Stop
+        if (-not $application.WaitForExit(10000)) {
+            throw "Moonrise did not exit after the launch smoke test."
         }
         if ($PortableLaunchIsolation -and (Test-Path -LiteralPath $portableMarker)) {
             Remove-Item -LiteralPath $portableMarker -Force
@@ -115,7 +113,7 @@ try {
     New-Item -ItemType Directory -Path $settingsDirectory -Force | Out-Null
     Set-Content -LiteralPath $sentinel -Value "preserve"
 
-    Install-Moonrise
+    Write-Host "[installer-smoke] Upgrade install complete"
     if (-not (Test-Path -LiteralPath $sentinel)) {
         throw "Upgrade removed Moonrise user data."
     }
@@ -128,6 +126,7 @@ try {
     if ($uninstall.ExitCode -ne 0) {
         throw "Uninstaller exited with code $($uninstall.ExitCode)."
     }
+    Write-Host "[installer-smoke] Normal uninstall complete"
     if (Test-Path -LiteralPath $installDirectory) {
         # Inno Setup may keep unins000.exe alive briefly while its self-delete helper
         # finishes. Wait for the directory to become empty instead of treating that
@@ -167,6 +166,7 @@ try {
         if ($uninstall.ExitCode -ne 0) {
             throw "Data-removal uninstall exited with code $($uninstall.ExitCode)."
         }
+        Write-Host "[installer-smoke] Data-removal uninstall complete"
         if (Test-Path -LiteralPath $dataRoot) {
             $dataCleanupDeadline = [DateTimeOffset]::UtcNow.AddSeconds(10)
             do {
