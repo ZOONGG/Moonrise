@@ -229,7 +229,7 @@ public sealed class MoonriseServicesTests
         paths.EnsureUserDirectories();
         Assert.Equal(Path.Combine(temp.Path, "packages", "weave"), paths.WeavePackagesDirectory);
         Assert.Equal(Path.Combine(temp.Path, "packages", "agents"), paths.AgentPackagesDirectory);
-        Assert.Equal(Path.Combine(temp.Path, "packages", "unclassified"), paths.UnclassifiedPackagesDirectory);
+        Assert.False(Directory.Exists(paths.UnclassifiedPackagesDirectory));
         Assert.Equal(Path.Combine(temp.Path, "packages", "metadata"), paths.PackageMetadataDirectory);
         Assert.Equal(Path.Combine(temp.Path, "adapters"), paths.AdaptersDirectory);
         Assert.Equal(Path.Combine(temp.Path, "cache", "catalog"), paths.CatalogCacheDirectory);
@@ -239,7 +239,7 @@ public sealed class MoonriseServicesTests
         Assert.False(Directory.Exists(paths.UserAgentsDirectory));
         Assert.False(Directory.Exists(paths.MoonriseOwnedPackagesDirectory));
         Assert.Equal(
-            ["agents", "metadata", "unclassified", "weave"],
+            ["agents", "metadata", "weave"],
             Directory.EnumerateDirectories(paths.PackagesDirectory)
                 .Select(path => Path.GetFileName(path)!)
                 .Order(StringComparer.OrdinalIgnoreCase)

@@ -34,8 +34,9 @@ public sealed class Stage2PageCompositionTests
         var xaml = Read("src", "Moonrise", "MainWindow.xaml");
         var code = Read("src", "Moonrise", "MainWindow.xaml.cs");
 
-        foreach (var filter in new[] { "AllKindButton", "ModsKindButton", "AgentsKindButton", "UnclassifiedKindButton" })
+        foreach (var filter in new[] { "AllKindButton", "ModsKindButton", "AgentsKindButton" })
             Assert.Contains($"x:Name=\"{filter}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("UnclassifiedKindButton", xaml, StringComparison.Ordinal);
         foreach (var command in new[]
                  {
                      "PackageKindButton_Click", "PackageEnabled_Click", "RemovePackageButton_Click",

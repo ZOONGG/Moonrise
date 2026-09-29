@@ -69,22 +69,28 @@ public sealed class LocalPackageLibraryTests
     }
 
     [Fact]
-    public void Import_DetectsAmbiguousAndUnclassifiedJarsAsDisabled()
+    public void Import_RejectsAmbiguousAndUnsupportedJarsWithoutCreatingLibraryEntries()
     {
         using var temp = new TestDirectory();
-        var library = CreateLibrary(temp.Path);
+        var paths = new AppPaths(temp.Path);
+        var library = new LocalPackageLibrary(paths, new JarMetadataParser());
+        library.Load();
         var ambiguous = Path.Combine(temp.Path, "ambiguous.jar");
         CreateJar(ambiguous, ValidWeaveJson("both"), Manifest("both.Agent"), "both");
         var plain = Path.Combine(temp.Path, "plain.jar");
         CreateJar(plain, null, "Manifest-Version: 1.0\r\n", "plain");
+        var ambiguousBytes = File.ReadAllBytes(ambiguous);
+        var plainBytes = File.ReadAllBytes(plain);
 
-        var both = library.Import(ambiguous).Package!;
-        var unclassified = library.Import(plain).Package!;
+        var ambiguousError = Assert.Throws<InvalidDataException>(() => library.Import(ambiguous));
+        var unsupportedError = Assert.Throws<InvalidDataException>(() => library.Import(plain));
 
-        Assert.Equal(PackageKind.Ambiguous, both.Kind);
-        Assert.Equal(PackageKind.Unclassified, unclassified.Kind);
-        Assert.False(both.IsEnabled);
-        Assert.False(unclassified.IsEnabled);
+        Assert.Contains("Ambiguous JAR", ambiguousError.Message, StringComparison.Ordinal);
+        Assert.Contains("Unsupported JAR", unsupportedError.Message, StringComparison.Ordinal);
+        Assert.Empty(library.Packages);
+        Assert.Equal(ambiguousBytes, File.ReadAllBytes(ambiguous));
+        Assert.Equal(plainBytes, File.ReadAllBytes(plain));
+        Assert.False(Directory.Exists(paths.UnclassifiedPackagesDirectory));
     }
 
     [Fact]
@@ -276,26 +282,6 @@ public sealed class LocalPackageLibraryTests
     }
 
     [Fact]
-    public void ManualTypeSelection_RequiresDeveloperModeThenMakesUnclassifiedPackageLaunchable()
-    {
-        using var temp = new TestDirectory();
-        var library = CreateLibrary(temp.Path);
-        var plain = Path.Combine(temp.Path, "advanced.jar");
-        CreateJar(plain, null, "Manifest-Version: 1.0\r\n", "advanced");
-        library.Import(plain);
-        var package = library.Packages.Single();
-
-        Assert.Throws<InvalidOperationException>(() =>
-            library.SelectType(package, PackageKind.JavaAgent, developerMode: false));
-        library.SelectType(package, PackageKind.JavaAgent, developerMode: true);
-        package = library.Packages.Single();
-        library.SetEnabled(package, true);
-
-        Assert.Single(new PackageLaunchResolver(new JarMetadataParser())
-            .Resolve(library.Packages).JavaAgents);
-    }
-
-    [Fact]
     public void Removal_DeletesManagedCopyAndMetadataButPreservesExternalOriginal()
     {
         using var temp = new TestDirectory();
@@ -407,7 +393,7 @@ public sealed class LocalPackageLibraryTests
 
         Assert.Equal(Path.Combine(temp.Path, "packages", "weave"), paths.WeavePackagesDirectory);
         Assert.Equal(Path.Combine(temp.Path, "packages", "agents"), paths.AgentPackagesDirectory);
-        Assert.Equal(Path.Combine(temp.Path, "packages", "unclassified"), paths.UnclassifiedPackagesDirectory);
+        Assert.False(Directory.Exists(paths.UnclassifiedPackagesDirectory));
         Assert.Equal(Path.Combine(temp.Path, "packages", "metadata", "index.json"), paths.PackageIndexPath);
         Assert.All(
             new[]

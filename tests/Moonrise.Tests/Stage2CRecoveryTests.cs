@@ -162,7 +162,7 @@ public sealed class Stage2CRecoveryTests
         Assert.True(expectedHashes.SetEquals(library.Packages.Select(package => package.Sha256)));
         Assert.All(library.Packages, package => Assert.False(package.IsEnabled));
         Assert.Equal(
-            ["agents", "metadata", "unclassified", "weave"],
+            ["agents", "metadata", "weave"],
             Directory.EnumerateDirectories(paths.PackagesDirectory)
                 .Select(path => Path.GetFileName(path)!)
                 .Order(StringComparer.OrdinalIgnoreCase)
@@ -175,7 +175,7 @@ public sealed class Stage2CRecoveryTests
     }
 
     [Fact]
-    public async Task InvalidLegacyJarIsPreservedDisabledAndNotReportedAgainByFolderScan()
+    public async Task InvalidLegacyJarIsPreservedOutsideActiveLibraryAndNotReportedAgainByFolderScan()
     {
         using var temp = new TestDirectory();
         var paths = new AppPaths(temp.Path);
@@ -186,15 +186,18 @@ public sealed class Stage2CRecoveryTests
         var library = new LocalPackageLibrary(paths, new JarMetadataParser());
 
         library.Load();
-        var package = Assert.Single(library.Packages);
         var scan = await library.ScanCategoryFoldersAsync(TimeSpan.Zero);
 
-        Assert.Equal(PackageKind.Unclassified, package.Kind);
-        Assert.False(package.IsEnabled);
-        Assert.Equal(expected, Hash(package.FullPath));
-        Assert.Contains("legacy-invalid", Path.GetFileName(package.FullPath), StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(library.Packages);
+        var preserved = Assert.Single(Directory.EnumerateFiles(
+            Path.Combine(paths.LegacyPreservedMetadataDirectory, "unsupported-jars"),
+            "*.jar",
+            SearchOption.TopDirectoryOnly));
+        Assert.Equal(expected, Hash(preserved));
+        Assert.False(File.Exists(invalid));
+        Assert.False(Directory.Exists(paths.UnclassifiedPackagesDirectory));
         Assert.Equal(0, scan.Invalid);
-        Assert.Equal(1, scan.AlreadyPresent);
+        Assert.Equal(0, scan.AlreadyPresent);
     }
 
     [Fact]
@@ -257,15 +260,14 @@ public sealed class Stage2CRecoveryTests
         Assert.Contains("_paths.PackagesDirectory", code, StringComparison.Ordinal);
         Assert.Contains("_paths.WeavePackagesDirectory", code, StringComparison.Ordinal);
         Assert.Contains("_paths.AgentPackagesDirectory", code, StringComparison.Ordinal);
-        Assert.Contains("_paths.UnclassifiedPackagesDirectory", code, StringComparison.Ordinal);
         Assert.Contains("Открыть папку пакетов", code, StringComparison.Ordinal);
         Assert.Contains("Открыть папку Weave-модов", code, StringComparison.Ordinal);
         Assert.Contains("Открыть папку Java-агентов", code, StringComparison.Ordinal);
-        Assert.Contains("Открыть папку без типа", code, StringComparison.Ordinal);
         Assert.Contains("Open package folder", code, StringComparison.Ordinal);
         Assert.Contains("Open Weave mods folder", code, StringComparison.Ordinal);
         Assert.Contains("Open Java agents folder", code, StringComparison.Ordinal);
-        Assert.Contains("Open unclassified folder", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("UnclassifiedKindButton", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Open unclassified folder", code, StringComparison.Ordinal);
         Assert.DoesNotContain("Rescan", xaml, StringComparison.OrdinalIgnoreCase);
     }
 
