@@ -1537,7 +1537,7 @@ public sealed class LocalPackageLibrary
 
     private void EnsureInCategoryStorage(string path)
     {
-        if (!IsInCategoryStorage(path))
+        if (!IsInCategoryStorage(path) && !IsInside(path, _paths.UnclassifiedPackagesDirectory))
             throw new InvalidDataException("Managed package path escapes the category package store.");
     }
 

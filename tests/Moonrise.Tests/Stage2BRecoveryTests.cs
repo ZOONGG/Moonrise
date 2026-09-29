@@ -146,13 +146,14 @@ public sealed class Stage2BRecoveryTests
 
         Assert.True(Directory.Exists(paths.WeavePackagesDirectory));
         Assert.True(Directory.Exists(paths.AgentPackagesDirectory));
-        Assert.True(Directory.Exists(paths.UnclassifiedPackagesDirectory));
+        Assert.False(Directory.Exists(paths.UnclassifiedPackagesDirectory));
         Assert.True(Directory.Exists(paths.PackageMetadataDirectory));
         Assert.False(Directory.Exists(paths.LegacyAddPackagesDirectory));
         Assert.False(Directory.Exists(paths.LegacyInstalledPackagesDirectory));
         var readme = File.ReadAllText(paths.PackageReadmePath);
         Assert.Contains("Копируйте Weave-моды в папку weave", readme, StringComparison.Ordinal);
         Assert.Contains("Copy Java agents into the agents folder", readme, StringComparison.Ordinal);
+        Assert.Contains("Only Weave mods and Java agents are supported", readme, StringComparison.Ordinal);
     }
 
     [Fact]
