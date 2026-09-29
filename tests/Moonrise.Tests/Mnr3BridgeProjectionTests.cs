@@ -114,25 +114,37 @@ public sealed class Mnr3BridgeProjectionTests
     }
 
     [Fact]
-    public void NativeBridgeLaunchPlanOverloadFailsBeforeCreateProcessForUnsupportedOptions()
+    public void Mnr4NativeBridgeLaunchPlanOverloadAcceptsAgentOptions()
     {
-        var plan = new LaunchPlanBuilder().Build(
-            [new PackageRuntimeDescriptor(
-                "agent-a",
-                PackageKind.JavaAgent,
-                @"C:\packages\a.jar",
-                "mode=strict")],
-            WeaveRuntimeMode.Disabled);
+        var root = Path.Combine(Path.GetTempPath(), $"moonrise-mnr4-launch-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var agent = Path.Combine(root, "agent.jar");
+            File.WriteAllBytes(agent, [0x50, 0x4b, 0x03, 0x04]);
+            var plan = new LaunchPlanBuilder().Build(
+                [new PackageRuntimeDescriptor(
+                    "agent-a",
+                    PackageKind.JavaAgent,
+                    agent,
+                    "mode=strict")],
+                WeaveRuntimeMode.Disabled);
+            var missingLauncher = Path.Combine(root, "Lunar Client.exe");
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            new NativeBridgeLauncher().Launch(
-                @"C:\unused\Lunar Client.exe",
-                plan,
-                @"C:\unused\mods",
-                @"C:\unused\Moonrise.Native.dll",
-                @"C:\unused\bridge-config.txt"));
+            var exception = Assert.Throws<FileNotFoundException>(() =>
+                new NativeBridgeLauncher().Launch(
+                    missingLauncher,
+                    plan,
+                    Path.Combine(root, "mods"),
+                    Path.Combine(root, "Moonrise.Native.dll"),
+                    Path.Combine(root, "bridge-config.txt")));
 
-        Assert.Contains("options", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(missingLauncher, exception.FileName);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     private static PackageRuntimeDescriptor Agent(string id, string path) =>

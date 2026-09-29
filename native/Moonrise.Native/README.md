@@ -44,6 +44,6 @@ Run from PowerShell on a machine with Visual Studio 2022 or Build Tools and the 
 ./tools/Build-NativeBridge.ps1
 ```
 
-The script locates `vcvars64.bat`, checks out the exact MinHook commit, compiles the bridge and MinHook sources, verifies the output is an x64 PE image, and prints its SHA-256. CI compiles this verification artifact on every main/PR build.
+The script locates `vcvars64.bat`, checks out the exact MinHook commit, compiles the bridge and MinHook sources, runs the native MNR3/MNR4 parser regression harness, verifies the output is an x64 PE image, and prints its SHA-256. CI compiles and tests this verification artifact on every main/PR build.
 
 The verification build does **not** automatically replace `runtime/bridge/Moonrise.Native.dll`. Runtime binary replacement remains an explicit reviewed step because `NativeBridgeDeploymentService.ExpectedSha256` pins the production artifact.
