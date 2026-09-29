@@ -180,6 +180,38 @@ public sealed class UniversalLaunchPlanTests
         Assert.Contains("structured", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("-Xmx4G\"bad")]
+    [InlineData("-Xmx4G\tbad")]
+    [InlineData("-Xmx4G\rbad")]
+    [InlineData("-Xmx4G\nbad")]
+    [InlineData("-Xmx4G\0bad")]
+    public void JvmArgumentsRejectUnsafeProtocolAndQuotingCharacters(string argument)
+    {
+        var exception = Assert.Throws<ArgumentException>(() =>
+            new LaunchPlanBuilder().Build(
+                [],
+                WeaveRuntimeMode.Disabled,
+                jvmArguments: [argument]));
+
+        Assert.Contains("unsafe", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("weave.mods.directory")]
+    [InlineData("WEAVE.API.MINECRAFT.ENABLED")]
+    [InlineData("weave.dump.bytecode.enabled")]
+    public void BridgeManagedWeavePropertiesCannotBeInjectedExplicitly(string name)
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new LaunchPlanBuilder().Build(
+                [],
+                WeaveRuntimeMode.Disabled,
+                jvmProperties: [new LaunchJvmProperty(name, "override")]));
+
+        Assert.Contains("managed by the Moonrise bridge", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void AgentOptionsRejectProtocolSeparators()
     {

@@ -128,6 +128,13 @@ public sealed class LaunchPlanBuilder
                 $"JVM property '{duplicateProperty.Key}' appears more than once in the launch plan.");
         }
 
+        var managedProperty = properties.FirstOrDefault(item => IsBridgeManagedProperty(item.Name));
+        if (managedProperty is not null)
+        {
+            throw new InvalidOperationException(
+                $"JVM property '{managedProperty.Name}' is managed by the Moonrise bridge.");
+        }
+
         return new LaunchPlan(weaveMode, mods, agents, arguments, properties);
     }
 
@@ -173,7 +180,7 @@ public sealed class LaunchPlanBuilder
     private static string NormalizeArgument(string value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value);
-        if (value.IndexOfAny(['\0', '\r', '\n', '\t']) >= 0)
+        if (value.IndexOfAny(['\0', '\r', '\n', '\t', '"']) >= 0)
             throw new ArgumentException("JVM argument contains unsafe characters.", nameof(value));
         if (value.StartsWith("-javaagent:", StringComparison.OrdinalIgnoreCase))
         {
@@ -199,4 +206,9 @@ public sealed class LaunchPlanBuilder
         }
         return property;
     }
+
+    private static bool IsBridgeManagedProperty(string name) =>
+        name.Equals("weave.mods.directory", StringComparison.OrdinalIgnoreCase) ||
+        name.Equals("weave.api.minecraft.enabled", StringComparison.OrdinalIgnoreCase) ||
+        name.Equals("weave.dump.bytecode.enabled", StringComparison.OrdinalIgnoreCase);
 }

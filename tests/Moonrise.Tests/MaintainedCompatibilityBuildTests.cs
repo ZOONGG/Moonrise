@@ -70,42 +70,24 @@ public sealed class MaintainedCompatibilityBuildTests
     }
 
     [Fact]
-    public void ResolveMoonriseOwnedSuccessors_ReplacesOnlyExactTargetAndPreservesOriginal()
+    public void Resolve_DoesNotReplaceUnrelatedStormyPackage()
     {
         using var temp = new TemporaryDirectory();
         var parser = new JarMetadataParser();
         var paths = new AppPaths(temp.Path);
         paths.EnsureUserDirectories();
-        var originalPath = CreateWeaveMod(temp.Path, "stormy.jar", "stormy", legacyApi: true);
-        var successorSource = CreateWeaveMod(temp.Path, "veyra.jar", "veyra", legacyApi: false);
-        var original = parser.ParseWeaveMod(originalPath);
-        var originalBytes = File.ReadAllBytes(originalPath);
-        var successorHash = LocalPackageLibrary.ComputeSha256(successorSource);
-        var successorName = $"{successorHash.ToLowerInvariant()}.jar";
-        var buildDirectory = Path.Combine(paths.AdaptersDirectory, "maintained-builds");
-        Directory.CreateDirectory(buildDirectory);
-        File.Copy(successorSource, Path.Combine(buildDirectory, successorName));
-        var rule = new MoonriseOwnedSuccessorRule(
-            "test-successor",
-            original.Sha256,
-            successorHash,
-            successorName,
-            "veyra",
-            "1.8.9",
-            WeaveAgentService.Version);
+        var stormyPath = CreateWeaveMod(temp.Path, "Stormy-1.0.jar", "stormy", legacyApi: false);
+        var stormy = parser.ParseWeaveMod(stormyPath);
+        var originalBytes = File.ReadAllBytes(stormyPath);
 
-        var result = new MaintainedCompatibilityBuildService(
-                paths,
-                parser,
-                rules: [],
-                successorRules: [rule])
-            .ResolveMoonriseOwnedSuccessors("1.8.9", [original]);
+        var result = new MaintainedCompatibilityBuildService(paths, parser)
+            .Resolve("1.8.9", [stormy]);
 
-        var applied = Assert.Single(result.AppliedSuccessors);
-        Assert.Equal("test-successor", applied.Rule.Id);
-        Assert.Equal("veyra", Assert.Single(result.LaunchMods).Identifier);
-        Assert.Equal(successorHash, applied.SuccessorPackage.Sha256);
-        Assert.Equal(originalBytes, File.ReadAllBytes(originalPath));
+        Assert.Empty(result.AppliedBuilds);
+        var launchPackage = Assert.Single(result.LaunchMods);
+        Assert.Equal(stormy.Sha256, launchPackage.Sha256);
+        Assert.Equal("stormy", launchPackage.Identifier);
+        Assert.Equal(originalBytes, File.ReadAllBytes(stormyPath));
     }
 
     private static string CreateWeaveMod(

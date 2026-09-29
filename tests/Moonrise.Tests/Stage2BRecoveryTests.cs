@@ -146,7 +146,7 @@ public sealed class Stage2BRecoveryTests
 
         Assert.True(Directory.Exists(paths.WeavePackagesDirectory));
         Assert.True(Directory.Exists(paths.AgentPackagesDirectory));
-        Assert.True(Directory.Exists(paths.UnclassifiedPackagesDirectory));
+        Assert.False(Directory.Exists(paths.UnclassifiedPackagesDirectory));
         Assert.True(Directory.Exists(paths.PackageMetadataDirectory));
         Assert.False(Directory.Exists(paths.LegacyAddPackagesDirectory));
         Assert.False(Directory.Exists(paths.LegacyInstalledPackagesDirectory));

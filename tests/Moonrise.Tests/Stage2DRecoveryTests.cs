@@ -327,7 +327,7 @@ public sealed class Stage2DRecoveryTests
         var paths = new AppPaths(temp.Path);
         var library = Library(paths);
         var package = library.Import(CreateWeaveJar(temp.Path, "one.jar", "same")).Package!;
-        var duplicate = Path.Combine(paths.UnclassifiedPackagesDirectory, "duplicate.jar");
+        var duplicate = Path.Combine(paths.AgentPackagesDirectory, "duplicate.jar");
         File.Copy(package.FullPath, duplicate);
 
         var result = library.Reconcile();
@@ -343,7 +343,7 @@ public sealed class Stage2DRecoveryTests
             "*.jar",
             SearchOption.AllDirectories));
         Assert.Equal(
-            ["agents", "metadata", "README.txt", "unclassified", "weave"],
+            ["agents", "metadata", "README.txt", "weave"],
             rootEntries);
         Assert.False(Directory.Exists(paths.LegacyOriginalsPackagesDirectory));
         Assert.False(Directory.Exists(paths.LegacyImportedPackagesDirectory));

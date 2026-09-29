@@ -20,24 +20,6 @@ public sealed record MaintainedCompatibilityBuildResolution(
     IReadOnlyList<PackageInfo> LaunchMods,
     IReadOnlyList<MaintainedCompatibilityBuildUse> AppliedBuilds);
 
-public sealed record MoonriseOwnedSuccessorRule(
-    string Id,
-    string TargetSha256,
-    string SuccessorSha256,
-    string SuccessorFileName,
-    string SuccessorIdentifier,
-    string MinecraftVersion,
-    string WeaveLoaderVersion);
-
-public sealed record MoonriseOwnedSuccessorUse(
-    MoonriseOwnedSuccessorRule Rule,
-    PackageInfo RequestedPackage,
-    PackageInfo SuccessorPackage);
-
-public sealed record MoonriseOwnedSuccessorResolution(
-    IReadOnlyList<PackageInfo> LaunchMods,
-    IReadOnlyList<MoonriseOwnedSuccessorUse> AppliedSuccessors);
-
 public sealed class MaintainedCompatibilityBuildService
 {
     private static readonly MaintainedCompatibilityBuildRule[] ProductionRules =
@@ -58,97 +40,18 @@ public sealed class MaintainedCompatibilityBuildService
             WeaveAgentService.Version)
     ];
 
-    private static readonly MoonriseOwnedSuccessorRule[] ProductionSuccessorRules =
-    [
-        new(
-            "moonrise-stormy-52ed-successor-veyra-ddc7",
-            "52ED9DA4C4F570FD43B32671E0D94FA5FC9E441168645D2E3DE054169374B021",
-            "DDC75A6697C706A323D4862B85CF886AA9E24BB0F90AA907D4CA3337C4B9D9E4",
-            "ddc75a6697c706a323d4862b85cf886aa9e24bb0f90aa907d4ca3337c4b9d9e4.jar",
-            "veyra",
-            "1.8.9",
-            WeaveAgentService.Version)
-    ];
-
     private readonly AppPaths _paths;
     private readonly JarMetadataParser _parser;
     private readonly IReadOnlyList<MaintainedCompatibilityBuildRule> _rules;
-    private readonly IReadOnlyList<MoonriseOwnedSuccessorRule> _successorRules;
 
     public MaintainedCompatibilityBuildService(
         AppPaths paths,
         JarMetadataParser parser,
-        IEnumerable<MaintainedCompatibilityBuildRule>? rules = null,
-        IEnumerable<MoonriseOwnedSuccessorRule>? successorRules = null)
+        IEnumerable<MaintainedCompatibilityBuildRule>? rules = null)
     {
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _parser = parser ?? throw new ArgumentNullException(nameof(parser));
         _rules = (rules ?? ProductionRules).ToArray();
-        _successorRules = (successorRules ?? ProductionSuccessorRules).ToArray();
-    }
-
-    public MoonriseOwnedSuccessorResolution ResolveMoonriseOwnedSuccessors(
-        string minecraftVersion,
-        IEnumerable<PackageInfo> enabledMods)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(minecraftVersion);
-        ArgumentNullException.ThrowIfNull(enabledMods);
-
-        var launchMods = new List<PackageInfo>();
-        var applied = new List<MoonriseOwnedSuccessorUse>();
-        foreach (var requested in enabledMods)
-        {
-            var rule = _successorRules.FirstOrDefault(candidate =>
-                string.Equals(candidate.TargetSha256, requested.Sha256, StringComparison.OrdinalIgnoreCase));
-            if (rule is null)
-            {
-                launchMods.Add(requested);
-                continue;
-            }
-
-            if (!string.Equals(rule.MinecraftVersion, minecraftVersion, StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(rule.WeaveLoaderVersion, WeaveAgentService.Version, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidDataException(
-                    $"{requested.OriginalFileName}: Moonrise-owned successor '{rule.Id}' does not target Minecraft {minecraftVersion} and Weave Loader {WeaveAgentService.Version}.");
-            }
-
-            var successorPath = Path.Combine(
-                _paths.AdaptersDirectory,
-                "maintained-builds",
-                rule.SuccessorFileName);
-            if (!File.Exists(successorPath))
-            {
-                throw new FileNotFoundException(
-                    $"{requested.OriginalFileName}: required Moonrise-owned successor '{rule.Id}' is missing.",
-                    successorPath);
-            }
-
-            var actualHash = LocalPackageLibrary.ComputeSha256(successorPath);
-            if (!string.Equals(actualHash, rule.SuccessorSha256, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidDataException(
-                    $"{requested.OriginalFileName}: Moonrise-owned successor '{rule.Id}' failed its SHA-256 check.");
-            }
-
-            var successor = _parser.ParseWeaveMod(successorPath);
-            if (!string.Equals(successor.Identifier, rule.SuccessorIdentifier, StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(successor.Sha256, rule.SuccessorSha256, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidDataException(
-                    $"{requested.OriginalFileName}: Moonrise-owned successor '{rule.Id}' has unexpected metadata.");
-            }
-
-            launchMods.Add(successor);
-            applied.Add(new MoonriseOwnedSuccessorUse(rule, requested, successor));
-        }
-
-        return new MoonriseOwnedSuccessorResolution(
-            launchMods
-                .GroupBy(package => package.Sha256, StringComparer.OrdinalIgnoreCase)
-                .Select(group => group.First())
-                .ToArray(),
-            applied);
     }
 
     public MaintainedCompatibilityBuildResolution Resolve(
