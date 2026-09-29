@@ -120,6 +120,7 @@ public sealed class LocalPackageLibrary
             _paths.EnsureUserDirectories();
             _index = ReadIndex();
             LastLayoutMigrationResult = MigratePackageLayoutOnceCore();
+            PreserveDeprecatedUnclassifiedCategory();
             LastReconciliationResult = ReconcileCore(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
             ReplaceCollection();
         }
@@ -917,6 +918,53 @@ public sealed class LocalPackageLibrary
             Path.Combine(_paths.LegacyPreservedMetadataDirectory, "unsupported-jars"),
             $"{stem}--unsupported-{hash[..8].ToLowerInvariant()}.jar",
             hash);
+    }
+
+    private void PreserveDeprecatedUnclassifiedCategory()
+    {
+        var root = _paths.UnclassifiedPackagesDirectory;
+        if (!Directory.Exists(root))
+            return;
+
+        foreach (var source in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories).ToArray())
+        {
+            try
+            {
+                if (string.Equals(Path.GetExtension(source), ".jar", StringComparison.OrdinalIgnoreCase))
+                {
+                    var hash = ComputeSha256(source);
+                    var destination = SelectInvalidLegacyDestination(source, hash);
+                    StoreVerifiedFile(source, destination, hash, ".migrating");
+                    PreserveLastWriteTime(source, destination);
+                    VerifyPathHash(source, hash);
+                    VerifyPathHash(destination, hash);
+                    if (!string.Equals(source, destination, StringComparison.OrdinalIgnoreCase))
+                        File.Delete(source);
+                    continue;
+                }
+
+                var relative = Path.GetRelativePath(root, source);
+                var destinationPath = SelectPreservedLegacyMetadataDestination(
+                    Path.Combine(_paths.LegacyPreservedMetadataDirectory, "unclassified", relative));
+                Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+                File.Move(source, destinationPath, overwrite: false);
+            }
+            catch (Exception exception) when (
+                exception is IOException or UnauthorizedAccessException or InvalidDataException)
+            {
+                // Preserve unreadable legacy content in place rather than risking data loss.
+            }
+        }
+
+        foreach (var directory in Directory.EnumerateDirectories(root, "*", SearchOption.AllDirectories)
+                     .OrderByDescending(path => path.Length))
+        {
+            if (!Directory.EnumerateFileSystemEntries(directory).Any())
+                Directory.Delete(directory);
+        }
+
+        if (!Directory.EnumerateFileSystemEntries(root).Any())
+            Directory.Delete(root);
     }
 
     private void RemoveEmptyLegacyDirectories()
