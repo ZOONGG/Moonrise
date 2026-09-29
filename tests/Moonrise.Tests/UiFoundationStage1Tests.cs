@@ -43,9 +43,10 @@ public sealed class UiFoundationStage1Tests
                  {
                      "PrimaryButton", "SecondaryButton", "GhostButton", "DangerButton", "IconButton", "CompactButton",
                      "NavButton", "SearchInput", "SmoothSwitch", "StatusIndicator", "Badge", "Card",
-                     "WeaveModIconTemplate", "AgentIconTemplate", "UnclassifiedIconTemplate"
+                     "WeaveModIconTemplate", "AgentIconTemplate"
                  })
             Assert.Contains(key, controlKeys);
+        Assert.DoesNotContain("UnclassifiedIconTemplate", controlKeys);
         Assert.Contains(controls.Root!.Elements(Presentation + "Style"),
             style => (string?)style.Attribute("TargetType") == "ComboBox");
     }
