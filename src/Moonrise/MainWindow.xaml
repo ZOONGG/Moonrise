@@ -301,11 +301,6 @@
             </Border>
         </ControlTemplate>
 
-        <ControlTemplate x:Key="UnclassifiedIconTemplate" TargetType="ContentControl">
-            <Border Width="44" Height="44" CornerRadius="11" Background="{DynamicResource UnknownIconBackground}" BorderBrush="{DynamicResource UnknownIconBorder}" BorderThickness="{DynamicResource PackageIconBorderThickness}">
-                <Viewbox Width="22" Height="22"><Path Data="{StaticResource IconUnknown}" Stroke="{DynamicResource UnknownIconForeground}" StrokeThickness="1.65" Fill="Transparent" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/></Viewbox>
-            </Border>
-        </ControlTemplate>
 
         <ControlTemplate x:Key="LunarClientIconTemplate" TargetType="ContentControl">
             <Border Width="40" Height="40" CornerRadius="10" Background="{DynamicResource ClientIconBackground}" BorderBrush="{DynamicResource ClientIconBorder}" BorderThickness="{DynamicResource PackageIconBorderThickness}">
@@ -883,7 +878,7 @@
                     <StackPanel><TextBlock x:Name="LibraryTitle" Text="Package library" Style="{StaticResource Heading}"/><TextBlock x:Name="LibrarySubtitle" Text="Manage local Weave mods and Java agents." Style="{StaticResource Caption}" Margin="0,7,0,0"/></StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal"><Button x:Name="OpenFolderButton" Content="Open folder" Style="{StaticResource ButtonBase}" Margin="0,0,10,0" Click="OpenPackageFolderButton_Click"/><Button x:Name="AddPackageButton" Content="+ Add JAR" Style="{StaticResource PrimaryButton}" Height="42" MinWidth="148" Click="AddPackageButton_Click"/></StackPanel>
                 </Grid>
-                <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="260"/></Grid.ColumnDefinitions><StackPanel Orientation="Horizontal"><RadioButton x:Name="AllKindButton" Content="All" Style="{StaticResource NavButton}" IsChecked="True" Click="PackageKindButton_Click"/><RadioButton x:Name="ModsKindButton" Content="Weave mods" Style="{StaticResource NavButton}" Click="PackageKindButton_Click"/><RadioButton x:Name="AgentsKindButton" Content="Java agents" Style="{StaticResource NavButton}" Click="PackageKindButton_Click"/><RadioButton x:Name="UnclassifiedKindButton" Content="Unclassified" Style="{StaticResource NavButton}" Click="PackageKindButton_Click"/><TextBlock x:Name="LibraryCountText" Text="0 packages" Foreground="{DynamicResource TextMuted}" VerticalAlignment="Center" Margin="10,0,0,0"/></StackPanel><TextBox x:Name="LibrarySearchBox" Grid.Column="1" TextChanged="LibrarySearchBox_TextChanged" ToolTip="Search / Поиск"/></Grid>
+                <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="260"/></Grid.ColumnDefinitions><StackPanel Orientation="Horizontal"><RadioButton x:Name="AllKindButton" Content="All" Style="{StaticResource NavButton}" IsChecked="True" Click="PackageKindButton_Click"/><RadioButton x:Name="ModsKindButton" Content="Weave mods" Style="{StaticResource NavButton}" Click="PackageKindButton_Click"/><RadioButton x:Name="AgentsKindButton" Content="Java agents" Style="{StaticResource NavButton}" Click="PackageKindButton_Click"/><TextBlock x:Name="LibraryCountText" Text="0 packages" Foreground="{DynamicResource TextMuted}" VerticalAlignment="Center" Margin="10,0,0,0"/></StackPanel><TextBox x:Name="LibrarySearchBox" Grid.Column="1" TextChanged="LibrarySearchBox_TextChanged" ToolTip="Search / Поиск"/></Grid>
                 <Border Grid.Row="4" Style="{StaticResource Card}" Padding="0" ClipToBounds="True">
                     <Grid><Grid.RowDefinitions><RowDefinition Height="42"/><RowDefinition/></Grid.RowDefinitions>
                         <Border Background="{DynamicResource SurfaceSecondary}" BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,0,0,1" Padding="18,0">
@@ -910,8 +905,6 @@
                                                      <Setter Property="Template" Value="{StaticResource WeaveModIconTemplate}"/>
                                                      <Style.Triggers>
                                                          <DataTrigger Binding="{Binding Kind}" Value="JavaAgent"><Setter Property="Template" Value="{StaticResource AgentIconTemplate}"/></DataTrigger>
-                                                         <DataTrigger Binding="{Binding Kind}" Value="Unclassified"><Setter Property="Template" Value="{StaticResource UnclassifiedIconTemplate}"/></DataTrigger>
-                                                         <DataTrigger Binding="{Binding Kind}" Value="Ambiguous"><Setter Property="Template" Value="{StaticResource UnclassifiedIconTemplate}"/></DataTrigger>
                                                      </Style.Triggers>
                                                  </Style>
                                              </ContentControl.Style>

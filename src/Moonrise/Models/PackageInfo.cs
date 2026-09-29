@@ -55,8 +55,7 @@ public sealed class PackageInfo : INotifyPropertyChanged
     {
         PackageKind.WeaveMod => "Weave mod",
         PackageKind.JavaAgent => "Java agent",
-        PackageKind.Ambiguous => "Ambiguous",
-        _ => "Unclassified"
+        _ => "Unsupported"
     };
 
     public string SizeLabel => Size < 1024 * 1024

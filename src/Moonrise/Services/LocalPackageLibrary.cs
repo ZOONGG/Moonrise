@@ -109,7 +109,7 @@ public sealed class LocalPackageLibrary
     public ObservableCollection<PackageInfo> Packages { get; } = [];
     public string IndexPath => _paths.PackageIndexPath;
     public IReadOnlyList<string> CategoryDirectories =>
-        [_paths.WeavePackagesDirectory, _paths.AgentPackagesDirectory, _paths.UnclassifiedPackagesDirectory];
+        [_paths.WeavePackagesDirectory, _paths.AgentPackagesDirectory];
     public PackageStorageMigrationResult? LastLayoutMigrationResult { get; private set; }
     public PackageReconciliationResult? LastReconciliationResult { get; private set; }
 
@@ -329,50 +329,14 @@ public sealed class LocalPackageLibrary
         lock (_sync)
         {
             var record = FindRecord(package.PackageId);
-            if (enabled && record.Kind is PackageKind.Ambiguous or PackageKind.Unclassified)
-                throw new InvalidOperationException("Unclassified package cannot be launched.");
+            if (enabled && record.Kind is not (PackageKind.WeaveMod or PackageKind.JavaAgent))
+                throw new InvalidOperationException("Unsupported package cannot be launched.");
             record.Enabled = enabled;
             package.IsEnabled = enabled;
             SaveIndex();
         }
     }
 
-    public void SelectType(PackageInfo package, PackageKind kind, bool developerMode)
-    {
-        ArgumentNullException.ThrowIfNull(package);
-        if (kind is not (PackageKind.WeaveMod or PackageKind.JavaAgent))
-            throw new ArgumentOutOfRangeException(nameof(kind));
-        if (package.Kind == PackageKind.Unclassified && !developerMode)
-            throw new InvalidOperationException("Developer mode is required to classify this package manually.");
-
-        lock (_sync)
-        {
-            var record = FindRecord(package.PackageId);
-            PackageInfo? parsed = null;
-            if (record.Kind != PackageKind.Unclassified)
-            {
-                parsed = kind == PackageKind.WeaveMod
-                    ? _parser.ParseWeaveMod(package.FullPath)
-                    : _parser.ParseJavaAgent(package.FullPath);
-            }
-            record.Kind = kind;
-            if (parsed is not null)
-            {
-                record.DisplayName = parsed.DisplayName;
-                record.Identifier = parsed.Identifier;
-                record.Version = parsed.Version;
-                record.Entrypoint = parsed.Entrypoint;
-            }
-            else
-            {
-                record.Entrypoint = "Manual classification";
-            }
-            record.Enabled = false;
-            MoveRecordToCategory(record);
-            SaveIndex();
-            ReplaceCollection();
-        }
-    }
 
     public bool VerifyIntegrity(PackageInfo package)
     {
@@ -459,28 +423,16 @@ public sealed class LocalPackageLibrary
 
             PackageKind kind;
             PackageInfo? metadata;
-            var legacyInvalid = recordAtPath is not null &&
-                string.Equals(
-                    recordAtPath.LastIntegrityCheckResult,
-                    "legacy-invalid",
-                    StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(recordAtPath.Sha256, hash, StringComparison.OrdinalIgnoreCase);
             try
             {
                 ValidateSource(originalPath);
                 (kind, metadata) = Detect(originalPath);
-                legacyInvalid = false;
             }
             catch (Exception exception) when (
                 exception is InvalidDataException or IOException or UnauthorizedAccessException)
             {
-                if (!legacyInvalid)
-                {
-                    errors.Add($"{Path.GetFileName(originalPath)}: {exception.Message}");
-                    continue;
-                }
-                kind = PackageKind.Unclassified;
-                metadata = null;
+                errors.Add($"{Path.GetFileName(originalPath)}: {exception.Message}");
+                continue;
             }
 
             var path = originalPath;
@@ -500,7 +452,7 @@ public sealed class LocalPackageLibrary
                 path = destination;
             }
 
-            physicalPackages.Add(new PhysicalPackage(path, hash, kind, metadata, legacyInvalid));
+            physicalPackages.Add(new PhysicalPackage(path, hash, kind, metadata, LegacyInvalid: false));
         }
 
         var canonicalPackages = new List<PhysicalPackage>();
@@ -935,7 +887,7 @@ public sealed class LocalPackageLibrary
     {
         PackageKind.WeaveMod => _paths.WeavePackagesDirectory,
         PackageKind.JavaAgent => _paths.AgentPackagesDirectory,
-        _ => _paths.UnclassifiedPackagesDirectory
+        _ => throw new InvalidDataException("Unsupported package type.")
     };
 
     private IEnumerable<string> LegacyPackageDirectories()
@@ -1268,12 +1220,14 @@ public sealed class LocalPackageLibrary
         PackageInfo? agent = isAgent ? _parser.ParseJavaAgent(path) : null;
 
         if (weave is not null && agent is not null)
-            return (PackageKind.Ambiguous, weave);
+            throw new InvalidDataException(
+                "Unsupported JAR: a package cannot declare both Weave mod metadata and a Java agent manifest.");
         if (weave is not null)
             return (PackageKind.WeaveMod, weave);
         if (agent is not null)
             return (PackageKind.JavaAgent, agent);
-        return (PackageKind.Unclassified, null);
+        throw new InvalidDataException(
+            "Unsupported JAR: Moonrise currently imports only Weave mods and Java agents.");
     }
 
     private static bool HasManifestValue(string raw, string name)
@@ -1635,10 +1589,10 @@ public sealed class PackageLaunchResolver
             .Select(group => group.First())
             .ToArray();
         var unsupported = enabled.FirstOrDefault(item =>
-            item.Kind is PackageKind.Ambiguous or PackageKind.Unclassified);
+            item.Kind is not (PackageKind.WeaveMod or PackageKind.JavaAgent));
         if (unsupported is not null)
             throw new InvalidOperationException(
-                $"{unsupported.OriginalFileName}: Unclassified package cannot be launched.");
+                $"{unsupported.OriginalFileName}: Unsupported package cannot be launched.");
 
         foreach (var package in enabled)
         {
@@ -1650,15 +1604,12 @@ public sealed class PackageLaunchResolver
             var actual = LocalPackageLibrary.ComputeSha256(package.FullPath);
             if (!string.Equals(actual, package.Sha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException($"{package.OriginalFileName}: Package integrity check failed.");
-            if (!string.Equals(package.Entrypoint, "Manual classification", StringComparison.Ordinal))
+            _ = package.Kind switch
             {
-                _ = package.Kind switch
-                {
-                    PackageKind.WeaveMod => _parser.ParseWeaveMod(package.FullPath),
-                    PackageKind.JavaAgent => _parser.ParseJavaAgent(package.FullPath),
-                    _ => throw new InvalidOperationException("Unclassified package cannot be launched.")
-                };
-            }
+                PackageKind.WeaveMod => _parser.ParseWeaveMod(package.FullPath),
+                PackageKind.JavaAgent => _parser.ParseJavaAgent(package.FullPath),
+                _ => throw new InvalidOperationException("Unsupported package cannot be launched.")
+            };
         }
 
         return new PackageLaunchSelection(
@@ -1672,8 +1623,7 @@ public sealed class PackageLaunchResolver
         return new[]
         {
             _paths!.WeavePackagesDirectory,
-            _paths.AgentPackagesDirectory,
-            _paths.UnclassifiedPackagesDirectory
+            _paths.AgentPackagesDirectory
         }.Any(root =>
         {
             var prefix = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) +

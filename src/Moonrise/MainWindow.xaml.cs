@@ -543,9 +543,7 @@ public partial class MainWindow : Window
             ? _library.Packages
             : AgentsKindButton.IsChecked == true
                 ? _agents
-                : UnclassifiedKindButton.IsChecked == true
-                    ? _library.Packages.Where(item => item.Kind is PackageKind.Ambiguous or PackageKind.Unclassified)
-                    : _mods;
+                : _mods;
         var search = LibrarySearchBox.Text.Trim();
         foreach (var package in query.Where(package => string.IsNullOrWhiteSpace(search) ||
                      package.DisplayName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
@@ -791,7 +789,7 @@ public partial class MainWindow : Window
             ? T("Запуск…", "Launching…")
             : T("Запустить", "Launch");
         LibraryTitle.Text = T("Библиотека пакетов", "Package library"); LibrarySubtitle.Text = T("Управление локальными Weave-модами и Java-агентами.", "Manage local Weave mods and Java agents.");
-        UpdateOpenPackageFolderButton(); AddPackageButton.Content = T("Добавить JAR", "Add JAR"); AllKindButton.Content = T("Все", "All"); ModsKindButton.Content = T("Weave-моды", "Weave mods"); AgentsKindButton.Content = T("Java-агенты", "Java agents"); UnclassifiedKindButton.Content = T("Без типа", "Unclassified"); DropTargetText.Text = T("Перетащите JAR-файлы сюда", "Drop JAR files here");
+        UpdateOpenPackageFolderButton(); AddPackageButton.Content = T("Добавить JAR", "Add JAR"); AllKindButton.Content = T("Все", "All"); ModsKindButton.Content = T("Weave-моды", "Weave mods"); AgentsKindButton.Content = T("Java-агенты", "Java agents"); DropTargetText.Text = T("Перетащите JAR-файлы сюда", "Drop JAR files here");
         DropTargetHint.Text = T("Weave-моды и Java-агенты определяются автоматически.", "Weave mods and Java agents are detected automatically.");
         PackageNameHeader.Text = T("ПАКЕТ", "PACKAGE"); EntrypointHeader.Text = T("ВЕРСИЯ", "VERSION"); PackageTypeHeader.Text = T("ТИП", "TYPE"); StateHeader.Text = T("СТАТУС", "STATUS");
         EmptyLibraryTitle.Text = T("Папка пуста", "This folder is empty"); EmptyLibraryText.Text = T("Добавьте совместимый JAR-пакет.", "Add a compatible JAR to continue.");
@@ -1515,7 +1513,7 @@ public partial class MainWindow : Window
         {
             package.IsEnabled = false;
             ShowError(T(
-                "Неклассифицированный пакет нельзя запустить.",
+                "Этот пакет не поддерживается.",
                 exception.Message));
         }
     }
@@ -2313,9 +2311,7 @@ public partial class MainWindow : Window
             ? _paths.WeavePackagesDirectory
             : AgentsKindButton.IsChecked == true
                 ? _paths.AgentPackagesDirectory
-                : UnclassifiedKindButton.IsChecked == true
-                    ? _paths.UnclassifiedPackagesDirectory
-                    : _paths.PackagesDirectory;
+                : _paths.PackagesDirectory;
 
     private void UpdateOpenPackageFolderButton()
     {
@@ -2325,9 +2321,7 @@ public partial class MainWindow : Window
             ? T("Открыть папку Weave-модов", "Open Weave mods folder")
             : AgentsKindButton.IsChecked == true
                 ? T("Открыть папку Java-агентов", "Open Java agents folder")
-                : UnclassifiedKindButton.IsChecked == true
-                    ? T("Открыть папку без типа", "Open unclassified folder")
-                    : T("Открыть папку пакетов", "Open package folder");
+                : T("Открыть папку пакетов", "Open package folder");
     }
 
     private void ImportFiles(IEnumerable<string> paths)
@@ -2338,7 +2332,6 @@ public partial class MainWindow : Window
             if (result.Status == PackageImportStatus.Imported && result.Package is not null)
             {
                 AddDiagnostic($"Imported {result.Package.OriginalFileName}; SHA-256={result.Package.Sha256}");
-                ResolveAmbiguousImport(result.Package);
             }
             else if (result.Status != PackageImportStatus.AlreadyImported)
             {
@@ -2350,26 +2343,6 @@ public partial class MainWindow : Window
         ShowImportSummary(summary);
     }
 
-    private void ResolveAmbiguousImport(PackageInfo imported)
-    {
-        var package = _library.Packages.FirstOrDefault(item =>
-            string.Equals(item.PackageId, imported.PackageId, StringComparison.OrdinalIgnoreCase));
-        if (package?.Kind != PackageKind.Ambiguous)
-            return;
-
-        var choice = MessageBox.Show(
-            this,
-            T(
-                $"«{package.OriginalFileName}» содержит и weave.mod.json, и Java-agent manifest.\n\nДа — Weave-мод\nНет — Java-агент\nОтмена — оставить отключённым.",
-                $"“{package.OriginalFileName}” contains both weave.mod.json and a Java-agent manifest.\n\nYes — Weave mod\nNo — Java agent\nCancel — keep it disabled."),
-            T("Выберите тип пакета", "Select package type"),
-            MessageBoxButton.YesNoCancel,
-            MessageBoxImage.Question);
-        if (choice == MessageBoxResult.Yes)
-            _library.SelectType(package, PackageKind.WeaveMod, _settings.DeveloperMode);
-        else if (choice == MessageBoxResult.No)
-            _library.SelectType(package, PackageKind.JavaAgent, _settings.DeveloperMode);
-    }
 
     private void ShowImportSummary(PackageImportSummary summary)
     {
@@ -2406,10 +2379,6 @@ public partial class MainWindow : Window
                 AddDiagnostic($"Incoming import failed for {Path.GetFileName(result.SourcePath)}: {result.Message}");
                 firstNewFailure ??= result;
             }
-        }
-        foreach (var result in summary.Results.Where(item => item.Status == PackageImportStatus.Imported && item.Package is not null))
-        {
-            ResolveAmbiguousImport(result.Package!);
         }
         LoadPackages();
         RefreshStorageSummary();
@@ -2601,43 +2570,12 @@ public partial class MainWindow : Window
             MessageBoxImage.Information);
     }
 
-    private void SelectPackageTypeMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        if ((sender as FrameworkElement)?.Tag is not PackageInfo package)
-            return;
-        if (package.Kind == PackageKind.Unclassified && !_settings.DeveloperMode)
-        {
-            ShowError(T(
-                "Ручной выбор типа доступен только в режиме разработчика.",
-                "Manual type selection is available only in Developer mode."));
-            return;
-        }
-        var choice = MessageBox.Show(
-            this,
-            T("Да — Weave-мод\nНет — Java-агент", "Yes — Weave mod\nNo — Java agent"),
-            T("Выберите тип пакета", "Select package type"),
-            MessageBoxButton.YesNoCancel,
-            MessageBoxImage.Question);
-        try
-        {
-            if (choice == MessageBoxResult.Yes)
-                _library.SelectType(package, PackageKind.WeaveMod, _settings.DeveloperMode);
-            else if (choice == MessageBoxResult.No)
-                _library.SelectType(package, PackageKind.JavaAgent, _settings.DeveloperMode);
-            LoadPackages();
-        }
-        catch (Exception exception)
-        {
-            ShowError(exception.Message);
-        }
-    }
 
     private string LocalizedPackageType(PackageKind kind) => kind switch
     {
         PackageKind.WeaveMod => T("Weave-мод", "Weave mod"),
         PackageKind.JavaAgent => T("Java-агент", "Java agent"),
-        PackageKind.Ambiguous => T("Неоднозначный", "Ambiguous"),
-        _ => T("Неклассифицированный", "Unclassified")
+        _ => T("Неподдерживаемый", "Unsupported")
     };
 
     private string LocalizePackageError(string message)
@@ -2648,6 +2586,10 @@ public partial class MainWindow : Window
             return "Пакет уже импортирован.";
         if (message.Contains("weave.mod.json is malformed", StringComparison.OrdinalIgnoreCase))
             return "Файл weave.mod.json повреждён.";
+        if (message.Contains("cannot declare both Weave mod metadata and a Java agent manifest", StringComparison.OrdinalIgnoreCase))
+            return "JAR одновременно объявляет Weave-мод и Java-агент. Такой пакет сейчас не поддерживается.";
+        if (message.Contains("Moonrise currently imports only Weave mods and Java agents", StringComparison.OrdinalIgnoreCase))
+            return "JAR не поддерживается. В библиотеку Moonrise можно добавлять только Weave-моды и Java-агенты; Forge/Fabric/обычные JAR не импортируются.";
         if (message.Contains("still in progress", StringComparison.OrdinalIgnoreCase))
             return "Копирование файла ещё не завершено.";
         if (message.Contains("managed package file is missing", StringComparison.OrdinalIgnoreCase))
@@ -2666,12 +2608,10 @@ public partial class MainWindow : Window
     public string PackageDetailsMenuText => T("Сведения о пакете", "Package details");
     public string VerifyIntegrityMenuText => T("Проверить целостность", "Verify integrity");
     public string RevealManagedFileMenuText => T("Показать управляемый файл", "Reveal managed file");
-    public string SelectPackageTypeMenuText => T("Выбрать тип (расширенно)", "Select package type (advanced)");
     public string CatalogInstallText => T("Установить", "Install");
     public string DeletePackageText => T("Удалить", "Delete");
     public string WeaveTypeText => T("Weave-мод", "Weave mod");
     public string AgentTypeText => T("Java-агент", "Java agent");
-    public string UnclassifiedTypeText => T("Без типа", "Unclassified");
 
     private static void OpenExternalUrl(string url) =>
         Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
