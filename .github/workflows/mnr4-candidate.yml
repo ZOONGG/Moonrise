@@ -101,10 +101,11 @@ jobs:
         run: |
           $bridgeHash = (Get-FileHash -Algorithm SHA256 "runtime/bridge/Moonrise.Native.dll").Hash
           @(
-            "source_commit=${{ github.sha }}"
+            "source_commit=${{ github.event.pull_request.head.sha || github.sha }}"
+            "verification_commit=${{ github.sha }}"
             "protocol=MNR4"
             "bridge_sha256=$bridgeHash"
-            "runtime_change_committed=false"
+            "runtime_change_committed=true"
             "purpose=real Lunar smoke test only"
           ) | Set-Content "artifacts/mnr4-candidate/MNR4-CANDIDATE.txt" -Encoding ascii
 
