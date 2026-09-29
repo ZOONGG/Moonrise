@@ -282,6 +282,30 @@ public sealed class LocalPackageLibraryTests
     }
 
     [Fact]
+    public void Load_PreservesDeprecatedUnclassifiedJarOutsideActiveLibrary()
+    {
+        using var temp = new TestDirectory();
+        var paths = new AppPaths(temp.Path);
+        Directory.CreateDirectory(paths.UnclassifiedPackagesDirectory);
+        var source = Path.Combine(paths.UnclassifiedPackagesDirectory, "old-unsupported.jar");
+        CreateJar(source, null, "Manifest-Version: 1.0\r\n", "legacy-unsupported");
+        var expectedBytes = File.ReadAllBytes(source);
+        var expectedHash = Hash(source);
+
+        var library = new LocalPackageLibrary(paths, new JarMetadataParser());
+        library.Load();
+
+        Assert.Empty(library.Packages);
+        Assert.False(Directory.Exists(paths.UnclassifiedPackagesDirectory));
+        var preserved = Assert.Single(Directory.EnumerateFiles(
+            Path.Combine(paths.LegacyPreservedMetadataDirectory, "unsupported-jars"),
+            "*.jar",
+            SearchOption.TopDirectoryOnly));
+        Assert.Equal(expectedHash, Hash(preserved));
+        Assert.Equal(expectedBytes, File.ReadAllBytes(preserved));
+    }
+
+    [Fact]
     public void Removal_DeletesManagedCopyAndMetadataButPreservesExternalOriginal()
     {
         using var temp = new TestDirectory();
