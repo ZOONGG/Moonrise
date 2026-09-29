@@ -64,6 +64,7 @@ try {
         }
     }
 
+    Install-Moonrise
     Write-Host "[installer-smoke] Clean install complete"
     $executable = Join-Path $installDirectory "Moonrise.exe"
     $uninstaller = Join-Path $installDirectory "unins000.exe"
@@ -83,7 +84,7 @@ try {
         if ($PortableLaunchIsolation) {
             New-Item -ItemType File -Path $portableMarker | Out-Null
         }
-        Write-Output "[installer-smoke] Launch installed Moonrise"
+        Write-Host "[installer-smoke] Launch installed Moonrise"
         $application = Start-Process -FilePath $executable -WorkingDirectory $installDirectory -PassThru
         Start-Sleep -Seconds 5
         if ($application.HasExited) {
@@ -113,6 +114,7 @@ try {
     New-Item -ItemType Directory -Path $settingsDirectory -Force | Out-Null
     Set-Content -LiteralPath $sentinel -Value "preserve"
 
+    Install-Moonrise
     Write-Host "[installer-smoke] Upgrade install complete"
     if (-not (Test-Path -LiteralPath $sentinel)) {
         throw "Upgrade removed Moonrise user data."
