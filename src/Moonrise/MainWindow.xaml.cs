@@ -3001,34 +3001,6 @@ public partial class MainWindow : Window
                 .Select(item => item.PackageId)
                 .ToArray();
             var enabledModDirectoryService = new EnabledModDirectoryService(_jarParser);
-            var successorResolution = await Task.Run(() =>
-                _compatibilityBuilds.ResolveMoonriseOwnedSuccessors(selectedVersion, enabledMods));
-            if (successorResolution.AppliedSuccessors.Count > 0)
-            {
-                enabledMods = successorResolution.LaunchMods;
-                selection = new PackageLaunchSelection(enabledMods, enabledAgents);
-                foreach (var successor in successorResolution.AppliedSuccessors)
-                {
-                    AddDiagnostic(
-                        $"Moonrise-owned successor applied: {successor.RequestedPackage.OriginalFileName}; " +
-                        $"target SHA-256={successor.RequestedPackage.Sha256}; successor={successor.SuccessorPackage.DisplayName}; " +
-                        $"successor SHA-256={successor.SuccessorPackage.Sha256}");
-                }
-                launchReport.Set(
-                    "moonriseOwnedSuccessors",
-                    successorResolution.AppliedSuccessors.Select(item => new
-                    {
-                        item.Rule.Id,
-                        RequestedPackageId = item.RequestedPackage.PackageId,
-                        RequestedSha256 = item.RequestedPackage.Sha256,
-                        SuccessorPackageId = item.SuccessorPackage.PackageId,
-                        SuccessorSha256 = item.SuccessorPackage.Sha256,
-                        item.Rule.SuccessorIdentifier,
-                        item.Rule.MinecraftVersion,
-                        item.Rule.WeaveLoaderVersion
-                    }).ToArray());
-            }
-
             // Exact-hash maintained builds must be considered before choosing the
             // loader generation. Otherwise one old mod downgrades every package to
             // Weave 0.2.x and bypasses the known Weave 1.x compatibility builds.
