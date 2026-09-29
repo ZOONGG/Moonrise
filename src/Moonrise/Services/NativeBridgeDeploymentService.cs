@@ -6,7 +6,7 @@ namespace Moonrise.Services;
 public sealed class NativeBridgeDeploymentService
 {
     public const string ResourceName = "Moonrise.NativeBridge.dll";
-    public const string ExpectedSha256 = "C502099A884B00632561EB439DB4B25EBE74FE04B0E44FE0E27A4C21286E2500";
+    public const string ExpectedSha256 = "FF3CF0EEC2B4DF0BA4580A8666668E90BDB0E44C779ECF2BC0061E19929D931F";
 
     private readonly Func<Stream> _openResource;
     private readonly string _expectedSha256;
