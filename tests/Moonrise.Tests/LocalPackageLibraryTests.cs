@@ -331,15 +331,22 @@ public sealed class LocalPackageLibraryTests
     }
 
     [Fact]
-    public void LaunchResolution_BlocksEnabledUnclassifiedPackageClearly()
+    public void LaunchResolution_BlocksStaleEnabledUnclassifiedPackageClearly()
     {
         using var temp = new TestDirectory();
-        var library = CreateLibrary(temp.Path);
         var plain = Path.Combine(temp.Path, "plain.jar");
         CreateJar(plain, null, "Manifest-Version: 1.0\r\n", "plain");
-        library.Import(plain);
-        var package = library.Packages.Single();
-        package.IsEnabled = true;
+        var package = new PackageInfo
+        {
+            PackageId = "sha256:legacy-unclassified",
+            FileName = "plain.jar",
+            OriginalFileName = "plain.jar",
+            DisplayName = "plain",
+            Identifier = "legacy-unclassified",
+            FullPath = plain,
+            Kind = PackageKind.Unclassified,
+            IsEnabled = true
+        };
 
         var exception = Assert.Throws<InvalidOperationException>(() =>
             new PackageLaunchResolver(new JarMetadataParser()).Resolve([package]));
