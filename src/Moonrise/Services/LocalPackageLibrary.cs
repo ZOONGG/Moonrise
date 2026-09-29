@@ -109,7 +109,7 @@ public sealed class LocalPackageLibrary
     public ObservableCollection<PackageInfo> Packages { get; } = [];
     public string IndexPath => _paths.PackageIndexPath;
     public IReadOnlyList<string> CategoryDirectories =>
-        [_paths.WeavePackagesDirectory, _paths.AgentPackagesDirectory, _paths.UnclassifiedPackagesDirectory];
+        [_paths.WeavePackagesDirectory, _paths.AgentPackagesDirectory];
     public PackageStorageMigrationResult? LastLayoutMigrationResult { get; private set; }
     public PackageReconciliationResult? LastReconciliationResult { get; private set; }
 
@@ -337,43 +337,6 @@ public sealed class LocalPackageLibrary
         }
     }
 
-    public void SelectType(PackageInfo package, PackageKind kind, bool developerMode)
-    {
-        ArgumentNullException.ThrowIfNull(package);
-        if (kind is not (PackageKind.WeaveMod or PackageKind.JavaAgent))
-            throw new ArgumentOutOfRangeException(nameof(kind));
-        if (package.Kind == PackageKind.Unclassified && !developerMode)
-            throw new InvalidOperationException("Developer mode is required to classify this package manually.");
-
-        lock (_sync)
-        {
-            var record = FindRecord(package.PackageId);
-            PackageInfo? parsed = null;
-            if (record.Kind != PackageKind.Unclassified)
-            {
-                parsed = kind == PackageKind.WeaveMod
-                    ? _parser.ParseWeaveMod(package.FullPath)
-                    : _parser.ParseJavaAgent(package.FullPath);
-            }
-            record.Kind = kind;
-            if (parsed is not null)
-            {
-                record.DisplayName = parsed.DisplayName;
-                record.Identifier = parsed.Identifier;
-                record.Version = parsed.Version;
-                record.Entrypoint = parsed.Entrypoint;
-            }
-            else
-            {
-                record.Entrypoint = "Manual classification";
-            }
-            record.Enabled = false;
-            MoveRecordToCategory(record);
-            SaveIndex();
-            ReplaceCollection();
-        }
-    }
-
     public bool VerifyIntegrity(PackageInfo package)
     {
         ArgumentNullException.ThrowIfNull(package);
@@ -459,28 +422,16 @@ public sealed class LocalPackageLibrary
 
             PackageKind kind;
             PackageInfo? metadata;
-            var legacyInvalid = recordAtPath is not null &&
-                string.Equals(
-                    recordAtPath.LastIntegrityCheckResult,
-                    "legacy-invalid",
-                    StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(recordAtPath.Sha256, hash, StringComparison.OrdinalIgnoreCase);
             try
             {
                 ValidateSource(originalPath);
                 (kind, metadata) = Detect(originalPath);
-                legacyInvalid = false;
             }
             catch (Exception exception) when (
                 exception is InvalidDataException or IOException or UnauthorizedAccessException)
             {
-                if (!legacyInvalid)
-                {
-                    errors.Add($"{Path.GetFileName(originalPath)}: {exception.Message}");
-                    continue;
-                }
-                kind = PackageKind.Unclassified;
-                metadata = null;
+                errors.Add($"{Path.GetFileName(originalPath)}: {exception.Message}");
+                continue;
             }
 
             var path = originalPath;
@@ -500,7 +451,7 @@ public sealed class LocalPackageLibrary
                 path = destination;
             }
 
-            physicalPackages.Add(new PhysicalPackage(path, hash, kind, metadata, legacyInvalid));
+            physicalPackages.Add(new PhysicalPackage(path, hash, kind, metadata, LegacyInvalid: false));
         }
 
         var canonicalPackages = new List<PhysicalPackage>();
@@ -714,7 +665,6 @@ public sealed class LocalPackageLibrary
 
             PackageKind kind;
             PackageInfo? metadata;
-            var invalid = false;
             try
             {
                 ValidateSource(source);
@@ -723,18 +673,23 @@ public sealed class LocalPackageLibrary
             catch (Exception exception) when (
                 exception is InvalidDataException or IOException or UnauthorizedAccessException)
             {
-                kind = PackageKind.Unclassified;
-                metadata = null;
-                invalid = true;
-                migrationLog.Add($"INVALID legacy JAR preserved; SHA-256={hash}; source={source}; reason={exception.Message}");
+                var preserved = SelectInvalidLegacyDestination(source, hash);
+                StoreVerifiedFile(source, preserved, hash, ".migrating");
+                PreserveLastWriteTime(source, preserved);
+                VerifyPathHash(preserved, hash);
+                if (!string.Equals(source, preserved, StringComparison.OrdinalIgnoreCase))
+                    File.Delete(source);
+                migrationLog.Add(
+                    $"PRESERVED unsupported legacy JAR outside active categories; SHA-256={hash}; " +
+                    $"source={source}; reason={exception.Message}");
+                migratedLegacyFiles++;
+                continue;
             }
 
-            var destination = invalid
-                ? SelectInvalidLegacyDestination(source, hash)
-                : SelectFriendlyDestination(
-                    GetCategoryDirectory(kind),
-                    Path.GetFileName(source),
-                    hash);
+            var destination = SelectFriendlyDestination(
+                GetCategoryDirectory(kind),
+                Path.GetFileName(source),
+                hash);
             StoreVerifiedFile(source, destination, hash, ".migrating");
             PreserveLastWriteTime(source, destination);
             VerifyPathHash(destination, hash);
@@ -748,14 +703,14 @@ public sealed class LocalPackageLibrary
                 sourceType: "legacy",
                 sourceUrl: null,
                 enabled: false);
-            record.LastIntegrityCheckResult = invalid ? "legacy-invalid" : "verified";
+            record.LastIntegrityCheckResult = "verified";
             _index.Packages.Add(record);
             SaveIndex();
             VerifyManagedCopy(record);
             if (!string.Equals(source, destination, StringComparison.OrdinalIgnoreCase))
                 File.Delete(source);
             migrationLog.Add(
-                $"{(invalid ? "PRESERVED invalid" : "MIGRATED unique")} legacy JAR -> " +
+                $"MIGRATED unique legacy JAR -> " +
                 $"{Path.GetRelativePath(_paths.PackagesDirectory, destination)}; SHA-256={hash}");
             migratedLegacyFiles++;
         }
@@ -959,8 +914,8 @@ public sealed class LocalPackageLibrary
         var friendly = SanitizeFriendlyJarFileName(Path.GetFileName(source));
         var stem = Path.GetFileNameWithoutExtension(friendly);
         return SelectFriendlyDestination(
-            _paths.UnclassifiedPackagesDirectory,
-            $"{stem}--legacy-invalid-{hash[..8].ToLowerInvariant()}.jar",
+            Path.Combine(_paths.LegacyPreservedMetadataDirectory, "unsupported-jars"),
+            $"{stem}--unsupported-{hash[..8].ToLowerInvariant()}.jar",
             hash);
     }
 
@@ -1159,9 +1114,7 @@ public sealed class LocalPackageLibrary
         }
 
         var detection = Detect(source);
-        if (expectedKind is { } expected &&
-            detection.Kind is PackageKind.WeaveMod or PackageKind.JavaAgent &&
-            detection.Kind != expected)
+        if (expectedKind is { } expected && detection.Kind != expected)
         {
             throw new InvalidDataException("The stored package type does not match its legacy location.");
         }
@@ -1185,7 +1138,7 @@ public sealed class LocalPackageLibrary
             detection.Metadata,
             sourceType,
             sourceUrl,
-            enabledOverride && detection.Kind is PackageKind.WeaveMod or PackageKind.JavaAgent);
+            enabledOverride);
         _index.Packages.Add(record);
         SaveIndex();
         VerifyManagedCopy(record);
@@ -1268,12 +1221,16 @@ public sealed class LocalPackageLibrary
         PackageInfo? agent = isAgent ? _parser.ParseJavaAgent(path) : null;
 
         if (weave is not null && agent is not null)
-            return (PackageKind.Ambiguous, weave);
+        {
+            throw new InvalidDataException(
+                "Ambiguous JAR: it declares both weave.mod.json and Java-agent entrypoints.");
+        }
         if (weave is not null)
             return (PackageKind.WeaveMod, weave);
         if (agent is not null)
             return (PackageKind.JavaAgent, agent);
-        return (PackageKind.Unclassified, null);
+        throw new InvalidDataException(
+            "Unsupported JAR: expected weave.mod.json for a Weave mod or Premain-Class/Agent-Class for a Java agent.");
     }
 
     private static bool HasManifestValue(string raw, string name)
@@ -1672,8 +1629,7 @@ public sealed class PackageLaunchResolver
         return new[]
         {
             _paths!.WeavePackagesDirectory,
-            _paths.AgentPackagesDirectory,
-            _paths.UnclassifiedPackagesDirectory
+            _paths.AgentPackagesDirectory
         }.Any(root =>
         {
             var prefix = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) +

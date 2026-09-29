@@ -88,7 +88,6 @@ public sealed class AppPaths
         Directory.CreateDirectory(PackagesDirectory);
         Directory.CreateDirectory(WeavePackagesDirectory);
         Directory.CreateDirectory(AgentPackagesDirectory);
-        Directory.CreateDirectory(UnclassifiedPackagesDirectory);
         Directory.CreateDirectory(PackageMetadataDirectory);
         Directory.CreateDirectory(AdaptersDirectory);
         Directory.CreateDirectory(CacheDirectory);
@@ -114,7 +113,6 @@ public sealed class AppPaths
             "RU:\r\n" +
             "- Копируйте Weave-моды в папку weave.\r\n" +
             "- Копируйте Java-агенты в папку agents.\r\n" +
-            "- Файлы, тип которых не удалось определить, появляются в папке unclassified и остаются отключёнными.\r\n" +
             "- Также можно использовать «Добавить JAR» или перетаскивание.\r\n" +
             "- Moonrise автоматически обнаруживает новые файлы; кнопка повторного сканирования не требуется.\r\n" +
             "- Не изменяйте содержимое папки metadata вручную.\r\n" +
@@ -124,7 +122,6 @@ public sealed class AppPaths
             "EN:\r\n" +
             "- Copy Weave mods into the weave folder.\r\n" +
             "- Copy Java agents into the agents folder.\r\n" +
-            "- Files whose type cannot be resolved appear in unclassified and remain disabled.\r\n" +
             "- You can also use Add JAR or drag and drop.\r\n" +
             "- Moonrise detects new files automatically; no Rescan button is required.\r\n" +
             "- Do not edit the metadata folder manually.\r\n" +
