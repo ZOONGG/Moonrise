@@ -38,6 +38,7 @@ public partial class MainWindow : Window
     private readonly WeaveModApiInspector _weaveApiInspector = new();
     private readonly LaunchSessionService _launchSessions = new();
     private readonly LauncherExecutableDetector _launcherDetector = new();
+    private readonly LunarLaunchLifecycleService _lunarLifecycle = new();
     private readonly LauncherProfileService _profileService = new();
     private readonly LunarProfileReadinessService _profileReadiness = new();
     private readonly WeaveAgentService _weaveAgent = new();
@@ -75,6 +76,9 @@ public partial class MainWindow : Window
     private readonly MoonriseSettings _settings;
     private CancellationTokenSource? _monitorCancellation;
     private int _launchInProgress;
+    private long _launchAttemptSequence;
+    private string? _activeLaunchAttemptId;
+    private int _activeLaunchCommandSent;
     private SafeLogger? _logger;
     private SafeLogger? _lunarWindowLogger;
     private bool _initialized;
@@ -86,6 +90,7 @@ public partial class MainWindow : Window
     private Forms.ToolStripMenuItem? _trayExitItem;
     private PackageInfo? _pendingDeletePackage;
     private Action? _pendingConfirmationAction;
+    private TaskCompletionSource<bool>? _lunarClosePromptCompletion;
     private UpdateRelease? _availableUpdate;
     private string? _pendingActivationArgument;
     private bool _catalogReady;
@@ -229,6 +234,7 @@ public partial class MainWindow : Window
             CloseAfterLaunchCheckBox.IsChecked = _settings.CloseAfterLaunch;
             _settings.BackgroundLunarLaunch = true;
             RevealLunarCheckBox.IsChecked = _settings.RevealLunarWhenActionRequired;
+            AutoCloseLunarCheckBox.IsChecked = _settings.AutoCloseLunarBeforeLaunch;
             CheckForUpdatesCheckBox.IsChecked = _settings.CheckForUpdates;
             PrereleaseUpdatesCheckBox.IsChecked = _settings.IncludePrereleaseUpdates;
             DeveloperModeCheckBox.IsChecked = _settings.DeveloperMode;
@@ -806,6 +812,7 @@ public partial class MainWindow : Window
         LauncherPathTitle.Text = "Lunar Launcher"; LauncherPathHint.Text = T("Исполняемый файл лаунчера", "Launcher executable"); BrowseLauncherButton.Content = T("Выбрать", "Browse");
         CloseAfterTitle.Text = T("Закрывать после запуска", "Close after launch"); CloseAfterHint.Text = T("Закрыть Moonrise после запуска игрового процесса.", "Close Moonrise when the game process starts.");
         RevealLunarTitle.Text = T("Показывать Lunar, если требуется действие", "Show Lunar when action is required"); RevealLunarHint.Text = T("Показать официальный лаунчер для входа, обновления или другого действия.", "Reveal the official launcher for authentication, updates, or other interaction.");
+        AutoCloseLunarTitle.Text = T("Автоматически закрывать Lunar перед запуском", "Automatically close Lunar before launch"); AutoCloseLunarHint.Text = T("Закрыть только официальный Lunar Launcher перед началом новой сессии Moonrise.", "Close only the official Lunar Launcher before Moonrise starts a new session.");
         StorageTitle.Text = T("Пакеты Moonrise занимают:", "Moonrise packages use:");
         StorageHint.Text = T("Откройте папку данных Moonrise.", "Open the Moonrise data directory.");
         OpenRootButton.Content = T("Открыть папку", "Open folder");
@@ -2643,6 +2650,59 @@ public partial class MainWindow : Window
         SaveSettings();
     }
 
+    private void AutoCloseLunarCheckBox_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.AutoCloseLunarBeforeLaunch = AutoCloseLunarCheckBox.IsChecked == true;
+        SaveSettings();
+    }
+
+    private Task<bool> PromptToCloseRunningLunarAsync()
+    {
+        if (_lunarClosePromptCompletion is { Task.IsCompleted: false })
+            return _lunarClosePromptCompletion.Task;
+
+        _lunarClosePromptCompletion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        LunarRunningTitle.Text = T("Lunar Client уже запущен", "Lunar Client is already running");
+        LunarRunningSubtitle.Text = T(
+            "Для запуска через Moonrise нужно закрыть Lunar Client.",
+            "Moonrise needs Lunar Client to be closed before starting a new session.");
+        LunarRunningDetail.Text = T(
+            "Закрыть Lunar автоматически и продолжить?",
+            "Close Lunar automatically and continue?");
+        LunarRunningRememberCheckBox.Content = T("Запомнить мой выбор", "Remember my choice");
+        LunarRunningRememberCheckBox.IsChecked = false;
+        LunarRunningCancelButton.Content = T("Отмена", "Cancel");
+        LunarRunningConfirmButton.Content = T("Закрыть Lunar и продолжить", "Close Lunar and continue");
+        LunarRunningOverlay.Visibility = Visibility.Visible;
+        LunarRunningOverlay.IsHitTestVisible = true;
+        LunarRunningCancelButton.Focus();
+        return _lunarClosePromptCompletion.Task;
+    }
+
+    private void LunarRunningCancelButton_Click(object sender, RoutedEventArgs e) =>
+        CompleteLunarRunningPrompt(false);
+
+    private void LunarRunningConfirmButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (LunarRunningRememberCheckBox.IsChecked == true)
+        {
+            _settings.AutoCloseLunarBeforeLaunch = true;
+            AutoCloseLunarCheckBox.IsChecked = true;
+            SaveSettings();
+        }
+        CompleteLunarRunningPrompt(true);
+    }
+
+    private void CompleteLunarRunningPrompt(bool result)
+    {
+        LunarRunningOverlay.IsHitTestVisible = false;
+        LunarRunningOverlay.Visibility = Visibility.Collapsed;
+        LunarRunningRememberCheckBox.IsChecked = false;
+        var completion = _lunarClosePromptCompletion;
+        _lunarClosePromptCompletion = null;
+        completion?.TrySetResult(result);
+    }
+
     private void ClearTemporaryFilesButton_Click(object sender, RoutedEventArgs e)
     {
         if (Volatile.Read(ref _launchInProgress) == 1)
@@ -2860,6 +2920,7 @@ public partial class MainWindow : Window
         _settings.SafeLaunch = false;
         _settings.BackgroundLunarLaunch = true;
         _settings.RevealLunarWhenActionRequired = RevealLunarCheckBox.IsChecked == true;
+        _settings.AutoCloseLunarBeforeLaunch = AutoCloseLunarCheckBox.IsChecked == true;
         _settings.LaunchTimeoutSeconds = Math.Clamp(_settings.LaunchTimeoutSeconds, 30, 600);
         _settings.CheckForUpdates = CheckForUpdatesCheckBox.IsChecked == true;
         _settings.IncludePrereleaseUpdates = PrereleaseUpdatesCheckBox.IsChecked == true;
@@ -2873,9 +2934,17 @@ public partial class MainWindow : Window
 
     private async void LaunchButton_Click(object sender, RoutedEventArgs e)
     {
-        if (Interlocked.CompareExchange(ref _launchInProgress, 1, 0) != 0) return;
+        if (Interlocked.CompareExchange(ref _launchInProgress, 1, 0) != 0)
+        {
+            AddDiagnostic($"Duplicate launch request blocked; activeAttempt={_activeLaunchAttemptId ?? "unknown"}");
+            return;
+        }
 
         var launchStartedUtc = DateTimeOffset.UtcNow;
+        var launchAttemptId = $"{launchStartedUtc:yyyyMMddHHmmssfff}-{Interlocked.Increment(ref _launchAttemptSequence)}";
+        Interlocked.Exchange(ref _activeLaunchAttemptId, launchAttemptId);
+        Interlocked.Exchange(ref _activeLaunchCommandSent, 0);
+        AddDiagnostic($"Launch attempt started: id={launchAttemptId}");
         var monitorOwnsLaunchGate = false;
         LaunchSession? launchSession = null;
         SanitizedLaunchReport? launchReport = null;
@@ -2901,6 +2970,7 @@ public partial class MainWindow : Window
             launchReport = new SanitizedLaunchReport(_paths.LogsDirectory);
             launchReport.Set("launchStage", "preflight");
             launchReport.Set("launchStartedUtc", launchStartedUtc.ToString("O"));
+            launchReport.Set("launchAttemptId", launchAttemptId);
             if (!string.Equals(SelectedClient, "lunar", StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(SelectedVersion, "1.8.9", StringComparison.OrdinalIgnoreCase))
             {
@@ -3018,11 +3088,74 @@ public partial class MainWindow : Window
             if (!LauncherExecutableDetector.IsSupportedLauncher(launcherPath))
                 throw new InvalidDataException(T("Выберите официальный Lunar Client.exe.", "Select the official Lunar Client.exe."));
 
-            var running = _launcherDetector.GetRunningLaunchers();
-            if (running.Count > 0)
+            var prelaunch = await Task.Run(() => _lunarLifecycle.Capture(launcherPath), token);
+            AddDiagnostic(
+                $"Launch preflight: attempt={launchAttemptId}; launcherRunning={prelaunch.LauncherRunning}; " +
+                $"launcherPids=[{string.Join(",", prelaunch.LauncherProcessIds)}]; " +
+                $"visibleLunarWindows={prelaunch.VisibleLauncherWindowCount}; " +
+                $"minecraftRunning={prelaunch.MinecraftRunning}; minecraftPids=[{string.Join(",", prelaunch.MinecraftProcessIds)}]");
+            launchReport.Set("prelaunchLauncherProcessIds", prelaunch.LauncherProcessIds);
+            launchReport.Set("prelaunchMinecraftProcessIds", prelaunch.MinecraftProcessIds);
+            launchReport.Set("visibleLunarWindowsBeforeClose", prelaunch.VisibleLauncherWindowCount);
+
+            if (prelaunch.MinecraftRunning)
             {
-                foreach (var process in running) process.Dispose();
-                throw new InvalidOperationException(T("Сначала полностью закройте Lunar Launcher.", "Close Lunar Launcher completely before launching."));
+                launchReport.Set("launchBlockedReason", "minecraft-already-running");
+                throw new InvalidOperationException(T(
+                    "Minecraft уже запущен. Закройте текущую игру перед новым запуском через Moonrise.",
+                    "Minecraft is already running. Close the current game before starting another Moonrise launch."));
+            }
+
+            if (prelaunch.LauncherRunning)
+            {
+                var closeApproved = _settings.AutoCloseLunarBeforeLaunch;
+                if (!closeApproved)
+                {
+                    AddDiagnostic($"Lunar close prompt shown: attempt={launchAttemptId}");
+                    closeApproved = await PromptToCloseRunningLunarAsync();
+                    if (!closeApproved)
+                    {
+                        AddDiagnostic($"Launch cancelled at Lunar close prompt: attempt={launchAttemptId}");
+                        launchReport.Set("launchStage", "cancelled");
+                        launchReport.Set("launchBlockedReason", "user-cancelled-lunar-close");
+                        launchReport.Save();
+                        SetStatus(
+                            T("Запуск отменён", "Launch cancelled"),
+                            StatusLevel.Ready,
+                            T("Lunar Client оставлен запущенным.", "Lunar Client was left running."));
+                        return;
+                    }
+                }
+
+                AddDiagnostic(
+                    $"Lunar close requested: attempt={launchAttemptId}; auto={_settings.AutoCloseLunarBeforeLaunch}; " +
+                    $"pids=[{string.Join(",", prelaunch.LauncherProcessIds)}]");
+                launchReport.Set("lunarCloseRequested", true);
+                var closeResult = await _lunarLifecycle.CloseLauncherAsync(
+                    launcherPath,
+                    TimeSpan.FromSeconds(3),
+                    TimeSpan.FromSeconds(2),
+                    token);
+                var afterClose = await Task.Run(() => _lunarLifecycle.Capture(launcherPath), token);
+                AddDiagnostic(
+                    $"Lunar close result: attempt={launchAttemptId}; success={closeResult.Success}; " +
+                    $"graceful=[{string.Join(",", closeResult.GracefullyClosedProcessIds)}]; " +
+                    $"forced=[{string.Join(",", closeResult.ForceTerminatedProcessIds)}]; " +
+                    $"remaining=[{string.Join(",", closeResult.RemainingProcessIds)}]; " +
+                    $"visibleLunarWindowsAfter={afterClose.VisibleLauncherWindowCount}");
+                launchReport.Set("lunarCloseSuccess", closeResult.Success);
+                launchReport.Set("lunarGracefullyClosedProcessIds", closeResult.GracefullyClosedProcessIds);
+                launchReport.Set("lunarForceTerminatedProcessIds", closeResult.ForceTerminatedProcessIds);
+                launchReport.Set("lunarRemainingProcessIds", closeResult.RemainingProcessIds);
+                launchReport.Set("visibleLunarWindowsAfterClose", afterClose.VisibleLauncherWindowCount);
+                if (!closeResult.Success || afterClose.LauncherRunning)
+                    throw new InvalidOperationException(T(
+                        "Не удалось полностью закрыть Lunar Client. Закройте его вручную и повторите запуск.",
+                        "Moonrise could not fully close Lunar Client. Close it manually and try again."));
+            }
+            else
+            {
+                launchReport.Set("lunarCloseRequested", false);
             }
 
             profileSelection = _profileService.BeginExactProfileSelection(SelectedClient, SelectedVersion);
@@ -3271,8 +3404,22 @@ public partial class MainWindow : Window
     private async Task DispatchLaunchToExistingLunarAsync(
         string launcherPath,
         bool backgroundLaunch,
+        string launchAttemptId,
         CancellationToken cancellationToken)
     {
+        if (!string.Equals(_activeLaunchAttemptId, launchAttemptId, StringComparison.Ordinal))
+            throw new InvalidOperationException("The active launch attempt changed before Lunar dispatch.");
+        if (Interlocked.CompareExchange(ref _activeLaunchCommandSent, 1, 0) != 0)
+        {
+            AddDiagnostic($"Duplicate Lunar deeplink send blocked: attempt={launchAttemptId}; sendCount=1");
+            return;
+        }
+
+        var beforeSend = _lunarLifecycle.Capture(launcherPath);
+        AddDiagnostic(
+            $"Lunar deeplink dispatch: attempt={launchAttemptId}; sendCount=1; " +
+            $"launcherPids=[{string.Join(",", beforeSend.LauncherProcessIds)}]; " +
+            $"visibleLunarWindows={beforeSend.VisibleLauncherWindowCount}");
         var background = _activeLunarBackground;
         await Task.Run(async () =>
         {
@@ -3282,9 +3429,12 @@ public partial class MainWindow : Window
                 LaunchDeepLink);
             using var sender = Process.Start(startInfo)
                 ?? throw new InvalidOperationException("Unable to send the launch command to Lunar Client.");
-            AddDiagnostic($"Lunar launch command sent through hidden IPC sender: PID {sender.Id}");
+            AddDiagnostic(
+                $"Lunar launch command sent through hidden IPC sender: attempt={launchAttemptId}; PID {sender.Id}; sendCount=1");
 
-            var hideUntil = backgroundLaunch ? DateTimeOffset.UtcNow + TimeSpan.FromSeconds(3) : DateTimeOffset.UtcNow;
+            var hideUntil = backgroundLaunch
+                ? DateTimeOffset.UtcNow + TimeSpan.FromSeconds(3)
+                : DateTimeOffset.UtcNow;
             while (backgroundLaunch && DateTimeOffset.UtcNow < hideUntil)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -3302,10 +3452,27 @@ public partial class MainWindow : Window
                 }
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                 {
+                    AddDiagnostic(
+                        $"Lunar IPC sender timeout: attempt={launchAttemptId}; PID {sender.Id}; terminating sender only.");
+                    try
+                    {
+                        sender.Kill(entireProcessTree: false);
+                        await sender.WaitForExitAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(2));
+                    }
+                    catch
+                    {
+                    }
                     throw new InvalidOperationException(
-                        "Lunar launch command sender did not exit; a duplicate launcher was prevented.");
+                        "Lunar launch command sender did not exit; the sender was stopped to prevent duplicate launcher windows.");
                 }
             }
+
+            background?.HideOwnedWindows();
+            var afterSend = _lunarLifecycle.Capture(launcherPath);
+            AddDiagnostic(
+                $"Lunar deeplink dispatch complete: attempt={launchAttemptId}; senderPid={sender.Id}; " +
+                $"visibleLunarWindows={afterSend.VisibleLauncherWindowCount}; " +
+                $"launcherPids=[{string.Join(",", afterSend.LauncherProcessIds)}]");
         }, cancellationToken);
     }
 
@@ -3776,7 +3943,14 @@ public partial class MainWindow : Window
     private void EndLaunchAttempt()
     {
         _activeLaunchPackageIds.Clear();
-        if (Interlocked.Exchange(ref _launchInProgress, 0) == 0 || Dispatcher.HasShutdownStarted) return;
+        var attemptId = Interlocked.Exchange(ref _activeLaunchAttemptId, null);
+        Interlocked.Exchange(ref _activeLaunchCommandSent, 0);
+        if (Interlocked.Exchange(ref _launchInProgress, 0) == 0)
+            return;
+        if (!string.IsNullOrWhiteSpace(attemptId))
+            AddDiagnostic($"Launch attempt ended: id={attemptId}");
+        if (Dispatcher.HasShutdownStarted)
+            return;
 
         void UpdateButton()
         {

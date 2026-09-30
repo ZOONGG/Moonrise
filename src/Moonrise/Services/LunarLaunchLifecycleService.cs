@@ -5,7 +5,8 @@ namespace Moonrise.Services;
 
 public sealed record LunarPrelaunchSnapshot(
     IReadOnlyList<int> LauncherProcessIds,
-    IReadOnlyList<int> MinecraftProcessIds)
+    IReadOnlyList<int> MinecraftProcessIds,
+    int VisibleLauncherWindowCount)
 {
     public bool LauncherRunning => LauncherProcessIds.Count > 0;
     public bool MinecraftRunning => MinecraftProcessIds.Count > 0;
@@ -25,7 +26,8 @@ internal sealed record LunarManagedProcess(
     string Name,
     string? ExecutablePath,
     long MainWindowHandle,
-    string MainWindowTitle);
+    string MainWindowTitle,
+    bool IsMainWindowVisible);
 
 internal interface ILunarProcessBackend
 {
@@ -65,7 +67,9 @@ public sealed class LunarLaunchLifecycleService
             .Distinct()
             .Order()
             .ToArray();
-        return new LunarPrelaunchSnapshot(launcherIds, minecraftIds);
+        var visibleLauncherWindows = processes.Count(process =>
+            launcherIds.Contains(process.ProcessId) && process.IsMainWindowVisible);
+        return new LunarPrelaunchSnapshot(launcherIds, minecraftIds, visibleLauncherWindows);
     }
 
     public async Task<LunarLauncherCloseResult> CloseLauncherAsync(
@@ -167,6 +171,10 @@ public sealed class LunarLaunchLifecycleService
 
 internal sealed class WindowsLunarProcessBackend : ILunarProcessBackend
 {
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool IsWindowVisible(nint windowHandle);
+
     public IReadOnlyList<LunarManagedProcess> Snapshot()
     {
         var result = new List<LunarManagedProcess>();
@@ -184,12 +192,14 @@ internal sealed class WindowsLunarProcessBackend : ILunarProcessBackend
                     mainWindowTitle = process.MainWindowTitle ?? string.Empty;
                 }
                 catch { }
+                var visible = mainWindowHandle != 0 && IsWindowVisible(new nint(mainWindowHandle));
                 result.Add(new LunarManagedProcess(
                     process.Id,
                     process.ProcessName,
                     path,
                     mainWindowHandle,
-                    mainWindowTitle));
+                    mainWindowTitle,
+                    visible));
             }
             catch
             {
