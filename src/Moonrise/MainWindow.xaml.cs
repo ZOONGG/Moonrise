@@ -2934,7 +2934,7 @@ public partial class MainWindow : Window
 
     private async void LaunchButton_Click(object sender, RoutedEventArgs e)
     {
-        if (Interlocked.CompareExchange(ref _launchInProgress, 1, 0) != 0)
+        if (!LaunchSingleFlight.TryEnter(ref _launchInProgress))
         {
             AddDiagnostic($"Duplicate launch request blocked; activeAttempt={_activeLaunchAttemptId ?? "unknown"}");
             return;
@@ -3098,7 +3098,11 @@ public partial class MainWindow : Window
             launchReport.Set("prelaunchMinecraftProcessIds", prelaunch.MinecraftProcessIds);
             launchReport.Set("visibleLunarWindowsBeforeClose", prelaunch.VisibleLauncherWindowCount);
 
-            if (prelaunch.MinecraftRunning)
+            var prelaunchAction = LunarPrelaunchPolicy.Decide(
+                prelaunch,
+                _settings.AutoCloseLunarBeforeLaunch);
+            if (prelaunchAction == LunarPrelaunchAction.BlockForMinecraft ||
+                _activeGameProcessIds.Count > 0)
             {
                 launchReport.Set("launchBlockedReason", "minecraft-already-running");
                 throw new InvalidOperationException(T(
@@ -3106,9 +3110,10 @@ public partial class MainWindow : Window
                     "Minecraft is already running. Close the current game before starting another Moonrise launch."));
             }
 
-            if (prelaunch.LauncherRunning)
+            if (prelaunchAction is LunarPrelaunchAction.PromptToCloseLauncher or
+                LunarPrelaunchAction.AutoCloseLauncher)
             {
-                var closeApproved = _settings.AutoCloseLunarBeforeLaunch;
+                var closeApproved = prelaunchAction == LunarPrelaunchAction.AutoCloseLauncher;
                 if (!closeApproved)
                 {
                     AddDiagnostic($"Lunar close prompt shown: attempt={launchAttemptId}");
@@ -3409,7 +3414,7 @@ public partial class MainWindow : Window
     {
         if (!string.Equals(_activeLaunchAttemptId, launchAttemptId, StringComparison.Ordinal))
             throw new InvalidOperationException("The active launch attempt changed before Lunar dispatch.");
-        if (Interlocked.CompareExchange(ref _activeLaunchCommandSent, 1, 0) != 0)
+        if (!LaunchSingleFlight.TrySend(ref _activeLaunchCommandSent))
         {
             AddDiagnostic($"Duplicate Lunar deeplink send blocked: attempt={launchAttemptId}; sendCount=1");
             return;
@@ -3429,6 +3434,8 @@ public partial class MainWindow : Window
                 LaunchDeepLink);
             using var sender = Process.Start(startInfo)
                 ?? throw new InvalidOperationException("Unable to send the launch command to Lunar Client.");
+            background?.TrackTrustedProcess(sender.Id);
+            background?.HideOwnedWindows();
             AddDiagnostic(
                 $"Lunar launch command sent through hidden IPC sender: attempt={launchAttemptId}; PID {sender.Id}; sendCount=1");
 
@@ -3945,7 +3952,7 @@ public partial class MainWindow : Window
         _activeLaunchPackageIds.Clear();
         var attemptId = Interlocked.Exchange(ref _activeLaunchAttemptId, null);
         Interlocked.Exchange(ref _activeLaunchCommandSent, 0);
-        if (Interlocked.Exchange(ref _launchInProgress, 0) == 0)
+        if (!LaunchSingleFlight.Exit(ref _launchInProgress))
             return;
         if (!string.IsNullOrWhiteSpace(attemptId))
             AddDiagnostic($"Launch attempt ended: id={attemptId}");

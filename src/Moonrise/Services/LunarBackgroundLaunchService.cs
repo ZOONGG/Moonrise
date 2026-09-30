@@ -166,6 +166,17 @@ public sealed class LunarBackgroundLaunchService
         }
     }
 
+    public void TrackTrustedProcess(int processId)
+    {
+        if (processId <= 0)
+            throw new ArgumentOutOfRangeException(nameof(processId));
+        lock (_sync)
+        {
+            if (_ownedProcessIds.Add(processId))
+                Audit($"Trusted Lunar IPC process tracked: pid={processId}");
+        }
+    }
+
     public async Task WatchAsync(CancellationToken cancellationToken)
     {
         IDisposable? subscription = null;

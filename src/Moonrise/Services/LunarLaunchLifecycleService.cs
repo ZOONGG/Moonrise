@@ -12,6 +12,28 @@ public sealed record LunarPrelaunchSnapshot(
     public bool MinecraftRunning => MinecraftProcessIds.Count > 0;
 }
 
+internal enum LunarPrelaunchAction
+{
+    Proceed,
+    PromptToCloseLauncher,
+    AutoCloseLauncher,
+    BlockForMinecraft
+}
+
+internal static class LunarPrelaunchPolicy
+{
+    internal static LunarPrelaunchAction Decide(
+        LunarPrelaunchSnapshot snapshot,
+        bool autoCloseLauncher) =>
+        snapshot.MinecraftRunning
+            ? LunarPrelaunchAction.BlockForMinecraft
+            : !snapshot.LauncherRunning
+                ? LunarPrelaunchAction.Proceed
+                : autoCloseLauncher
+                    ? LunarPrelaunchAction.AutoCloseLauncher
+                    : LunarPrelaunchAction.PromptToCloseLauncher;
+}
+
 public sealed record LunarLauncherCloseResult(
     IReadOnlyList<int> InitialProcessIds,
     IReadOnlyList<int> GracefullyClosedProcessIds,
