@@ -3314,7 +3314,8 @@ public partial class MainWindow : Window
                 !string.Equals(confirmed.Version, SelectedVersion, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException($"Lunar selected {confirmed.Client} {confirmed.Version}, expected {SelectedClient} {SelectedVersion}.");
 
-            await DispatchLaunchToExistingLunarAsync(launcherPath, backgroundLaunch, token);
+            await DispatchLaunchToExistingLunarAsync(launcherPath, backgroundLaunch, launchAttemptId, token);
+            launchReport.Set("deeplinkSendCount", Volatile.Read(ref _activeLaunchCommandSent));
             profileSelection.Restore();
             profileSelection = null;
             launchReport.Set("launchStage", "waiting-for-java");
