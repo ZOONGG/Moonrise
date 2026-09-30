@@ -27,23 +27,23 @@ public sealed class LunarLaunchLifecycleTests
     }
 
     [Theory]
-    [InlineData(false, false, false, LunarPrelaunchAction.Proceed)]
-    [InlineData(true, false, false, LunarPrelaunchAction.PromptToCloseLauncher)]
-    [InlineData(true, false, true, LunarPrelaunchAction.AutoCloseLauncher)]
-    [InlineData(false, true, false, LunarPrelaunchAction.BlockForMinecraft)]
-    [InlineData(true, true, true, LunarPrelaunchAction.BlockForMinecraft)]
+    [InlineData(false, false, false, "Proceed")]
+    [InlineData(true, false, false, "PromptToCloseLauncher")]
+    [InlineData(true, false, true, "AutoCloseLauncher")]
+    [InlineData(false, true, false, "BlockForMinecraft")]
+    [InlineData(true, true, true, "BlockForMinecraft")]
     public void PrelaunchPolicy_ChoosesExpectedAction(
         bool launcherRunning,
         bool minecraftRunning,
         bool autoClose,
-        LunarPrelaunchAction expected)
+        string expected)
     {
         var snapshot = new LunarPrelaunchSnapshot(
             launcherRunning ? [10] : [],
             minecraftRunning ? [20] : [],
             launcherRunning ? 1 : 0);
 
-        Assert.Equal(expected, LunarPrelaunchPolicy.Decide(snapshot, autoClose));
+        Assert.Equal(expected, LunarPrelaunchPolicy.Decide(snapshot, autoClose).ToString());
     }
 
     [Fact]
