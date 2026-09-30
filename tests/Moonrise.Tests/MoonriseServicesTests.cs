@@ -25,6 +25,7 @@ public sealed class MoonriseServicesTests
             MinecraftVersion = "1.8.9",
             Language = "en",
             LauncherExecutablePath = @"C:\Apps\Lunar Client.exe",
+            AutoCloseLunarBeforeLaunch = true,
             DisabledMods = ["one.jar"],
             DisabledAgents = ["agent.jar"]
         });
@@ -33,9 +34,21 @@ public sealed class MoonriseServicesTests
         Assert.Equal("lunar", settings.Client);
         Assert.Equal("1.8.9", settings.MinecraftVersion);
         Assert.Equal("en", settings.Language);
+        Assert.True(settings.AutoCloseLunarBeforeLaunch);
         Assert.Equal(["one.jar"], settings.DisabledMods);
         Assert.Equal(["agent.jar"], settings.DisabledAgents);
         Assert.False(File.Exists(path + ".tmp"));
+    }
+
+    [Fact]
+    public void Settings_AutoCloseLunarDefaultsOff()
+    {
+        using var temp = new TemporaryDirectory();
+        var path = Path.Combine(temp.Path, "moonrise-settings.json");
+
+        var settings = new AppSettingsService(path).Load();
+
+        Assert.False(settings.AutoCloseLunarBeforeLaunch);
     }
 
     [Fact]
