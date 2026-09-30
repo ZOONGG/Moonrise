@@ -2,7 +2,7 @@ namespace Moonrise.Models;
 
 public sealed class MoonriseSettings
 {
-    public const int CurrentSettingsSchemaVersion = 6;
+    public const int CurrentSettingsSchemaVersion = 7;
 
     public int SettingsSchemaVersion { get; set; }
     public string Language { get; set; } = "ru";
@@ -14,6 +14,7 @@ public sealed class MoonriseSettings
     public bool SafeLaunch { get; set; }
     public bool BackgroundLunarLaunch { get; set; } = true;
     public bool RevealLunarWhenActionRequired { get; set; } = true;
+    public bool AutoCloseLunarBeforeLaunch { get; set; }
     public int LaunchTimeoutSeconds { get; set; } = 180;
     public bool CheckForUpdates { get; set; } = true;
     public bool IncludePrereleaseUpdates { get; set; }
