@@ -40,8 +40,10 @@ public sealed class RecoveryStage3DiagnosticsTests
         finally { Directory.Delete(root, true); }
     }
 
-    [Fact]
-    public void CrashBundle_CapturesActualCrashAndHsErrPathsAndRedactsTheirText()
+    [Theory]
+    [InlineData("java-exited-before-usable-window")]
+    [InlineData("minecraft-timeout")]
+    public void CrashBundle_CapturesActualCrashAndHsErrPathsAndRedactsTheirText(string failureStage)
     {
         var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -56,7 +58,7 @@ public sealed class RecoveryStage3DiagnosticsTests
             var launch = new SanitizedLaunchReport(Path.Combine(root, "logs"));
             launch.Save();
             var result = new PackageCrashDiagnosticsService().Capture(new PackageCrashCaptureRequest(
-                started, DateTimeOffset.UtcNow, "java-exited-before-usable-window", 1,
+                started, DateTimeOffset.UtcNow, failureStage, 1,
                 [], null, null, launch.Path, "success", [], [logs]), Path.Combine(root, "crashes"));
             var paths = File.ReadAllText(Path.Combine(result.DirectoryPath, "relevant-log-paths.txt"));
             Assert.Contains("crash-test.txt", paths);

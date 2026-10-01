@@ -22,6 +22,7 @@ $rows = @(Get-ChildItem -LiteralPath $LogsDirectory -Filter 'launch-*.json' -Fil
         javaExitCode = $report.javaExitCode
         cleanupResult = $report.cleanupResult
         stageTimeline = @($report.stageTimeline)
+        launchTimeoutSeconds = $report.launchTimeoutSeconds
         compatibilityStatus = 'untested'
         manualSmokeResult = 'pending'
     }

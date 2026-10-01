@@ -2982,6 +2982,7 @@ public partial class MainWindow : Window
             launchReport.Set("launchStage", "preflight");
             launchReport.Set("launchStartedUtc", launchStartedUtc.ToString("O"));
             launchReport.Set("launchAttemptId", launchAttemptId);
+            launchReport.Set("launchTimeoutSeconds", Math.Clamp(_settings.LaunchTimeoutSeconds, 30, 600));
             if (!string.Equals(SelectedClient, "lunar", StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(SelectedVersion, "1.8.9", StringComparison.OrdinalIgnoreCase))
             {
@@ -3026,6 +3027,7 @@ public partial class MainWindow : Window
                 .Select(item => item.PackageId)
                 .ToArray();
             var enabledModDirectoryService = new EnabledModDirectoryService(_jarParser);
+            launchReport.Set("launchStage", "compatibility-selection");
             // Exact-hash maintained builds must be considered before choosing the
             // loader generation. Otherwise one old mod downgrades every package to
             // Weave 0.2.x and bypasses the known Weave 1.x compatibility builds.
@@ -3108,6 +3110,7 @@ public partial class MainWindow : Window
                 throw new InvalidDataException(T("Выберите официальный Lunar Client.exe.", "Select the official Lunar Client.exe."));
 
             var prelaunch = await Task.Run(() => _lunarLifecycle.Capture(launcherPath), token);
+            launchReport.Set("launchStage", "lunar-preflight");
             AddDiagnostic(
                 $"Launch preflight: attempt={launchAttemptId}; launcherRunning={prelaunch.LauncherRunning}; " +
                 $"launcherPids=[{string.Join(",", prelaunch.LauncherProcessIds)}]; " +
@@ -3190,6 +3193,7 @@ public partial class MainWindow : Window
             var checkpoint = LunarProfileReadinessService.CaptureCheckpoint(launcherLog);
 
             launchSession = _launchSessions.Create(_paths.TempDirectory);
+            launchReport.Set("launchStage", "runtime-preparation");
             string? enabledModsDirectory = null;
             if (enabledMods.Count > 0)
             {
@@ -3763,7 +3767,7 @@ public partial class MainWindow : Window
                 launchReport.Set("javaExitCode", earlyExitCode);
                 var cleanupResult = CleanupLaunchSession(launchSession, launchReport);
                 launchReport.Save();
-                if (failureStage is "java-exited-before-usable-window" or "lunar-exited-before-java" &&
+                if (failureStage is "java-exited-before-usable-window" or "lunar-exited-before-java" or "minecraft-timeout" &&
                     selection.WeaveMods.Count + selection.JavaAgents.Count > 0)
                 {
                     CreatePackageCrashBundle(
