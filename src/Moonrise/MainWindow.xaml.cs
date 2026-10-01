@@ -583,6 +583,9 @@ public partial class MainWindow : Window
 
     private void RefreshProfileState()
     {
+        var previousProfileId = (LunarProfileComboBox.SelectedItem as LauncherProfile)?.Id;
+        LunarProfileComboBox.Visibility = Visibility.Collapsed;
+        ProfileStateText.Visibility = Visibility.Visible;
         var client = SelectedClient;
         var version = SelectedVersion;
         if (SelectedClientChoice?.Plugin is { } plugin)
@@ -593,12 +596,20 @@ public partial class MainWindow : Window
         }
         try
         {
-            var profile = _profileService.GetProfiles().FirstOrDefault(item =>
+            var profiles = _profileService.GetProfiles().Where(item =>
                 string.Equals(item.Client, client, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(item.GameVersion, version, StringComparison.OrdinalIgnoreCase));
+                string.Equals(item.GameVersion, version, StringComparison.OrdinalIgnoreCase)).ToArray();
+            var profile = profiles.FirstOrDefault(item => item.Id == previousProfileId) ?? profiles.FirstOrDefault();
+            LunarProfileComboBox.ItemsSource = profiles;
+            LunarProfileComboBox.SelectedItem = profile;
+            if (profiles.Length > 1)
+            {
+                ProfileStateText.Visibility = Visibility.Collapsed;
+                LunarProfileComboBox.Visibility = Visibility.Visible;
+            }
             ProfileStateText.Text = profile is null
                 ? T("Создайте профиль в Lunar", "Create it in Lunar first")
-                : profile.Name;
+                : profile.DetailLabel;
             ProfileStateText.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty,
                 profile is null ? "Warning" : "Success");
         }
@@ -3005,6 +3016,10 @@ public partial class MainWindow : Window
             }
             var enabledMods = selection.WeaveMods;
             var enabledAgents = selection.JavaAgents;
+            launchReport.Set("selectedPackages", enabledMods.Concat(enabledAgents).Select(item => new
+            {
+                item.PackageId, item.Identifier, item.OriginalFileName, Kind = item.Kind.ToString(), item.Sha256
+            }).ToArray());
             var selectedVersion = SelectedVersion;
             var selectedPackageIds = enabledMods
                 .Concat(enabledAgents)
@@ -3048,6 +3063,10 @@ public partial class MainWindow : Window
                 enabledMods.Any(IsBwhPackage);
 
             var runtimeApiInspection = await Task.Run(() => _weaveApiInspector.Inspect(enabledMods));
+            launchReport.Set("weaveApiInspection", runtimeApiInspection.Mods.Select(item => new
+            {
+                item.Package.PackageId, item.Package.Sha256, Generation = item.Generation.ToString()
+            }).ToArray());
             if (runtimeApiInspection.HasLegacy && runtimeApiInspection.HasCurrent)
             {
                 var legacyNames = string.Join(", ", runtimeApiInspection.Mods
@@ -3163,8 +3182,10 @@ public partial class MainWindow : Window
                 launchReport.Set("lunarCloseRequested", false);
             }
 
-            profileSelection = _profileService.BeginExactProfileSelection(SelectedClient, SelectedVersion);
+            profileSelection = _profileService.BeginExactProfileSelection(SelectedClient, SelectedVersion,
+                (LunarProfileComboBox.SelectedItem as LauncherProfile)?.Id);
             var selectedProfile = profileSelection.Profile;
+            launchReport.Set("selectedProfile", selectedProfile);
             var launcherLog = LunarProfileReadinessService.GetDefaultLauncherLogPath();
             var checkpoint = LunarProfileReadinessService.CaptureCheckpoint(launcherLog);
 
@@ -3195,8 +3216,21 @@ public partial class MainWindow : Window
                 selectedProfile.Id,
                 selectedProfile.Name,
                 selectedProfile.Client,
-                selectedProfile.GameVersion
+                selectedProfile.GameVersion,
+                selectedProfile.MajorVersion,
+                selectedProfile.Loaders,
+                selectedProfile.LoaderVersion,
+                selectedProfile.LunarModule
             });
+            launchReport.Set("weaveLoaderFamily", enabledMods.Count == 0 ? "disabled" : useLegacyWeave ? "legacy" : "current");
+            launchReport.Set("runtimePackages", enabledMods.Concat(enabledAgents).Select(item => new
+            {
+                item.PackageId, item.Identifier, item.OriginalFileName, Kind = item.Kind.ToString(), item.Sha256,
+                SourcePath = item.FullPath,
+                LaunchPath = item.Kind == PackageKind.JavaAgent ? item.FullPath : Path.Combine(enabledModsDirectory!,
+                    enabledMods.Count(mod => string.Equals(mod.FileName, item.FileName, StringComparison.OrdinalIgnoreCase)) > 1
+                        ? $"{item.Sha256.ToLowerInvariant()}.jar" : item.FileName)
+            }).ToArray());
             launchReport.Set("weaveLoaderPath", enabledMods.Count > 0 ? weaveLoaderPath : null);
             launchReport.Set("weaveLoaderVersion", enabledMods.Count > 0 ? weaveLoaderRelease.Version : null);
             launchReport.Set("weaveLoaderSha256", weaveHash);
@@ -3248,7 +3282,9 @@ public partial class MainWindow : Window
                     launchPlan.Agents.Select(item => new
                     {
                         item.RuntimeId,
-                        Role = item.Role.ToString()
+                        Role = item.Role.ToString(),
+                        item.Path,
+                        Sha256 = LocalPackageLibrary.ComputeSha256(item.Path)
                     }).ToArray());
                 launchReport.Set("bridgeConfigPath", launchSession.BridgeConfigPath);
                 var result = await Task.Run(() => _bridgeLauncher.Launch(
@@ -3651,6 +3687,7 @@ public partial class MainWindow : Window
                     await Task.Run(lunarBackground.MarkMinecraftDetected, cancellationToken);
                 _activeGameProcessIds.Add(game.ProcessId);
                 launchReport.Set("targetJavaProcessDetected", true);
+                launchReport.Set("usableWindowOutcome", "observed-package-functionality-unconfirmed");
                 launchReport.Set("detectedJavaProcessIds", new[] { game.ProcessId });
                 launchReport.Set("launchStage", "java-detected");
                 launchReport.Save();

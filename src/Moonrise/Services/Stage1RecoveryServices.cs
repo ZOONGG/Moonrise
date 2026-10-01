@@ -71,6 +71,8 @@ public sealed class LaunchSessionService
 
 public sealed class SanitizedLaunchReport
 {
+    private readonly System.Diagnostics.Stopwatch _elapsed = System.Diagnostics.Stopwatch.StartNew();
+    private readonly List<object> _stageTimeline = [];
     private readonly Dictionary<string, object?> _values = new(StringComparer.Ordinal);
     private readonly string _path;
 
@@ -83,6 +85,9 @@ public sealed class SanitizedLaunchReport
         Set("moonriseVersion", typeof(SanitizedLaunchReport).Assembly.GetName().Version?.ToString(3) ?? "unknown");
         Set("minecraftVersion", "1.8.9");
         Set("createdUtc", DateTimeOffset.UtcNow.ToString("O"));
+        Set("schemaVersion", 2);
+        Set("compatibilityStatus", "untested");
+        Set("usableWindowOutcome", "not-observed");
         Set("launchStage", "created");
     }
 
@@ -91,11 +96,17 @@ public sealed class SanitizedLaunchReport
     public void Set(string name, object? value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        if (name == "launchStage")
+        {
+            _stageTimeline.Add(new { Stage = value, ElapsedMilliseconds = _elapsed.ElapsedMilliseconds });
+            _values["stageTimeline"] = _stageTimeline;
+        }
         _values[name] = value is string text ? TokenRedactor.Redact(text) : value;
     }
 
     public void Save()
     {
+        _values["elapsedMilliseconds"] = _elapsed.ElapsedMilliseconds;
         var json = JsonSerializer.Serialize(_values, new JsonSerializerOptions { WriteIndented = true });
         json = TokenRedactor.Redact(json);
         var temporary = _path + $".{Guid.NewGuid():N}.tmp";

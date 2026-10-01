@@ -874,7 +874,10 @@
                                 <StackPanel Grid.Column="2">
                                     <TextBlock x:Name="ProfileLabel" Text="LAUNCHER PROFILE" Foreground="{DynamicResource TextMuted}" FontWeight="Bold" FontSize="11"/>
                                     <Border Background="{DynamicResource InputBackground}" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="{DynamicResource InputBorderThickness}" CornerRadius="{DynamicResource ControlRadius}" Height="{DynamicResource ControlHeight}" Margin="0,8,0,0" Padding="12,0">
-                                        <TextBlock x:Name="ProfileStateText" Text="Checking…" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextSecondary}"/>
+                                        <Grid>
+                                            <TextBlock x:Name="ProfileStateText" Text="Checking…" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextSecondary}"/>
+                                            <ComboBox x:Name="LunarProfileComboBox" DisplayMemberPath="DetailLabel" Visibility="Collapsed"/>
+                                        </Grid>
                                     </Border>
                                 </StackPanel>
                             </Grid>
