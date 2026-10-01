@@ -199,9 +199,35 @@ public sealed class LunarLaunchLifecycleTests
             .Single(element => (string?)element.Attribute(names + "Name") == "LunarRunningOverlay");
         XElement Named(string name) => overlay.Descendants()
             .Single(element => (string?)element.Attribute(names + "Name") == name);
-        Assert.Equal("{StaticResource MoonriseCheckBox}", (string?)Named("LunarRunningRememberCheckBox").Attribute("Style"));
+        Assert.Equal("{StaticResource DialogRememberCheckBox}", (string?)Named("LunarRunningRememberCheckBox").Attribute("Style"));
         Assert.Equal("{StaticResource DialogSecondaryButton}", (string?)Named("LunarRunningCancelButton").Attribute("Style"));
         Assert.Equal("{StaticResource DialogPrimaryButton}", (string?)Named("LunarRunningConfirmButton").Attribute("Style"));
+        Assert.Equal("560", (string?)Named("LunarRunningDialogPanel").Attribute("Width"));
+        Assert.Equal("16", (string?)Named("LunarRunningDetail").Attribute("FontSize"));
+        Assert.Equal("SemiBold", (string?)Named("LunarRunningDetail").Attribute("FontWeight"));
+        Assert.Equal("24", (string?)Named("LunarRunningDetail").Attribute("LineHeight"));
+        Assert.Equal("15", (string?)Named("LunarRunningRememberCheckBox").Attribute("FontSize"));
+        var document = XDocument.Parse(xaml);
+        XElement Style(string key) => document.Descendants(ui + "Style")
+            .Single(element => (string?)element.Attribute(names + "Key") == key);
+        Assert.Equal("{StaticResource ButtonBase}", (string?)Style("DialogSecondaryButton").Attribute("BasedOn"));
+        Assert.DoesNotContain(Style("DialogSecondaryButton").Elements(ui + "Setter"),
+            element => (string?)element.Attribute("Property") == "Template");
+        Assert.Equal("{StaticResource PrimaryButton}", (string?)Style("DialogPrimaryButton").Attribute("BasedOn"));
+        var expectedTemplate = new XElement(Style("PrimaryButton").Descendants(ui + "ControlTemplate").Single());
+        expectedTemplate.Descendants().Single(element => (string?)element.Attribute(names + "Name") == "EnergySweep").Remove();
+        foreach (var animation in expectedTemplate.Descendants().Where(element =>
+                     (string?)element.Attribute("Storyboard.TargetName") == "EnergySweep").ToArray())
+            animation.Remove();
+        Assert.True(XNode.DeepEquals(expectedTemplate, Style("DialogPrimaryButton").Descendants(ui + "ControlTemplate").Single()));
+        foreach (var key in new[] { "DialogPrimaryButton", "ButtonBase" })
+        {
+            Assert.DoesNotContain(Style(key).Descendants(), element => element.Name.LocalName is "TranslateTransform" or "ScaleTransform");
+            Assert.DoesNotContain(Style(key).Descendants().Attributes(), attribute => attribute.Value.Contains("RenderTransform", StringComparison.Ordinal));
+        }
+        var checkboxTemplate = Style("DialogRememberCheckBox").Descendants(ui + "ControlTemplate").Single();
+        Assert.All(checkboxTemplate.Descendants().Where(element => element.Attribute("VerticalAlignment") is not null),
+            element => Assert.Equal("Center", (string?)element.Attribute("VerticalAlignment")));
         Assert.Equal("LunarRunningCancelButton_Click", (string?)Named("LunarRunningCancelButton").Attribute("Click"));
         Assert.Equal("LunarRunningConfirmButton_Click", (string?)Named("LunarRunningConfirmButton").Attribute("Click"));
         Assert.Contains(overlay.Descendants(ui + "ContentControl"),

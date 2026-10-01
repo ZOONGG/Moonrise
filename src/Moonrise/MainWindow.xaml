@@ -223,7 +223,96 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- Use the same window button states; omit only the primary click sweep's motion. -->
+        <Style x:Key="DialogSecondaryButton" TargetType="Button" BasedOn="{StaticResource ButtonBase}">
+            <Setter Property="Height" Value="50"/>
+            <Setter Property="FontSize" Value="14"/>
+        </Style>
+        <Style x:Key="DialogPrimaryButton" TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{DynamicResource PrimaryButtonRadius}" Effect="{DynamicResource PrimaryButtonShadow}"/>
+                            <Border x:Name="ClickGlow" Margin="2" Background="#D9E5FF" CornerRadius="10" Opacity="0" IsHitTestVisible="False"/>
+                            <Border x:Name="HoverLight" Background="{DynamicResource TextPrimary}" CornerRadius="{DynamicResource PrimaryButtonRadius}" Opacity="0" IsHitTestVisible="False"/>
+                            <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <EventTrigger RoutedEvent="MouseEnter">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="HoverLight" Storyboard.TargetProperty="Opacity" To="0.16" Duration="0:0:0.16">
+                                            <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                            <EventTrigger RoutedEvent="MouseLeave">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="HoverLight" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.22">
+                                            <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                            <EventTrigger RoutedEvent="Button.Click">
+                                <BeginStoryboard HandoffBehavior="SnapshotAndReplace">
+                                    <Storyboard>
+                                        <DoubleAnimationUsingKeyFrames Storyboard.TargetName="ClickGlow" Storyboard.TargetProperty="Opacity">
+                                            <DiscreteDoubleKeyFrame KeyTime="0:0:0" Value="0"/>
+                                            <SplineDoubleKeyFrame KeyTime="0:0:0.10" Value="0.24" KeySpline="0.2,0,0.2,1"/>
+                                            <SplineDoubleKeyFrame KeyTime="0:0:0.52" Value="0" KeySpline="0.2,0,0.2,1"/>
+                                        </DoubleAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource PrimaryGradientHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource PrimaryGradientPressed}"/>
+                                <Setter TargetName="Surface" Property="Opacity" Value="0.82"/>
+                                <Setter TargetName="HoverLight" Property="Opacity" Value="0.04"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Surface" Property="Opacity" Value="0.38"/>
+                                <Setter TargetName="HoverLight" Property="Opacity" Value="0"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
+
+        <Style x:Key="DialogRememberCheckBox" TargetType="CheckBox" BasedOn="{StaticResource MoonriseCheckBox}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <Grid Background="Transparent" SnapsToDevicePixels="True">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="30"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                        <Grid Width="20" Height="20" HorizontalAlignment="Left" VerticalAlignment="Center">
+                            <Border x:Name="Box" Background="{DynamicResource InputBackground}" BorderBrush="{DynamicResource BorderPrimary}"
+                                    BorderThickness="1" CornerRadius="5" SnapsToDevicePixels="True" UseLayoutRounding="True"/>
+                            <Viewbox x:Name="Check" Width="13" Height="13" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     Opacity="0" IsHitTestVisible="False" SnapsToDevicePixels="False">
+                                <Path Data="M1,7 L3.3,4.7 L5.7,7.1 L11.8,1 L14,3.2 L5.7,11.6 Z"
+                                      Fill="{DynamicResource PrimaryButtonForeground}"/>
+                            </Viewbox>
+                        </Grid>
+                        <ContentPresenter Grid.Column="1" VerticalAlignment="Center" Margin="0"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Box" Property="Background" Value="{DynamicResource SurfaceHover}"/></Trigger>
+                        <Trigger Property="IsChecked" Value="True"><Setter TargetName="Box" Property="Background" Value="{DynamicResource AccentPurple}"/><Setter TargetName="Box" Property="BorderThickness" Value="0"/><Setter TargetName="Check" Property="Opacity" Value="1"/></Trigger>
+                        <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/><Setter Property="Cursor" Value="Arrow"/></Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        </Style>
         <Style x:Key="LanguageButtonStyle" TargetType="Button" BasedOn="{StaticResource ButtonBase}">
             <Setter Property="Width" Value="98"/>
             <Setter Property="Height" Value="38"/>
@@ -1326,9 +1415,9 @@
                         </StackPanel>
                     </Grid>
                     <Border Grid.Row="2" Background="{DynamicResource SurfaceSecondary}" CornerRadius="{DynamicResource ControlRadius}" Padding="14,12">
-                        <TextBlock x:Name="LunarRunningDetail" Text="Close Lunar automatically and continue?" Style="{StaticResource BodyText}" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="LunarRunningDetail" Text="Close Lunar automatically and continue?" Style="{StaticResource BodyText}" FontSize="16" FontWeight="SemiBold" LineHeight="24" LineStackingStrategy="BlockLineHeight" TextWrapping="Wrap"/>
                     </Border>
-                    <CheckBox x:Name="LunarRunningRememberCheckBox" Grid.Row="4" Content="Remember my choice" Style="{StaticResource MoonriseCheckBox}" VerticalAlignment="Center"/>
+                    <CheckBox x:Name="LunarRunningRememberCheckBox" Grid.Row="4" Content="Remember my choice" Style="{StaticResource DialogRememberCheckBox}" FontSize="15" FontWeight="Medium" VerticalAlignment="Center"/>
                     <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
                         <Button x:Name="LunarRunningCancelButton" Content="Cancel" Style="{StaticResource DialogSecondaryButton}" MinWidth="104" Margin="0,0,12,0" Click="LunarRunningCancelButton_Click"/>
                         <Button x:Name="LunarRunningConfirmButton" Content="Close Lunar and continue" Style="{StaticResource DialogPrimaryButton}" MinWidth="190" Click="LunarRunningConfirmButton_Click"/>
