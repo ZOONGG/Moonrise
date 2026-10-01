@@ -1313,27 +1313,25 @@
         </ItemsControl>
 
         <Grid x:Name="LunarRunningOverlay" Grid.RowSpan="3" Panel.ZIndex="105" Background="{DynamicResource OverlaySurface}" Visibility="Collapsed">
-            <Border x:Name="LunarRunningDialogPanel" Width="500" Background="{DynamicResource SurfaceFloating}" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="{DynamicResource PopupBorderThickness}" CornerRadius="{DynamicResource PopupRadius}" Padding="24" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+            <Border x:Name="LunarRunningDialogPanel" Width="560" Style="{StaticResource DialogSurface}" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
                 <Border.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1"/></Border.RenderTransform>
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="18"/><RowDefinition Height="Auto"/><RowDefinition Height="18"/><RowDefinition Height="Auto"/><RowDefinition Height="24"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <Grid>
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="48"/><ColumnDefinition/></Grid.ColumnDefinitions>
-                        <Border Width="42" Height="42" CornerRadius="12" Background="{DynamicResource AccentSoft}" HorizontalAlignment="Left">
-                            <TextBlock Text="◐" Foreground="{DynamicResource Accent}" FontSize="21" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="60"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                        <ContentControl Template="{StaticResource LunarClientIconTemplate}" HorizontalAlignment="Left" VerticalAlignment="Center"/>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <TextBlock x:Name="LunarRunningTitle" Text="Lunar Client is already running" FontSize="18" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}"/>
+                            <TextBlock x:Name="LunarRunningTitle" Text="Lunar Client is already running" Style="{StaticResource SectionTitle}" TextWrapping="Wrap"/>
                             <TextBlock x:Name="LunarRunningSubtitle" Text="Moonrise needs to close Lunar before starting a new session." Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"/>
                         </StackPanel>
                     </Grid>
                     <Border Grid.Row="2" Background="{DynamicResource SurfaceSecondary}" CornerRadius="{DynamicResource ControlRadius}" Padding="14,12">
-                        <TextBlock x:Name="LunarRunningDetail" Text="Close Lunar automatically and continue?" Foreground="{DynamicResource TextSecondary}" FontSize="13" TextWrapping="Wrap"/>
+                        <TextBlock x:Name="LunarRunningDetail" Text="Close Lunar automatically and continue?" Style="{StaticResource BodyText}" TextWrapping="Wrap"/>
                     </Border>
-                    <CheckBox x:Name="LunarRunningRememberCheckBox" Grid.Row="4" Content="Remember my choice" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center"/>
+                    <CheckBox x:Name="LunarRunningRememberCheckBox" Grid.Row="4" Content="Remember my choice" Style="{StaticResource MoonriseCheckBox}" VerticalAlignment="Center"/>
                     <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button x:Name="LunarRunningCancelButton" Content="Cancel" Style="{StaticResource ButtonBase}" MinWidth="104" Margin="0,0,10,0" Click="LunarRunningCancelButton_Click"/>
-                        <Button x:Name="LunarRunningConfirmButton" Content="Close Lunar and continue" Style="{StaticResource PrimaryButton}" MinWidth="176" Click="LunarRunningConfirmButton_Click"/>
+                        <Button x:Name="LunarRunningCancelButton" Content="Cancel" Style="{StaticResource DialogSecondaryButton}" MinWidth="104" Margin="0,0,12,0" Click="LunarRunningCancelButton_Click"/>
+                        <Button x:Name="LunarRunningConfirmButton" Content="Close Lunar and continue" Style="{StaticResource DialogPrimaryButton}" MinWidth="190" Click="LunarRunningConfirmButton_Click"/>
                     </StackPanel>
                 </Grid>
             </Border>

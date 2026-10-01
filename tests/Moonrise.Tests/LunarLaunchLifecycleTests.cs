@@ -1,3 +1,4 @@
+using System.Xml.Linq;
 using Moonrise.Services;
 using Xunit;
 
@@ -192,6 +193,19 @@ public sealed class LunarLaunchLifecycleTests
         Assert.Contains("x:Name=\"AutoCloseLunarCheckBox\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"LunarRunningOverlay\"", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Name=\"LunarRunningRememberCheckBox\"", xaml, StringComparison.Ordinal);
+        XNamespace ui = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        XNamespace names = "http://schemas.microsoft.com/winfx/2006/xaml";
+        var overlay = XDocument.Parse(xaml).Descendants(ui + "Grid")
+            .Single(element => (string?)element.Attribute(names + "Name") == "LunarRunningOverlay");
+        XElement Named(string name) => overlay.Descendants()
+            .Single(element => (string?)element.Attribute(names + "Name") == name);
+        Assert.Equal("{StaticResource MoonriseCheckBox}", (string?)Named("LunarRunningRememberCheckBox").Attribute("Style"));
+        Assert.Equal("{StaticResource DialogSecondaryButton}", (string?)Named("LunarRunningCancelButton").Attribute("Style"));
+        Assert.Equal("{StaticResource DialogPrimaryButton}", (string?)Named("LunarRunningConfirmButton").Attribute("Style"));
+        Assert.Equal("LunarRunningCancelButton_Click", (string?)Named("LunarRunningCancelButton").Attribute("Click"));
+        Assert.Equal("LunarRunningConfirmButton_Click", (string?)Named("LunarRunningConfirmButton").Attribute("Click"));
+        Assert.Contains(overlay.Descendants(ui + "ContentControl"),
+            element => (string?)element.Attribute("Template") == "{StaticResource LunarClientIconTemplate}");
         Assert.Contains("PromptToCloseRunningLunarAsync", code, StringComparison.Ordinal);
         Assert.Contains("CloseLauncherAsync", code, StringComparison.Ordinal);
         Assert.Contains("LaunchSingleFlight.TryEnter", code, StringComparison.Ordinal);
