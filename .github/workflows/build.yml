@@ -92,6 +92,16 @@ jobs:
             -LaunchSmokeTest `
             -TestUserDataDeletion
 
+      - name: Test explicit portable launch isolation
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          ./tools/Test-MoonriseInstaller.ps1 `
+            -SetupPath "artifacts/release/Moonrise-Setup-0.0.${{ github.run_number }}-x64.exe" `
+            -LaunchSmokeTest `
+            -PortableLaunchIsolation `
+            -TestUserDataDeletion
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v7

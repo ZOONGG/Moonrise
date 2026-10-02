@@ -30,6 +30,7 @@ coverage.*
 *.DotSettings.user
 
 # Moonrise user-owned/private data — never commit
+Moonrise-data/
 user-mods/
 user-agents/
 profiles/

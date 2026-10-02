@@ -247,7 +247,7 @@ public sealed class MoonriseServicesTests
     }
 
     [Fact]
-    public void AppPaths_DiscoverAlwaysUsesPerUserMoonriseRoot()
+    public void AppPaths_DiscoverUsesExplicitPortableMarker()
     {
         using var temp = new TemporaryDirectory();
         var application = Path.Combine(temp.Path, "application");
@@ -263,9 +263,10 @@ public sealed class MoonriseServicesTests
         File.WriteAllText(Path.Combine(application, AppPaths.PortableMarkerFileName), string.Empty);
         var portable = AppPaths.Discover(application, localAppData);
 
-        Assert.Equal(AppMode.Installed, portable.Mode);
-        Assert.Equal(Path.Combine(localAppData, "Moonrise"), portable.RootDirectory);
-        Assert.False(portable.IsPortable);
+        Assert.Equal(AppMode.Portable, portable.Mode);
+        Assert.Equal(Path.Combine(application, "Moonrise-data"), portable.RootDirectory);
+        Assert.Equal(application, portable.InstallationDirectory);
+        Assert.True(portable.IsPortable);
     }
 
     [Fact]

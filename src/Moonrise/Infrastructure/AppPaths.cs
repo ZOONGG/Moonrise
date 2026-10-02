@@ -12,6 +12,7 @@ public enum AppMode
 public sealed class AppPaths
 {
     public const string PortableMarkerFileName = "Moonrise.portable";
+    public const string PortableDataDirectoryName = "Moonrise-data";
     public const string ApplicationDirectoryName = "Moonrise";
     public const string DevelopmentDirectoryName = "dev";
 
@@ -164,6 +165,16 @@ public sealed class AppPaths
                 }
                 current = current.Parent;
             }
+        }
+
+        // Development discovery above retains priority. Only a marker beside
+        // this executable opts a packaged build into portable storage.
+        if (File.Exists(Path.Combine(installationDirectory, PortableMarkerFileName)))
+        {
+            return new AppPaths(
+                Path.Combine(installationDirectory, PortableDataDirectoryName),
+                installationDirectory,
+                AppMode.Portable);
         }
 
         var dataRoot = Path.Combine(
