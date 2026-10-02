@@ -38,7 +38,7 @@ try {
         )
 
         Write-Host "[installer-smoke] $Stage"
-        $process = Start-Process -FilePath $FilePath -ArgumentList $ArgumentList -PassThru
+        $process = Start-Process -FilePath $FilePath -ArgumentList $ArgumentList -WindowStyle Hidden -PassThru
         if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
             try {
                 Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
@@ -61,6 +61,9 @@ try {
         )
         if ($process.ExitCode -ne 0) {
             throw "Installer exited with code $($process.ExitCode)."
+        }
+        if (Test-Path -LiteralPath (Join-Path $installDirectory "Moonrise.portable")) {
+            throw "Setup must not install a portable marker."
         }
     }
 
@@ -85,7 +88,7 @@ try {
             New-Item -ItemType File -Path $portableMarker | Out-Null
         }
         Write-Host "[installer-smoke] Launch installed Moonrise"
-        $application = Start-Process -FilePath $executable -WorkingDirectory $installDirectory -PassThru
+        $application = Start-Process -FilePath $executable -WorkingDirectory $installDirectory -WindowStyle Hidden -PassThru
         Start-Sleep -Seconds 5
         if ($application.HasExited) {
             throw "Moonrise exited during the post-install launch smoke test with code $($application.ExitCode)."
@@ -99,12 +102,21 @@ try {
             Remove-Item -LiteralPath $portableMarker -Force
         }
         if ($PortableLaunchIsolation) {
-            foreach ($name in @("packages", "cache", "settings", "sessions", "logs")) {
-                $portableDataPath = Join-Path $installDirectory $name
-                if (Test-Path -LiteralPath $portableDataPath) {
-                    Remove-Item -LiteralPath $portableDataPath -Recurse -Force
-                }
+            $portableDataPath = [IO.Path]::GetFullPath((Join-Path $installDirectory "Moonrise-data"))
+            $testPrefix = [IO.Path]::GetFullPath($testRoot).TrimEnd('\') + '\'
+            if (-not $portableDataPath.StartsWith($testPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+                throw "Refusing to remove unsafe portable test path: $portableDataPath"
             }
+            if (-not (Test-Path -LiteralPath (Join-Path $portableDataPath "settings") -PathType Container)) {
+                throw "Portable launch did not create settings under Moonrise-data."
+            }
+            if (-not $dataExisted -and (Test-Path -LiteralPath $dataRoot)) {
+                throw "Portable launch unexpectedly created installed user data."
+            }
+            Remove-Item -LiteralPath $portableDataPath -Recurse -Force
+        }
+        elseif (-not (Test-Path -LiteralPath (Join-Path $dataRoot "settings") -PathType Container)) {
+            throw "Installed launch did not create settings under the installed data root."
         }
     }
 

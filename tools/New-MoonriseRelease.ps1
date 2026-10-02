@@ -88,6 +88,9 @@ try {
     }
 
     $portableStage = Join-Path $output ".portable-stage"
+    if (Test-Path -LiteralPath (Join-Path $publish "Moonrise.portable")) {
+        throw "Installed publish directory must not contain a portable marker."
+    }
     Copy-Item -LiteralPath $publish -Destination $portableStage -Recurse
     New-Item -ItemType File -Path (Join-Path $portableStage "Moonrise.portable") | Out-Null
     $portableName = "Moonrise-Portable-$Version-x64.zip"
@@ -96,6 +99,18 @@ try {
         -SourceDirectory $portableStage `
         -DestinationPath $portablePath
     if ($LASTEXITCODE -ne 0) { throw "Portable archive creation failed." }
+    $archive = [IO.Compression.ZipFile]::OpenRead($portablePath)
+    try {
+        foreach ($required in @("Moonrise.exe", "Moonrise.portable", "runtime/bridge/Moonrise.Native.dll")) {
+            if ($null -eq $archive.GetEntry($required)) {
+                throw "Portable archive is missing root-relative entry: $required"
+            }
+        }
+        if (@($archive.Entries | Where-Object { $_.FullName -like "Moonrise-data/*" }).Count -gt 0) {
+            throw "Portable archive must not contain user data."
+        }
+    }
+    finally { $archive.Dispose() }
     Remove-Item -LiteralPath $portableStage -Recurse -Force
 
     & $IsccPath `

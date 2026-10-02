@@ -73,16 +73,23 @@ Moonrise lists common Minecraft versions from 1.8.9 through 1.21.4 and also disc
 ## Installation
 
 1. Open the [latest GitHub Release](https://github.com/ZOONGG/Moonrise/releases/latest).
-2. Download `Moonrise-<version>-win-x64.zip` and the matching `.sha256` file.
+2. Download `Moonrise-Portable-<version>-x64.zip` and the matching `.sha256` file.
 3. Compare the published checksum:
 
    ```powershell
-   (Get-FileHash .\Moonrise-<version>-win-x64.zip -Algorithm SHA256).Hash
-   Get-Content .\Moonrise-<version>-win-x64.zip.sha256
+   (Get-FileHash .\Moonrise-Portable-<version>-x64.zip -Algorithm SHA256).Hash
+   Get-Content .\Moonrise-Portable-<version>-x64.zip.sha256
    ```
 
 4. Extract the complete ZIP to a writable folder.
 5. Run `Moonrise.exe`.
+
+For a per-user installation, download `Moonrise-Setup-<version>-x64.exe` and its
+matching `.sha256` instead. Setup stores application files in
+`%LocalAppData%\Programs\Moonrise` and data in `%LocalAppData%\Moonrise`.
+The Portable ZIP includes `Moonrise.portable` and stores data in `Moonrise-data/`
+beside the executable. See [portable mode](docs/PORTABLE_MODE.md) for discovery
+priorities, the complete data layout, migration, and update behavior.
 
 Published builds are self-contained; users do not need to install .NET. Releases are currently unsigned, so Windows may show a SmartScreen prompt. Verify the release source and checksum before continuing.
 
@@ -123,7 +130,7 @@ A Java-agent JAR must declare `Premain-Class` or `Agent-Class` in `META-INF/MANI
 ## Enabling and removing packages
 
 - Use the switch beside a package to include or exclude it from future launches.
-- Use the remove button to delete Moonrise's local copy from `user-mods/` or `user-agents/`.
+- Use the remove button to delete Moonrise's local copy from `packages/weave/` or `packages/agents/`.
 - Use launch loadouts to save the selected version and enabled package filenames. Loadout exports contain configuration metadata, not JAR content.
 - Optional signed catalogs are user-selected; Moonrise has no built-in mod list. A valid catalog signature and package hash prove catalog integrity, not that third-party code is harmless or compatible.
 
@@ -139,7 +146,7 @@ In **Settings**, **Safe launch** starts a diagnostic session without third-party
 
 ![Moonrise diagnostics in English](docs/images/en/moonrise-diagnostics.png)
 
-The **Diagnostics** page shows local Moonrise initialization, package, compatibility, and launch events. Managed logs are stored under `logs/`; abnormal game exits can produce a redacted text report under `crash-reports/` with an exit code, a basic classification, recommendations, and up to 100 recent managed diagnostic lines.
+The **Diagnostics** page shows local Moonrise initialization, package, compatibility, and launch events. Managed logs are stored under `logs/`; abnormal game exits can produce a redacted text report under `logs/crashes/` with an exit code, a basic classification, recommendations, and up to 100 recent managed diagnostic lines.
 
 Token redaction reduces risk but cannot guarantee that arbitrary third-party text contains no private information. Before sharing a log or crash report, remove personal paths, usernames, account details, identifiers, private package names, and full command lines. Never upload account files or JARs.
 
@@ -148,18 +155,18 @@ Token redaction reduces risk but cannot guarantee that arbitrary third-party tex
 > [!IMPORTANT]
 > Moonrise does not request or manage Microsoft, Minecraft, or Lunar account credentials. It must not read, copy, store, log, or modify account/session tokens.
 
-Moonrise stores only its own local configuration and runtime data:
+Moonrise stores only its own local configuration and runtime data under the active data root:
 
 ```text
-moonrise-settings.json  language, Lunar client marker, selected version, launcher path,
-                        close/safe-launch preferences, active loadout, disabled filenames
-profiles/               local loadout JSON files; no JAR content
-user-mods/              user-owned Weave mod JARs
-user-agents/            user-owned Java-agent JARs
-runtime/weave/           verified Weave Loader download
-runtime/sessions/        temporary package snapshots and launch proofs
-logs/                    redacted Moonrise-managed logs
-crash-reports/           redacted local Moonrise crash analyses
+settings/moonrise-settings.json  language, Lunar client marker, selected version, launcher path,
+                                close/safe-launch preferences, active loadout, disabled filenames
+settings/profiles/              local loadout JSON files; no JAR content
+packages/weave/                 user-owned Weave mod JARs
+packages/agents/                user-owned Java-agent JARs
+cache/runtime/weave/            verified Weave Loader download
+temp/                           temporary package snapshots and launch proofs
+logs/                           redacted Moonrise-managed logs
+logs/crashes/                   redacted local Moonrise crash analyses
 ```
 
 To select an existing profile, Moonrise opens `.lunarclient/db/profiles.db` read-only and changes only `settings.gameProfile` in `.lunarclient/settings/launcher.json`. It does not access the official launcher's account or token files.
