@@ -96,8 +96,13 @@ public sealed class LauncherProfileService
             return new JsonObject();
         try
         {
-            return JsonNode.Parse(File.ReadAllText(LauncherSettingsPath))?.AsObject()
-                ?? throw new InvalidDataException("Lunar launcher.json must contain a JSON object.");
+            if (JsonNode.Parse(File.ReadAllText(LauncherSettingsPath)) is not JsonObject root)
+                throw new InvalidDataException("Lunar launcher.json must contain a JSON object.");
+            // Missing settings can be initialized; an existing unsupported value
+            // must never be silently replaced (including during restoration).
+            if (root.TryGetPropertyValue("settings", out var settings) && settings is not JsonObject)
+                throw new InvalidDataException("Lunar launcher.json settings must contain a JSON object; Moonrise did not modify it.");
+            return root;
         }
         catch (JsonException exception)
         {
