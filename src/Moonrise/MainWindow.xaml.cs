@@ -3306,6 +3306,7 @@ public partial class MainWindow : Window
             _lunarWindowLogger = new SafeLogger(
                 _paths.LogsDirectory,
                 "lunar-window-classification");
+            ReleaseActiveLunarBackground();
             _activeLunarBackground = new LunarBackgroundLaunchService(
                 launcherProcessId,
                 launcherPath,
@@ -3688,7 +3689,10 @@ public partial class MainWindow : Window
                 AddDiagnostic($"Game JVM detected: PID {game.ProcessId}");
                 AddDiagnostic("The target Java process was detected; package functionality remains unconfirmed until the user checks Minecraft.");
                 if (_activeLunarBackground is { } lunarBackground)
+                {
                     await Task.Run(lunarBackground.MarkMinecraftDetected, cancellationToken);
+                    ReleaseActiveLunarBackground(cancelService: false);
+                }
                 _activeGameProcessIds.Add(game.ProcessId);
                 launchReport.Set("targetJavaProcessDetected", true);
                 launchReport.Set("usableWindowOutcome", "observed-package-functionality-unconfirmed");
@@ -3991,6 +3995,7 @@ public partial class MainWindow : Window
 
     private void EndLaunchAttempt()
     {
+        ReleaseActiveLunarBackground();
         _activeLaunchPackageIds.Clear();
         var attemptId = Interlocked.Exchange(ref _activeLaunchAttemptId, null);
         Interlocked.Exchange(ref _activeLaunchCommandSent, 0);
@@ -4042,6 +4047,17 @@ public partial class MainWindow : Window
             cancellationToken);
     }
 
+    private void ReleaseActiveLunarBackground(bool cancelService = true)
+    {
+        _lunarWindowCancellation?.Cancel();
+        _lunarWindowCancellation?.Dispose();
+        _lunarWindowCancellation = null;
+        _lunarWindowTask = null;
+        if (cancelService)
+            _activeLunarBackground?.Cancel();
+        _activeLunarBackground = null;
+    }
+
     private void RevealActiveLunar(bool force, bool interactionRequired = false)
     {
         if (!force && !_settings.RevealLunarWhenActionRequired)
@@ -4068,7 +4084,7 @@ public partial class MainWindow : Window
         _launchWaitCancelledByUser = true;
         _monitorCancellation?.Cancel();
         RevealActiveLunar(force: true);
-        _activeLunarBackground?.Cancel();
+        ReleaseActiveLunarBackground();
     }
 
     private void CreatePackageCrashBundle(
@@ -4358,8 +4374,7 @@ public partial class MainWindow : Window
         foreach (var watcher in _packageWatchers)
             watcher.Dispose();
         _packageWatchers.Clear();
-        _lunarWindowCancellation?.Cancel();
-        _lunarWindowCancellation?.Dispose();
+        ReleaseActiveLunarBackground();
         _bwhApiRelay?.Dispose();
         _bwhApiRelay = null;
         if (_trayIcon is not null)

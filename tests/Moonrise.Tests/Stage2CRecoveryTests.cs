@@ -112,7 +112,7 @@ public sealed class Stage2CRecoveryTests
     }
 
     [Fact]
-    public void MinecraftDetectionKeepsLauncherAliveAndHidden()
+    public void MinecraftDetectionStopsSuppressionAndReleasesOwnership()
     {
         var processes = new MutableProcessTree([
             new(10, 1, "Lunar Client"),
@@ -127,9 +127,9 @@ public sealed class Stage2CRecoveryTests
         service.MarkMinecraftDetected();
 
         Assert.Equal(LunarLaunchWindowState.MinecraftDetected, service.State);
-        Assert.True(service.IsLauncherTreeRunning());
-        Assert.Contains((nint)100, windows.Hidden);
-        Assert.DoesNotContain((nint)120, windows.Hidden);
+        Assert.False(service.IsLauncherTreeRunning());
+        Assert.Empty(service.OwnedProcessIds);
+        Assert.Empty(windows.Hidden);
         Assert.Single(processes.Entries, entry => entry.ProcessId == 10);
     }
 

@@ -63,9 +63,7 @@ internal interface IWindowEventSource
 public sealed class LunarBackgroundLaunchService
 {
     private static readonly TimeSpan BackgroundPollInterval = TimeSpan.FromMilliseconds(500);
-    private static readonly TimeSpan MinecraftPollInterval = TimeSpan.FromSeconds(2);
-    private static readonly TimeSpan ReplacementGracePeriod = TimeSpan.FromSeconds(12);
-    private static readonly TimeSpan LaunchStartTolerance = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan ProcessStartTolerance = TimeSpan.FromSeconds(1);
     private const int MaximumHideAttempts = 3;
 
     private readonly LunarLaunchIdentity _identity;
@@ -74,12 +72,11 @@ public sealed class LunarBackgroundLaunchService
     private readonly IWindowEventSource _windowEvents;
     private readonly Action<string>? _audit;
     private readonly HashSet<int> _ownedProcessIds = [];
+    private readonly Dictionary<int, DateTimeOffset?> _ownedProcessStartTimes = [];
     private readonly HashSet<string> _knownExecutableNames;
     private readonly HashSet<string> _auditedWindowStates = new(StringComparer.Ordinal);
     private readonly object _sync = new();
     private LunarLaunchWindowState _state = LunarLaunchWindowState.BackgroundHidden;
-    private bool _keepHiddenAfterMinecraft;
-    private DateTimeOffset _lastTrustedProcessSeenUtc;
 
     public LunarBackgroundLaunchService(int rootProcessId)
         : this(
@@ -134,10 +131,10 @@ public sealed class LunarBackgroundLaunchService
         _windowEvents = windowEvents ?? new NoWindowEventSource();
         _audit = audit;
         _ownedProcessIds.Add(identity.InitialProcessId);
+        _ownedProcessStartTimes[identity.InitialProcessId] = identity.InitialProcessStartUtc;
         _knownExecutableNames = new HashSet<string>(
             identity.KnownExecutableNames,
             StringComparer.OrdinalIgnoreCase);
-        _lastTrustedProcessSeenUtc = identity.LaunchTimestampUtc;
         Audit(
             $"Lunar launch identity: initialPid={identity.InitialProcessId}; " +
             $"initialStartUtc={identity.InitialProcessStartUtc:O}; launchUtc={identity.LaunchTimestampUtc:O}; " +
@@ -172,8 +169,16 @@ public sealed class LunarBackgroundLaunchService
             throw new ArgumentOutOfRangeException(nameof(processId));
         lock (_sync)
         {
+            var process = _processTree.Capture()
+                .FirstOrDefault(item => item.ProcessId == processId);
+            if (process is null)
+            {
+                Audit($"Trusted Lunar IPC process was not adopted because it was not observed: pid={processId}");
+                return;
+            }
             if (_ownedProcessIds.Add(processId))
                 Audit($"Trusted Lunar IPC process tracked: pid={processId}");
+            _ownedProcessStartTimes[processId] = process.StartTimeUtc;
         }
     }
 
@@ -195,22 +200,17 @@ public sealed class LunarBackgroundLaunchService
             while (!cancellationToken.IsCancellationRequested)
             {
                 LunarLaunchWindowState state;
-                bool keepHidden;
                 lock (_sync)
-                {
                     state = _state;
-                    keepHidden = _keepHiddenAfterMinecraft;
-                }
 
                 if (state is LunarLaunchWindowState.UserVisible or
                     LunarLaunchWindowState.InteractionRequired or
+                    LunarLaunchWindowState.MinecraftDetected or
                     LunarLaunchWindowState.LauncherExited or
                     LunarLaunchWindowState.Cancelled)
                 {
                     return;
                 }
-                if (state == LunarLaunchWindowState.MinecraftDetected && !keepHidden)
-                    return;
 
                 if (!IsLauncherTreeRunning())
                 {
@@ -219,15 +219,12 @@ public sealed class LunarBackgroundLaunchService
                 }
 
                 HideOwnedWindows();
-                var delay = state == LunarLaunchWindowState.BackgroundHidden
-                    ? BackgroundPollInterval
-                    : MinecraftPollInterval;
-                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+                await Task.Delay(BackgroundPollInterval, cancellationToken).ConfigureAwait(false);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            SetStateIfHiding(LunarLaunchWindowState.Cancelled);
+            Cancel();
         }
         finally
         {
@@ -269,7 +266,6 @@ public sealed class LunarBackgroundLaunchService
         lock (_sync)
         {
             _state = LunarLaunchWindowState.UserVisible;
-            _keepHiddenAfterMinecraft = false;
             return RevealAndFocusCore();
         }
     }
@@ -279,7 +275,6 @@ public sealed class LunarBackgroundLaunchService
         lock (_sync)
         {
             _state = LunarLaunchWindowState.InteractionRequired;
-            _keepHiddenAfterMinecraft = false;
             return RevealAndFocusCore();
         }
     }
@@ -290,10 +285,9 @@ public sealed class LunarBackgroundLaunchService
     {
         lock (_sync)
         {
-            _keepHiddenAfterMinecraft = _state == LunarLaunchWindowState.BackgroundHidden;
             _state = LunarLaunchWindowState.MinecraftDetected;
+            ReleaseOwnershipCore("minecraft-detected");
         }
-        HideOwnedWindows();
     }
 
     public void Cancel()
@@ -301,7 +295,7 @@ public sealed class LunarBackgroundLaunchService
         lock (_sync)
         {
             _state = LunarLaunchWindowState.Cancelled;
-            _keepHiddenAfterMinecraft = false;
+            ReleaseOwnershipCore("cancelled");
         }
     }
 
@@ -309,12 +303,8 @@ public sealed class LunarBackgroundLaunchService
     {
         lock (_sync)
         {
-            var running = _processTree.Capture();
-            RefreshOwnedProcessIds(running);
-            if (running.Any(process => _ownedProcessIds.Contains(process.ProcessId)))
-                return true;
-            return _identity.InstallationDirectories.Count > 0 &&
-                DateTimeOffset.UtcNow - _lastTrustedProcessSeenUtc < ReplacementGracePeriod;
+            RefreshOwnedProcessIds(_processTree.Capture());
+            return _ownedProcessIds.Count > 0;
         }
     }
 
@@ -378,83 +368,85 @@ public sealed class LunarBackgroundLaunchService
             return new WindowClassification(false, "excluded: process-not-running");
         if (IsExplicitlyExcluded(process, window))
             return new WindowClassification(false, $"excluded: {ExplicitExclusionReason(process, window)}");
-        if (_ownedProcessIds.Contains(window.ProcessId))
-            return new WindowClassification(true, "included: trusted-lunar-process");
-        if (window.OwnerProcessId > 0 && _ownedProcessIds.Contains(window.OwnerProcessId))
-        {
-            _ownedProcessIds.Add(window.ProcessId);
-            RememberExecutable(process);
-            return new WindowClassification(true, "included: owner-is-trusted-lunar-process");
-        }
-
-        var pathInInstall = IsInKnownInstallationDirectory(process.ExecutablePath);
-        var recent = IsCurrentLaunchProcess(process);
-        var knownName = IsKnownExecutableName(process);
-        var safeMarker = HasSafeLunarCommandLineMarker(process.CommandLine);
-        var lunarWindow = IsObservedLunarWindow(window);
-        if (pathInInstall && recent && (knownName || safeMarker) && lunarWindow)
-        {
-            _ownedProcessIds.Add(window.ProcessId);
-            RememberExecutable(process);
-            _lastTrustedProcessSeenUtc = DateTimeOffset.UtcNow;
-            return new WindowClassification(
-                true,
-                "included: detached-replacement(path+start+name/marker+window)");
-        }
-        return new WindowClassification(
-            false,
-            $"excluded: signals[path={pathInInstall},recent={recent},knownName={knownName}," +
-            $"marker={safeMarker},lunarWindow={lunarWindow}]");
+        if (IsOwnedProcess(process))
+            return new WindowClassification(true, "included: verified-launch-process");
+        return new WindowClassification(false, "excluded: not-a-verified-launch-descendant");
     }
 
     private void RefreshOwnedProcessIds(IReadOnlyList<ProcessTreeEntry> snapshot)
     {
-        var runningIds = snapshot.Select(process => process.ProcessId).ToHashSet();
+        var processes = snapshot.ToDictionary(process => process.ProcessId);
+
+        foreach (var ownedProcessId in _ownedProcessIds.ToArray())
+        {
+            if (!processes.TryGetValue(ownedProcessId, out var process))
+            {
+                _ownedProcessIds.Remove(ownedProcessId);
+                _ownedProcessStartTimes.Remove(ownedProcessId);
+                continue;
+            }
+            _ = IsOwnedProcess(process);
+        }
+
         var changed = true;
         while (changed)
         {
             changed = false;
             foreach (var process in snapshot)
             {
-                if (_ownedProcessIds.Contains(process.ProcessId))
+                if (IsOwnedProcess(process) || IsExplicitlyExcluded(process, null))
+                    continue;
+                if (!processes.TryGetValue(process.ParentProcessId, out var parent) ||
+                    !IsOwnedProcess(parent))
                 {
-                    RememberExecutable(process);
                     continue;
                 }
-                if (IsExplicitlyExcluded(process, null))
-                    continue;
 
-                var ancestor = _ownedProcessIds.Contains(process.ParentProcessId);
-                var exactPath = PathsEqual(process.ExecutablePath, _identity.InitialExecutablePath);
-                var pathInInstall = IsInKnownInstallationDirectory(process.ExecutablePath);
-                var recent = IsCurrentLaunchProcess(process);
-                var knownName = IsKnownExecutableName(process);
-                var safeMarker = HasSafeLunarCommandLineMarker(process.CommandLine);
-                if (ancestor ||
-                    (exactPath && recent && knownName) ||
-                    (pathInInstall && recent && knownName && safeMarker))
+                if (_ownedProcessIds.Add(process.ProcessId))
                 {
-                    changed |= _ownedProcessIds.Add(process.ProcessId);
-                    RememberExecutable(process);
-                    if (!ancestor)
-                    {
-                        Audit(
-                            $"Detached Lunar process tracked: pid={process.ProcessId}; parentPid={process.ParentProcessId}; " +
-                            $"startUtc={process.StartTimeUtc:O}; executable={SafeExecutableName(process)}; " +
-                            $"pathHash={HashPath(process.ExecutablePath)}; " +
-                            $"reason={(exactPath ? "exact-path+name+start" : "install-path+name+start+marker")}");
-                    }
+                    _ownedProcessStartTimes[process.ProcessId] = process.StartTimeUtc;
+                    changed = true;
+                    Audit(
+                        $"Lunar launch descendant tracked: pid={process.ProcessId}; parentPid={process.ParentProcessId}; " +
+                        $"startUtc={process.StartTimeUtc:O}; executable={SafeExecutableName(process)}; " +
+                        $"pathHash={HashPath(process.ExecutablePath)}");
                 }
             }
         }
-        _ownedProcessIds.RemoveWhere(processId => !runningIds.Contains(processId));
+    }
+
+    private bool IsOwnedProcess(ProcessTreeEntry process)
+    {
+        if (!_ownedProcessIds.Contains(process.ProcessId))
+            return false;
+        if (!_ownedProcessStartTimes.TryGetValue(process.ProcessId, out var expectedStart) ||
+            expectedStart is null ||
+            process.StartTimeUtc is null)
+        {
+            return true;
+        }
+
+        if ((process.StartTimeUtc.Value - expectedStart.Value).Duration() <= ProcessStartTolerance)
+            return true;
+
+        _ownedProcessIds.Remove(process.ProcessId);
+        _ownedProcessStartTimes.Remove(process.ProcessId);
+        Audit(
+            $"Lunar process ownership released after PID reuse: pid={process.ProcessId}; " +
+            $"expectedStartUtc={expectedStart:O}; actualStartUtc={process.StartTimeUtc:O}");
+        return false;
+    }
+
+    private void ReleaseOwnershipCore(string reason)
+    {
         if (_ownedProcessIds.Count > 0)
-            _lastTrustedProcessSeenUtc = DateTimeOffset.UtcNow;
+            Audit($"Lunar launch ownership released: reason={reason}; processCount={_ownedProcessIds.Count}");
+        _ownedProcessIds.Clear();
+        _ownedProcessStartTimes.Clear();
     }
 
     private bool ShouldHideWindows() =>
-        _state == LunarLaunchWindowState.BackgroundHidden ||
-        (_state == LunarLaunchWindowState.MinecraftDetected && _keepHiddenAfterMinecraft);
+        _state == LunarLaunchWindowState.BackgroundHidden;
 
     private void SetState(LunarLaunchWindowState state)
     {
