@@ -24,11 +24,23 @@ public sealed partial class LunarProfileReadinessService
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var deadline = DateTimeOffset.UtcNow + timeout;
         var offset = Math.Max(0, checkpoint);
+        byte[]? boundary = null;
+        DateTime? creationTime = null;
         var pending = new StringBuilder();
         var expectedProfileObserved = false;
         DateTimeOffset? launcherReadyObservedUtc = null;
+        void ResetLog()
+        {
+            offset = 0;
+            boundary = null;
+            creationTime = null;
+            pending.Clear();
+            expectedProfileObserved = false;
+            launcherReadyObservedUtc = null;
+        }
         while (DateTimeOffset.UtcNow < deadline)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -37,11 +49,22 @@ public sealed partial class LunarProfileReadinessService
                 if (File.Exists(logPath))
                 {
                     using var stream = new FileStream(logPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                    if (stream.Length < offset) { offset = 0; pending.Clear(); }
+                    var currentCreationTime = File.GetCreationTimeUtc(logPath);
+                    // Length alone misses rotation to a larger file and truncate/refill
+                    // between polls. Compare a bounded byte anchor at the last offset.
+                    if (stream.Length < offset ||
+                        (creationTime is not null && creationTime != currentCreationTime) ||
+                        (boundary is not null && !boundary.AsSpan().SequenceEqual(ReadBoundary(stream, offset))))
+                        ResetLog();
+                    creationTime = currentCreationTime;
                     stream.Position = offset;
                     using var reader = new StreamReader(stream, Encoding.UTF8, true, leaveOpen: true);
-                    pending.Append(await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false));
+                    // At EOF, capture the checkpoint anchor before yielding: a
+                    // same-length replacement may arrive during an async EOF read.
+                    if (stream.Length > offset)
+                        pending.Append(await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false));
                     offset = stream.Position;
+                    boundary = ReadBoundary(stream, offset);
                     var text = pending.ToString();
                     var lastLine = text.LastIndexOf('\n');
                     if (lastLine >= 0)
@@ -63,6 +86,7 @@ public sealed partial class LunarProfileReadinessService
                             return Expected(expectedProfile);
                     }
                 }
+                else ResetLog();
             }
             catch (IOException) { }
 
@@ -83,6 +107,14 @@ public sealed partial class LunarProfileReadinessService
             $"Lunar Launcher did not become ready for the selected profile within {Math.Ceiling(timeout.TotalSeconds)} seconds.");
     }
 
+    private static byte[] ReadBoundary(FileStream stream, long offset)
+    {
+        var bytes = new byte[(int)Math.Min(offset, 128)];
+        stream.Position = offset - bytes.Length;
+        stream.ReadExactly(bytes);
+        return bytes;
+    }
+
     internal static bool TryParseSelectedProfile(
         string text,
         out (string Client, string Version) selected)
@@ -101,13 +133,20 @@ public sealed partial class LunarProfileReadinessService
     }
 
     private static bool IsExpectedProfileEvidence(string line, string expectedProfileId) =>
-        line.Contains(expectedProfileId, StringComparison.OrdinalIgnoreCase) &&
+        !string.IsNullOrEmpty(expectedProfileId) &&
+        Regex.IsMatch(line, $@"(?<![A-Za-z0-9._-]){Regex.Escape(expectedProfileId)}(?![A-Za-z0-9._-])", RegexOptions.CultureInvariant) &&
         line.Contains("profile", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsLauncherReadyEvidence(string line) =>
-        line.Contains("ready", StringComparison.OrdinalIgnoreCase) &&
+        ReadyWordRegex().IsMatch(line) && !NegativeReadyRegex().IsMatch(line) &&
         (line.Contains("[Window]", StringComparison.OrdinalIgnoreCase) ||
          line.Contains("Ready signal", StringComparison.OrdinalIgnoreCase));
+
+    [GeneratedRegex(@"\bready\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ReadyWordRegex();
+
+    [GeneratedRegex(@"\b(?:not|never)[\s-]+(?:yet[\s-]+)?ready\b|\bready\s*[:=]\s*false\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex NegativeReadyRegex();
 
     private static (string Client, string Version) Expected(LauncherProfile profile) =>
         (profile.Client.ToLowerInvariant(), profile.GameVersion);
