@@ -77,6 +77,9 @@ public sealed class LunarBackgroundLaunchService
     private readonly HashSet<string> _knownExecutableNames;
     private readonly HashSet<string> _auditedWindowStates = new(StringComparer.Ordinal);
     private readonly object _sync = new();
+    private readonly CancellationTokenSource _watchStop = new();
+    private bool _released;
+    private bool _watchStarted;
     private LunarLaunchWindowState _state = LunarLaunchWindowState.BackgroundHidden;
 
     public LunarBackgroundLaunchService(int rootProcessId)
@@ -158,7 +161,7 @@ public sealed class LunarBackgroundLaunchService
         {
             lock (_sync)
             {
-                RefreshOwnedProcessIds(_processTree.Capture());
+                if (!_released) RefreshOwnedProcessIds(_processTree.Capture());
                 return _ownedProcessIds.ToArray();
             }
         }
@@ -170,6 +173,7 @@ public sealed class LunarBackgroundLaunchService
             throw new ArgumentOutOfRangeException(nameof(processId));
         lock (_sync)
         {
+            if (_released) return;
             var process = _processTree.Capture()
                 .FirstOrDefault(item => item.ProcessId == processId);
             if (process is null)
@@ -185,12 +189,23 @@ public sealed class LunarBackgroundLaunchService
 
     public async Task WatchAsync(CancellationToken cancellationToken)
     {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _watchStop.Token);
+        cancellationToken = linked.Token;
         IDisposable? subscription = null;
+        lock (_sync)
+        {
+            if (_released || _watchStarted || cancellationToken.IsCancellationRequested) return;
+            _watchStarted = true;
+        }
         try
         {
             try
             {
-                subscription = _windowEvents.Subscribe(HandleWindowCreatedOrShown);
+                lock (_sync)
+                {
+                    if (_released || cancellationToken.IsCancellationRequested) return;
+                    subscription = _windowEvents.Subscribe(HandleWindowCreatedOrShown);
+                }
             }
             catch (Exception exception) when (
                 exception is Win32Exception or PlatformNotSupportedException)
@@ -225,11 +240,18 @@ public sealed class LunarBackgroundLaunchService
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            Cancel();
+            SetStateIfHiding(LunarLaunchWindowState.Cancelled);
         }
         finally
         {
             subscription?.Dispose();
+            lock (_sync)
+            {
+                if (cancellationToken.IsCancellationRequested ||
+                    _state is LunarLaunchWindowState.MinecraftDetected or
+                        LunarLaunchWindowState.LauncherExited or LunarLaunchWindowState.Cancelled)
+                    ReleaseOwnershipCore("watcher-ended");
+            }
         }
     }
 
@@ -266,6 +288,7 @@ public sealed class LunarBackgroundLaunchService
     {
         lock (_sync)
         {
+            if (_released) return false;
             _state = LunarLaunchWindowState.UserVisible;
             return RevealAndFocusCore();
         }
@@ -275,6 +298,7 @@ public sealed class LunarBackgroundLaunchService
     {
         lock (_sync)
         {
+            if (_released) return false;
             _state = LunarLaunchWindowState.InteractionRequired;
             return RevealAndFocusCore();
         }
@@ -286,6 +310,7 @@ public sealed class LunarBackgroundLaunchService
     {
         lock (_sync)
         {
+            if (_released) return;
             _state = LunarLaunchWindowState.MinecraftDetected;
             ReleaseOwnershipCore("minecraft-detected");
         }
@@ -295,6 +320,7 @@ public sealed class LunarBackgroundLaunchService
     {
         lock (_sync)
         {
+            if (_released) return;
             _state = LunarLaunchWindowState.Cancelled;
             ReleaseOwnershipCore("cancelled");
         }
@@ -304,6 +330,7 @@ public sealed class LunarBackgroundLaunchService
     {
         lock (_sync)
         {
+            if (_released) return false;
             RefreshOwnedProcessIds(_processTree.Capture());
             return _ownedProcessIds.Count > 0;
         }
@@ -376,6 +403,7 @@ public sealed class LunarBackgroundLaunchService
 
     private void RefreshOwnedProcessIds(IReadOnlyList<ProcessTreeEntry> snapshot)
     {
+        if (_released) return;
         var processes = snapshot.ToDictionary(process => process.ProcessId);
 
         foreach (var ownedProcessId in _ownedProcessIds.ToArray())
@@ -444,15 +472,18 @@ public sealed class LunarBackgroundLaunchService
             Audit($"Lunar launch ownership released: reason={reason}; processCount={_ownedProcessIds.Count}");
         _ownedProcessIds.Clear();
         _ownedProcessStartTimes.Clear();
+        _released = true;
+        _auditedWindowStates.Clear();
+        _watchStop.Cancel();
     }
 
     private bool ShouldHideWindows() =>
-        _state == LunarLaunchWindowState.BackgroundHidden;
+        !_released && _state == LunarLaunchWindowState.BackgroundHidden;
 
     private void SetState(LunarLaunchWindowState state)
     {
         lock (_sync)
-            _state = state;
+            if (!_released) _state = state;
     }
 
     private void SetStateIfHiding(LunarLaunchWindowState state)
