@@ -76,11 +76,12 @@ public sealed class DesignRedesignTests
         var xaml = Read("src", "Moonrise", "MainWindow.xaml");
         var code = Read("src", "Moonrise", "MainWindow.xaml.cs");
 
-        foreach (var filter in new[] { "AllKindButton", "ModsKindButton", "AgentsKindButton", "UnclassifiedKindButton" })
+        foreach (var filter in new[] { "AllKindButton", "ModsKindButton", "AgentsKindButton" })
             Assert.Contains($"x:Name=\"{filter}\"", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("UnclassifiedKindButton", xaml, StringComparison.Ordinal);
         Assert.Contains("PackageKindButton_Click", xaml, StringComparison.Ordinal);
         Assert.Contains("GetSelectedPackageFolder", code, StringComparison.Ordinal);
-        Assert.Contains("_paths.UnclassifiedPackagesDirectory", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("_paths.UnclassifiedPackagesDirectory", code, StringComparison.Ordinal);
         Assert.Contains("T(\"Перетащите JAR-файлы сюда\", \"Drop JAR files here\")", code, StringComparison.Ordinal);
     }
 

@@ -38,6 +38,7 @@ public partial class MainWindow : Window
     private readonly WeaveModApiInspector _weaveApiInspector = new();
     private readonly LaunchSessionService _launchSessions = new();
     private readonly LauncherExecutableDetector _launcherDetector = new();
+    private readonly LunarLaunchLifecycleService _lunarLifecycle = new();
     private readonly LauncherProfileService _profileService = new();
     private readonly LunarProfileReadinessService _profileReadiness = new();
     private readonly WeaveAgentService _weaveAgent = new();
@@ -75,6 +76,9 @@ public partial class MainWindow : Window
     private readonly MoonriseSettings _settings;
     private CancellationTokenSource? _monitorCancellation;
     private int _launchInProgress;
+    private long _launchAttemptSequence;
+    private string? _activeLaunchAttemptId;
+    private int _activeLaunchCommandSent;
     private SafeLogger? _logger;
     private SafeLogger? _lunarWindowLogger;
     private bool _initialized;
@@ -86,6 +90,7 @@ public partial class MainWindow : Window
     private Forms.ToolStripMenuItem? _trayExitItem;
     private PackageInfo? _pendingDeletePackage;
     private Action? _pendingConfirmationAction;
+    private TaskCompletionSource<bool>? _lunarClosePromptCompletion;
     private UpdateRelease? _availableUpdate;
     private string? _pendingActivationArgument;
     private bool _catalogReady;
@@ -229,6 +234,7 @@ public partial class MainWindow : Window
             CloseAfterLaunchCheckBox.IsChecked = _settings.CloseAfterLaunch;
             _settings.BackgroundLunarLaunch = true;
             RevealLunarCheckBox.IsChecked = _settings.RevealLunarWhenActionRequired;
+            AutoCloseLunarCheckBox.IsChecked = _settings.AutoCloseLunarBeforeLaunch;
             CheckForUpdatesCheckBox.IsChecked = _settings.CheckForUpdates;
             PrereleaseUpdatesCheckBox.IsChecked = _settings.IncludePrereleaseUpdates;
             DeveloperModeCheckBox.IsChecked = _settings.DeveloperMode;
@@ -543,9 +549,7 @@ public partial class MainWindow : Window
             ? _library.Packages
             : AgentsKindButton.IsChecked == true
                 ? _agents
-                : UnclassifiedKindButton.IsChecked == true
-                    ? _library.Packages.Where(item => item.Kind is PackageKind.Ambiguous or PackageKind.Unclassified)
-                    : _mods;
+                : _mods;
         var search = LibrarySearchBox.Text.Trim();
         foreach (var package in query.Where(package => string.IsNullOrWhiteSpace(search) ||
                      package.DisplayName.Contains(search, StringComparison.OrdinalIgnoreCase) ||
@@ -579,6 +583,9 @@ public partial class MainWindow : Window
 
     private void RefreshProfileState()
     {
+        var previousProfileId = (LunarProfileComboBox.SelectedItem as LauncherProfile)?.Id;
+        LunarProfileComboBox.Visibility = Visibility.Collapsed;
+        ProfileStateText.Visibility = Visibility.Visible;
         var client = SelectedClient;
         var version = SelectedVersion;
         if (SelectedClientChoice?.Plugin is { } plugin)
@@ -589,12 +596,20 @@ public partial class MainWindow : Window
         }
         try
         {
-            var profile = _profileService.GetProfiles().FirstOrDefault(item =>
+            var profiles = _profileService.GetProfiles().Where(item =>
                 string.Equals(item.Client, client, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(item.GameVersion, version, StringComparison.OrdinalIgnoreCase));
+                string.Equals(item.GameVersion, version, StringComparison.OrdinalIgnoreCase)).ToArray();
+            var profile = profiles.FirstOrDefault(item => item.Id == previousProfileId) ?? profiles.FirstOrDefault();
+            LunarProfileComboBox.ItemsSource = profiles;
+            LunarProfileComboBox.SelectedItem = profile;
+            if (profiles.Length > 1)
+            {
+                ProfileStateText.Visibility = Visibility.Collapsed;
+                LunarProfileComboBox.Visibility = Visibility.Visible;
+            }
             ProfileStateText.Text = profile is null
                 ? T("Создайте профиль в Lunar", "Create it in Lunar first")
-                : profile.Name;
+                : profile.DetailLabel;
             ProfileStateText.SetResourceReference(System.Windows.Documents.TextElement.ForegroundProperty,
                 profile is null ? "Warning" : "Success");
         }
@@ -791,7 +806,7 @@ public partial class MainWindow : Window
             ? T("Запуск…", "Launching…")
             : T("Запустить", "Launch");
         LibraryTitle.Text = T("Библиотека пакетов", "Package library"); LibrarySubtitle.Text = T("Управление локальными Weave-модами и Java-агентами.", "Manage local Weave mods and Java agents.");
-        UpdateOpenPackageFolderButton(); AddPackageButton.Content = T("Добавить JAR", "Add JAR"); AllKindButton.Content = T("Все", "All"); ModsKindButton.Content = T("Weave-моды", "Weave mods"); AgentsKindButton.Content = T("Java-агенты", "Java agents"); UnclassifiedKindButton.Content = T("Без типа", "Unclassified"); DropTargetText.Text = T("Перетащите JAR-файлы сюда", "Drop JAR files here");
+        UpdateOpenPackageFolderButton(); AddPackageButton.Content = T("Добавить JAR", "Add JAR"); AllKindButton.Content = T("Все", "All"); ModsKindButton.Content = T("Weave-моды", "Weave mods"); AgentsKindButton.Content = T("Java-агенты", "Java agents"); DropTargetText.Text = T("Перетащите JAR-файлы сюда", "Drop JAR files here");
         DropTargetHint.Text = T("Weave-моды и Java-агенты определяются автоматически.", "Weave mods and Java agents are detected automatically.");
         PackageNameHeader.Text = T("ПАКЕТ", "PACKAGE"); EntrypointHeader.Text = T("ВЕРСИЯ", "VERSION"); PackageTypeHeader.Text = T("ТИП", "TYPE"); StateHeader.Text = T("СТАТУС", "STATUS");
         EmptyLibraryTitle.Text = T("Папка пуста", "This folder is empty"); EmptyLibraryText.Text = T("Добавьте совместимый JAR-пакет.", "Add a compatible JAR to continue.");
@@ -808,6 +823,7 @@ public partial class MainWindow : Window
         LauncherPathTitle.Text = "Lunar Launcher"; LauncherPathHint.Text = T("Исполняемый файл лаунчера", "Launcher executable"); BrowseLauncherButton.Content = T("Выбрать", "Browse");
         CloseAfterTitle.Text = T("Закрывать после запуска", "Close after launch"); CloseAfterHint.Text = T("Закрыть Moonrise после запуска игрового процесса.", "Close Moonrise when the game process starts.");
         RevealLunarTitle.Text = T("Показывать Lunar, если требуется действие", "Show Lunar when action is required"); RevealLunarHint.Text = T("Показать официальный лаунчер для входа, обновления или другого действия.", "Reveal the official launcher for authentication, updates, or other interaction.");
+        AutoCloseLunarTitle.Text = T("Автоматически закрывать Lunar перед запуском", "Automatically close Lunar before launch"); AutoCloseLunarHint.Text = T("Закрыть только официальный Lunar Launcher перед началом новой сессии Moonrise.", "Close only the official Lunar Launcher before Moonrise starts a new session.");
         StorageTitle.Text = T("Пакеты Moonrise занимают:", "Moonrise packages use:");
         StorageHint.Text = T("Откройте папку данных Moonrise.", "Open the Moonrise data directory.");
         OpenRootButton.Content = T("Открыть папку", "Open folder");
@@ -1515,7 +1531,7 @@ public partial class MainWindow : Window
         {
             package.IsEnabled = false;
             ShowError(T(
-                "Неклассифицированный пакет нельзя запустить.",
+                "Этот пакет не поддерживается.",
                 exception.Message));
         }
     }
@@ -2313,9 +2329,7 @@ public partial class MainWindow : Window
             ? _paths.WeavePackagesDirectory
             : AgentsKindButton.IsChecked == true
                 ? _paths.AgentPackagesDirectory
-                : UnclassifiedKindButton.IsChecked == true
-                    ? _paths.UnclassifiedPackagesDirectory
-                    : _paths.PackagesDirectory;
+                : _paths.PackagesDirectory;
 
     private void UpdateOpenPackageFolderButton()
     {
@@ -2325,9 +2339,7 @@ public partial class MainWindow : Window
             ? T("Открыть папку Weave-модов", "Open Weave mods folder")
             : AgentsKindButton.IsChecked == true
                 ? T("Открыть папку Java-агентов", "Open Java agents folder")
-                : UnclassifiedKindButton.IsChecked == true
-                    ? T("Открыть папку без типа", "Open unclassified folder")
-                    : T("Открыть папку пакетов", "Open package folder");
+                : T("Открыть папку пакетов", "Open package folder");
     }
 
     private void ImportFiles(IEnumerable<string> paths)
@@ -2338,7 +2350,6 @@ public partial class MainWindow : Window
             if (result.Status == PackageImportStatus.Imported && result.Package is not null)
             {
                 AddDiagnostic($"Imported {result.Package.OriginalFileName}; SHA-256={result.Package.Sha256}");
-                ResolveAmbiguousImport(result.Package);
             }
             else if (result.Status != PackageImportStatus.AlreadyImported)
             {
@@ -2350,26 +2361,6 @@ public partial class MainWindow : Window
         ShowImportSummary(summary);
     }
 
-    private void ResolveAmbiguousImport(PackageInfo imported)
-    {
-        var package = _library.Packages.FirstOrDefault(item =>
-            string.Equals(item.PackageId, imported.PackageId, StringComparison.OrdinalIgnoreCase));
-        if (package?.Kind != PackageKind.Ambiguous)
-            return;
-
-        var choice = MessageBox.Show(
-            this,
-            T(
-                $"«{package.OriginalFileName}» содержит и weave.mod.json, и Java-agent manifest.\n\nДа — Weave-мод\nНет — Java-агент\nОтмена — оставить отключённым.",
-                $"“{package.OriginalFileName}” contains both weave.mod.json and a Java-agent manifest.\n\nYes — Weave mod\nNo — Java agent\nCancel — keep it disabled."),
-            T("Выберите тип пакета", "Select package type"),
-            MessageBoxButton.YesNoCancel,
-            MessageBoxImage.Question);
-        if (choice == MessageBoxResult.Yes)
-            _library.SelectType(package, PackageKind.WeaveMod, _settings.DeveloperMode);
-        else if (choice == MessageBoxResult.No)
-            _library.SelectType(package, PackageKind.JavaAgent, _settings.DeveloperMode);
-    }
 
     private void ShowImportSummary(PackageImportSummary summary)
     {
@@ -2406,10 +2397,6 @@ public partial class MainWindow : Window
                 AddDiagnostic($"Incoming import failed for {Path.GetFileName(result.SourcePath)}: {result.Message}");
                 firstNewFailure ??= result;
             }
-        }
-        foreach (var result in summary.Results.Where(item => item.Status == PackageImportStatus.Imported && item.Package is not null))
-        {
-            ResolveAmbiguousImport(result.Package!);
         }
         LoadPackages();
         RefreshStorageSummary();
@@ -2601,43 +2588,12 @@ public partial class MainWindow : Window
             MessageBoxImage.Information);
     }
 
-    private void SelectPackageTypeMenuItem_Click(object sender, RoutedEventArgs e)
-    {
-        if ((sender as FrameworkElement)?.Tag is not PackageInfo package)
-            return;
-        if (package.Kind == PackageKind.Unclassified && !_settings.DeveloperMode)
-        {
-            ShowError(T(
-                "Ручной выбор типа доступен только в режиме разработчика.",
-                "Manual type selection is available only in Developer mode."));
-            return;
-        }
-        var choice = MessageBox.Show(
-            this,
-            T("Да — Weave-мод\nНет — Java-агент", "Yes — Weave mod\nNo — Java agent"),
-            T("Выберите тип пакета", "Select package type"),
-            MessageBoxButton.YesNoCancel,
-            MessageBoxImage.Question);
-        try
-        {
-            if (choice == MessageBoxResult.Yes)
-                _library.SelectType(package, PackageKind.WeaveMod, _settings.DeveloperMode);
-            else if (choice == MessageBoxResult.No)
-                _library.SelectType(package, PackageKind.JavaAgent, _settings.DeveloperMode);
-            LoadPackages();
-        }
-        catch (Exception exception)
-        {
-            ShowError(exception.Message);
-        }
-    }
 
     private string LocalizedPackageType(PackageKind kind) => kind switch
     {
         PackageKind.WeaveMod => T("Weave-мод", "Weave mod"),
         PackageKind.JavaAgent => T("Java-агент", "Java agent"),
-        PackageKind.Ambiguous => T("Неоднозначный", "Ambiguous"),
-        _ => T("Неклассифицированный", "Unclassified")
+        _ => T("Неподдерживаемый", "Unsupported")
     };
 
     private string LocalizePackageError(string message)
@@ -2648,6 +2604,10 @@ public partial class MainWindow : Window
             return "Пакет уже импортирован.";
         if (message.Contains("weave.mod.json is malformed", StringComparison.OrdinalIgnoreCase))
             return "Файл weave.mod.json повреждён.";
+        if (message.Contains("cannot declare both Weave mod metadata and a Java agent manifest", StringComparison.OrdinalIgnoreCase))
+            return "JAR одновременно объявляет Weave-мод и Java-агент. Такой пакет сейчас не поддерживается.";
+        if (message.Contains("Moonrise currently imports only Weave mods and Java agents", StringComparison.OrdinalIgnoreCase))
+            return "JAR не поддерживается. В библиотеку Moonrise можно добавлять только Weave-моды и Java-агенты; Forge/Fabric/обычные JAR не импортируются.";
         if (message.Contains("still in progress", StringComparison.OrdinalIgnoreCase))
             return "Копирование файла ещё не завершено.";
         if (message.Contains("managed package file is missing", StringComparison.OrdinalIgnoreCase))
@@ -2666,12 +2626,10 @@ public partial class MainWindow : Window
     public string PackageDetailsMenuText => T("Сведения о пакете", "Package details");
     public string VerifyIntegrityMenuText => T("Проверить целостность", "Verify integrity");
     public string RevealManagedFileMenuText => T("Показать управляемый файл", "Reveal managed file");
-    public string SelectPackageTypeMenuText => T("Выбрать тип (расширенно)", "Select package type (advanced)");
     public string CatalogInstallText => T("Установить", "Install");
     public string DeletePackageText => T("Удалить", "Delete");
     public string WeaveTypeText => T("Weave-мод", "Weave mod");
     public string AgentTypeText => T("Java-агент", "Java agent");
-    public string UnclassifiedTypeText => T("Без типа", "Unclassified");
 
     private static void OpenExternalUrl(string url) =>
         Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
@@ -2701,6 +2659,59 @@ public partial class MainWindow : Window
     {
         _settings.RevealLunarWhenActionRequired = RevealLunarCheckBox.IsChecked == true;
         SaveSettings();
+    }
+
+    private void AutoCloseLunarCheckBox_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.AutoCloseLunarBeforeLaunch = AutoCloseLunarCheckBox.IsChecked == true;
+        SaveSettings();
+    }
+
+    private Task<bool> PromptToCloseRunningLunarAsync()
+    {
+        if (_lunarClosePromptCompletion is { Task.IsCompleted: false })
+            return _lunarClosePromptCompletion.Task;
+
+        _lunarClosePromptCompletion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        LunarRunningTitle.Text = T("Lunar Client уже запущен", "Lunar Client is already running");
+        LunarRunningSubtitle.Text = T(
+            "Для запуска через Moonrise нужно закрыть Lunar Client.",
+            "Moonrise needs Lunar Client to be closed before starting a new session.");
+        LunarRunningDetail.Text = T(
+            "Закрыть Lunar автоматически и продолжить?",
+            "Close Lunar automatically and continue?");
+        LunarRunningRememberCheckBox.Content = T("Запомнить мой выбор", "Remember my choice");
+        LunarRunningRememberCheckBox.IsChecked = false;
+        LunarRunningCancelButton.Content = T("Отмена", "Cancel");
+        LunarRunningConfirmButton.Content = T("Закрыть Lunar и продолжить", "Close Lunar and continue");
+        LunarRunningOverlay.Visibility = Visibility.Visible;
+        LunarRunningOverlay.IsHitTestVisible = true;
+        LunarRunningCancelButton.Focus();
+        return _lunarClosePromptCompletion.Task;
+    }
+
+    private void LunarRunningCancelButton_Click(object sender, RoutedEventArgs e) =>
+        CompleteLunarRunningPrompt(false);
+
+    private void LunarRunningConfirmButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (LunarRunningRememberCheckBox.IsChecked == true)
+        {
+            _settings.AutoCloseLunarBeforeLaunch = true;
+            AutoCloseLunarCheckBox.IsChecked = true;
+            SaveSettings();
+        }
+        CompleteLunarRunningPrompt(true);
+    }
+
+    private void CompleteLunarRunningPrompt(bool result)
+    {
+        LunarRunningOverlay.IsHitTestVisible = false;
+        LunarRunningOverlay.Visibility = Visibility.Collapsed;
+        LunarRunningRememberCheckBox.IsChecked = false;
+        var completion = _lunarClosePromptCompletion;
+        _lunarClosePromptCompletion = null;
+        completion?.TrySetResult(result);
     }
 
     private void ClearTemporaryFilesButton_Click(object sender, RoutedEventArgs e)
@@ -2920,6 +2931,7 @@ public partial class MainWindow : Window
         _settings.SafeLaunch = false;
         _settings.BackgroundLunarLaunch = true;
         _settings.RevealLunarWhenActionRequired = RevealLunarCheckBox.IsChecked == true;
+        _settings.AutoCloseLunarBeforeLaunch = AutoCloseLunarCheckBox.IsChecked == true;
         _settings.LaunchTimeoutSeconds = Math.Clamp(_settings.LaunchTimeoutSeconds, 30, 600);
         _settings.CheckForUpdates = CheckForUpdatesCheckBox.IsChecked == true;
         _settings.IncludePrereleaseUpdates = PrereleaseUpdatesCheckBox.IsChecked == true;
@@ -2933,9 +2945,17 @@ public partial class MainWindow : Window
 
     private async void LaunchButton_Click(object sender, RoutedEventArgs e)
     {
-        if (Interlocked.CompareExchange(ref _launchInProgress, 1, 0) != 0) return;
+        if (!LaunchSingleFlight.TryEnter(ref _launchInProgress))
+        {
+            AddDiagnostic($"Duplicate launch request blocked; activeAttempt={_activeLaunchAttemptId ?? "unknown"}");
+            return;
+        }
 
         var launchStartedUtc = DateTimeOffset.UtcNow;
+        var launchAttemptId = $"{launchStartedUtc:yyyyMMddHHmmssfff}-{Interlocked.Increment(ref _launchAttemptSequence)}";
+        Interlocked.Exchange(ref _activeLaunchAttemptId, launchAttemptId);
+        Interlocked.Exchange(ref _activeLaunchCommandSent, 0);
+        AddDiagnostic($"Launch attempt started: id={launchAttemptId}");
         var monitorOwnsLaunchGate = false;
         LaunchSession? launchSession = null;
         SanitizedLaunchReport? launchReport = null;
@@ -2961,6 +2981,8 @@ public partial class MainWindow : Window
             launchReport = new SanitizedLaunchReport(_paths.LogsDirectory);
             launchReport.Set("launchStage", "preflight");
             launchReport.Set("launchStartedUtc", launchStartedUtc.ToString("O"));
+            launchReport.Set("launchAttemptId", launchAttemptId);
+            launchReport.Set("launchTimeoutSeconds", Math.Clamp(_settings.LaunchTimeoutSeconds, 30, 600));
             if (!string.Equals(SelectedClient, "lunar", StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(SelectedVersion, "1.8.9", StringComparison.OrdinalIgnoreCase))
             {
@@ -2995,40 +3017,17 @@ public partial class MainWindow : Window
             }
             var enabledMods = selection.WeaveMods;
             var enabledAgents = selection.JavaAgents;
+            launchReport.Set("selectedPackages", enabledMods.Concat(enabledAgents).Select(item => new
+            {
+                item.PackageId, item.Identifier, item.OriginalFileName, Kind = item.Kind.ToString(), item.Sha256
+            }).ToArray());
             var selectedVersion = SelectedVersion;
             var selectedPackageIds = enabledMods
                 .Concat(enabledAgents)
                 .Select(item => item.PackageId)
                 .ToArray();
             var enabledModDirectoryService = new EnabledModDirectoryService(_jarParser);
-            var successorResolution = await Task.Run(() =>
-                _compatibilityBuilds.ResolveMoonriseOwnedSuccessors(selectedVersion, enabledMods));
-            if (successorResolution.AppliedSuccessors.Count > 0)
-            {
-                enabledMods = successorResolution.LaunchMods;
-                selection = new PackageLaunchSelection(enabledMods, enabledAgents);
-                foreach (var successor in successorResolution.AppliedSuccessors)
-                {
-                    AddDiagnostic(
-                        $"Moonrise-owned successor applied: {successor.RequestedPackage.OriginalFileName}; " +
-                        $"target SHA-256={successor.RequestedPackage.Sha256}; successor={successor.SuccessorPackage.DisplayName}; " +
-                        $"successor SHA-256={successor.SuccessorPackage.Sha256}");
-                }
-                launchReport.Set(
-                    "moonriseOwnedSuccessors",
-                    successorResolution.AppliedSuccessors.Select(item => new
-                    {
-                        item.Rule.Id,
-                        RequestedPackageId = item.RequestedPackage.PackageId,
-                        RequestedSha256 = item.RequestedPackage.Sha256,
-                        SuccessorPackageId = item.SuccessorPackage.PackageId,
-                        SuccessorSha256 = item.SuccessorPackage.Sha256,
-                        item.Rule.SuccessorIdentifier,
-                        item.Rule.MinecraftVersion,
-                        item.Rule.WeaveLoaderVersion
-                    }).ToArray());
-            }
-
+            launchReport.Set("launchStage", "compatibility-selection");
             // Exact-hash maintained builds must be considered before choosing the
             // loader generation. Otherwise one old mod downgrades every package to
             // Weave 0.2.x and bypasses the known Weave 1.x compatibility builds.
@@ -3066,6 +3065,10 @@ public partial class MainWindow : Window
                 enabledMods.Any(IsBwhPackage);
 
             var runtimeApiInspection = await Task.Run(() => _weaveApiInspector.Inspect(enabledMods));
+            launchReport.Set("weaveApiInspection", runtimeApiInspection.Mods.Select(item => new
+            {
+                item.Package.PackageId, item.Package.Sha256, Generation = item.Generation.ToString()
+            }).ToArray());
             if (runtimeApiInspection.HasLegacy && runtimeApiInspection.HasCurrent)
             {
                 var legacyNames = string.Join(", ", runtimeApiInspection.Mods
@@ -3106,19 +3109,91 @@ public partial class MainWindow : Window
             if (!LauncherExecutableDetector.IsSupportedLauncher(launcherPath))
                 throw new InvalidDataException(T("Выберите официальный Lunar Client.exe.", "Select the official Lunar Client.exe."));
 
-            var running = _launcherDetector.GetRunningLaunchers();
-            if (running.Count > 0)
+            var prelaunch = await Task.Run(() => _lunarLifecycle.Capture(launcherPath), token);
+            launchReport.Set("launchStage", "lunar-preflight");
+            AddDiagnostic(
+                $"Launch preflight: attempt={launchAttemptId}; launcherRunning={prelaunch.LauncherRunning}; " +
+                $"launcherPids=[{string.Join(",", prelaunch.LauncherProcessIds)}]; " +
+                $"visibleLunarWindows={prelaunch.VisibleLauncherWindowCount}; " +
+                $"minecraftRunning={prelaunch.MinecraftRunning}; minecraftPids=[{string.Join(",", prelaunch.MinecraftProcessIds)}]");
+            launchReport.Set("prelaunchLauncherProcessIds", prelaunch.LauncherProcessIds);
+            launchReport.Set("prelaunchMinecraftProcessIds", prelaunch.MinecraftProcessIds);
+            launchReport.Set("visibleLunarWindowsBeforeClose", prelaunch.VisibleLauncherWindowCount);
+
+            var prelaunchAction = LunarPrelaunchPolicy.Decide(
+                prelaunch,
+                _settings.AutoCloseLunarBeforeLaunch);
+            if (prelaunchAction == LunarPrelaunchAction.BlockForMinecraft ||
+                _activeGameProcessIds.Count > 0)
             {
-                foreach (var process in running) process.Dispose();
-                throw new InvalidOperationException(T("Сначала полностью закройте Lunar Launcher.", "Close Lunar Launcher completely before launching."));
+                launchReport.Set("launchBlockedReason", "minecraft-already-running");
+                throw new InvalidOperationException(T(
+                    "Minecraft уже запущен. Закройте текущую игру перед новым запуском через Moonrise.",
+                    "Minecraft is already running. Close the current game before starting another Moonrise launch."));
             }
 
-            profileSelection = _profileService.BeginExactProfileSelection(SelectedClient, SelectedVersion);
+            if (prelaunchAction is LunarPrelaunchAction.PromptToCloseLauncher or
+                LunarPrelaunchAction.AutoCloseLauncher)
+            {
+                var closeApproved = prelaunchAction == LunarPrelaunchAction.AutoCloseLauncher;
+                if (!closeApproved)
+                {
+                    AddDiagnostic($"Lunar close prompt shown: attempt={launchAttemptId}");
+                    closeApproved = await PromptToCloseRunningLunarAsync();
+                    if (!closeApproved)
+                    {
+                        AddDiagnostic($"Launch cancelled at Lunar close prompt: attempt={launchAttemptId}");
+                        launchReport.Set("launchStage", "cancelled");
+                        launchReport.Set("launchBlockedReason", "user-cancelled-lunar-close");
+                        launchReport.Save();
+                        SetStatus(
+                            T("Запуск отменён", "Launch cancelled"),
+                            StatusLevel.Ready,
+                            T("Lunar Client оставлен запущенным.", "Lunar Client was left running."));
+                        return;
+                    }
+                }
+
+                AddDiagnostic(
+                    $"Lunar close requested: attempt={launchAttemptId}; auto={_settings.AutoCloseLunarBeforeLaunch}; " +
+                    $"pids=[{string.Join(",", prelaunch.LauncherProcessIds)}]");
+                launchReport.Set("lunarCloseRequested", true);
+                var closeResult = await _lunarLifecycle.CloseLauncherAsync(
+                    launcherPath,
+                    TimeSpan.FromSeconds(3),
+                    TimeSpan.FromSeconds(2),
+                    token);
+                var afterClose = await Task.Run(() => _lunarLifecycle.Capture(launcherPath), token);
+                AddDiagnostic(
+                    $"Lunar close result: attempt={launchAttemptId}; success={closeResult.Success}; " +
+                    $"graceful=[{string.Join(",", closeResult.GracefullyClosedProcessIds)}]; " +
+                    $"forced=[{string.Join(",", closeResult.ForceTerminatedProcessIds)}]; " +
+                    $"remaining=[{string.Join(",", closeResult.RemainingProcessIds)}]; " +
+                    $"visibleLunarWindowsAfter={afterClose.VisibleLauncherWindowCount}");
+                launchReport.Set("lunarCloseSuccess", closeResult.Success);
+                launchReport.Set("lunarGracefullyClosedProcessIds", closeResult.GracefullyClosedProcessIds);
+                launchReport.Set("lunarForceTerminatedProcessIds", closeResult.ForceTerminatedProcessIds);
+                launchReport.Set("lunarRemainingProcessIds", closeResult.RemainingProcessIds);
+                launchReport.Set("visibleLunarWindowsAfterClose", afterClose.VisibleLauncherWindowCount);
+                if (!closeResult.Success || afterClose.LauncherRunning)
+                    throw new InvalidOperationException(T(
+                        "Не удалось полностью закрыть Lunar Client. Закройте его вручную и повторите запуск.",
+                        "Moonrise could not fully close Lunar Client. Close it manually and try again."));
+            }
+            else
+            {
+                launchReport.Set("lunarCloseRequested", false);
+            }
+
+            profileSelection = _profileService.BeginExactProfileSelection(SelectedClient, SelectedVersion,
+                (LunarProfileComboBox.SelectedItem as LauncherProfile)?.Id);
             var selectedProfile = profileSelection.Profile;
+            launchReport.Set("selectedProfile", selectedProfile);
             var launcherLog = LunarProfileReadinessService.GetDefaultLauncherLogPath();
             var checkpoint = LunarProfileReadinessService.CaptureCheckpoint(launcherLog);
 
             launchSession = _launchSessions.Create(_paths.TempDirectory);
+            launchReport.Set("launchStage", "runtime-preparation");
             string? enabledModsDirectory = null;
             if (enabledMods.Count > 0)
             {
@@ -3145,8 +3220,21 @@ public partial class MainWindow : Window
                 selectedProfile.Id,
                 selectedProfile.Name,
                 selectedProfile.Client,
-                selectedProfile.GameVersion
+                selectedProfile.GameVersion,
+                selectedProfile.MajorVersion,
+                selectedProfile.Loaders,
+                selectedProfile.LoaderVersion,
+                selectedProfile.LunarModule
             });
+            launchReport.Set("weaveLoaderFamily", enabledMods.Count == 0 ? "disabled" : useLegacyWeave ? "legacy" : "current");
+            launchReport.Set("runtimePackages", enabledMods.Concat(enabledAgents).Select(item => new
+            {
+                item.PackageId, item.Identifier, item.OriginalFileName, Kind = item.Kind.ToString(), item.Sha256,
+                SourcePath = item.FullPath,
+                LaunchPath = item.Kind == PackageKind.JavaAgent ? item.FullPath : Path.Combine(enabledModsDirectory!,
+                    enabledMods.Count(mod => string.Equals(mod.FileName, item.FileName, StringComparison.OrdinalIgnoreCase)) > 1
+                        ? $"{item.Sha256.ToLowerInvariant()}.jar" : item.FileName)
+            }).ToArray());
             launchReport.Set("weaveLoaderPath", enabledMods.Count > 0 ? weaveLoaderPath : null);
             launchReport.Set("weaveLoaderVersion", enabledMods.Count > 0 ? weaveLoaderRelease.Version : null);
             launchReport.Set("weaveLoaderSha256", weaveHash);
@@ -3191,13 +3279,16 @@ public partial class MainWindow : Window
                     useLegacyWeave,
                     legacyWeaveAdapterPath,
                     bwhNetworkAgentPath);
+                launchReport.Set("bridgeProtocol", "MNR4");
                 launchReport.Set("launchPlanWeaveMode", launchPlan.WeaveMode.ToString());
                 launchReport.Set(
                     "launchPlanAgents",
                     launchPlan.Agents.Select(item => new
                     {
                         item.RuntimeId,
-                        Role = item.Role.ToString()
+                        Role = item.Role.ToString(),
+                        item.Path,
+                        Sha256 = LocalPackageLibrary.ComputeSha256(item.Path)
                     }).ToArray());
                 launchReport.Set("bridgeConfigPath", launchSession.BridgeConfigPath);
                 var result = await Task.Run(() => _bridgeLauncher.Launch(
@@ -3215,6 +3306,7 @@ public partial class MainWindow : Window
             _lunarWindowLogger = new SafeLogger(
                 _paths.LogsDirectory,
                 "lunar-window-classification");
+            ReleaseActiveLunarBackground();
             _activeLunarBackground = new LunarBackgroundLaunchService(
                 launcherProcessId,
                 launcherPath,
@@ -3263,7 +3355,8 @@ public partial class MainWindow : Window
                 !string.Equals(confirmed.Version, SelectedVersion, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException($"Lunar selected {confirmed.Client} {confirmed.Version}, expected {SelectedClient} {SelectedVersion}.");
 
-            await DispatchLaunchToExistingLunarAsync(launcherPath, backgroundLaunch, token);
+            await DispatchLaunchToExistingLunarAsync(launcherPath, backgroundLaunch, launchAttemptId, token);
+            launchReport.Set("deeplinkSendCount", Volatile.Read(ref _activeLaunchCommandSent));
             profileSelection.Restore();
             profileSelection = null;
             launchReport.Set("launchStage", "waiting-for-java");
@@ -3358,8 +3451,22 @@ public partial class MainWindow : Window
     private async Task DispatchLaunchToExistingLunarAsync(
         string launcherPath,
         bool backgroundLaunch,
+        string launchAttemptId,
         CancellationToken cancellationToken)
     {
+        if (!string.Equals(_activeLaunchAttemptId, launchAttemptId, StringComparison.Ordinal))
+            throw new InvalidOperationException("The active launch attempt changed before Lunar dispatch.");
+        if (!LaunchSingleFlight.TrySend(ref _activeLaunchCommandSent))
+        {
+            AddDiagnostic($"Duplicate Lunar deeplink send blocked: attempt={launchAttemptId}; sendCount=1");
+            return;
+        }
+
+        var beforeSend = _lunarLifecycle.Capture(launcherPath);
+        AddDiagnostic(
+            $"Lunar deeplink dispatch: attempt={launchAttemptId}; sendCount=1; " +
+            $"launcherPids=[{string.Join(",", beforeSend.LauncherProcessIds)}]; " +
+            $"visibleLunarWindows={beforeSend.VisibleLauncherWindowCount}");
         var background = _activeLunarBackground;
         await Task.Run(async () =>
         {
@@ -3369,9 +3476,14 @@ public partial class MainWindow : Window
                 LaunchDeepLink);
             using var sender = Process.Start(startInfo)
                 ?? throw new InvalidOperationException("Unable to send the launch command to Lunar Client.");
-            AddDiagnostic($"Lunar launch command sent through hidden IPC sender: PID {sender.Id}");
+            background?.TrackTrustedProcess(sender.Id);
+            background?.HideOwnedWindows();
+            AddDiagnostic(
+                $"Lunar launch command sent through hidden IPC sender: attempt={launchAttemptId}; PID {sender.Id}; sendCount=1");
 
-            var hideUntil = backgroundLaunch ? DateTimeOffset.UtcNow + TimeSpan.FromSeconds(3) : DateTimeOffset.UtcNow;
+            var hideUntil = backgroundLaunch
+                ? DateTimeOffset.UtcNow + TimeSpan.FromSeconds(3)
+                : DateTimeOffset.UtcNow;
             while (backgroundLaunch && DateTimeOffset.UtcNow < hideUntil)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -3389,10 +3501,27 @@ public partial class MainWindow : Window
                 }
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                 {
+                    AddDiagnostic(
+                        $"Lunar IPC sender timeout: attempt={launchAttemptId}; PID {sender.Id}; terminating sender only.");
+                    try
+                    {
+                        sender.Kill(entireProcessTree: false);
+                        await sender.WaitForExitAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(2));
+                    }
+                    catch
+                    {
+                    }
                     throw new InvalidOperationException(
-                        "Lunar launch command sender did not exit; a duplicate launcher was prevented.");
+                        "Lunar launch command sender did not exit; the sender was stopped to prevent duplicate launcher windows.");
                 }
             }
+
+            background?.HideOwnedWindows();
+            var afterSend = _lunarLifecycle.Capture(launcherPath);
+            AddDiagnostic(
+                $"Lunar deeplink dispatch complete: attempt={launchAttemptId}; senderPid={sender.Id}; " +
+                $"visibleLunarWindows={afterSend.VisibleLauncherWindowCount}; " +
+                $"launcherPids=[{string.Join(",", afterSend.LauncherProcessIds)}]");
         }, cancellationToken);
     }
 
@@ -3560,9 +3689,13 @@ public partial class MainWindow : Window
                 AddDiagnostic($"Game JVM detected: PID {game.ProcessId}");
                 AddDiagnostic("The target Java process was detected; package functionality remains unconfirmed until the user checks Minecraft.");
                 if (_activeLunarBackground is { } lunarBackground)
+                {
                     await Task.Run(lunarBackground.MarkMinecraftDetected, cancellationToken);
+                    ReleaseActiveLunarBackground(cancelService: false);
+                }
                 _activeGameProcessIds.Add(game.ProcessId);
                 launchReport.Set("targetJavaProcessDetected", true);
+                launchReport.Set("usableWindowOutcome", "observed-package-functionality-unconfirmed");
                 launchReport.Set("detectedJavaProcessIds", new[] { game.ProcessId });
                 launchReport.Set("launchStage", "java-detected");
                 launchReport.Save();
@@ -3638,7 +3771,7 @@ public partial class MainWindow : Window
                 launchReport.Set("javaExitCode", earlyExitCode);
                 var cleanupResult = CleanupLaunchSession(launchSession, launchReport);
                 launchReport.Save();
-                if (failureStage is "java-exited-before-usable-window" or "lunar-exited-before-java" &&
+                if (failureStage is "java-exited-before-usable-window" or "lunar-exited-before-java" or "minecraft-timeout" &&
                     selection.WeaveMods.Count + selection.JavaAgents.Count > 0)
                 {
                     CreatePackageCrashBundle(
@@ -3862,8 +3995,16 @@ public partial class MainWindow : Window
 
     private void EndLaunchAttempt()
     {
+        ReleaseActiveLunarBackground();
         _activeLaunchPackageIds.Clear();
-        if (Interlocked.Exchange(ref _launchInProgress, 0) == 0 || Dispatcher.HasShutdownStarted) return;
+        var attemptId = Interlocked.Exchange(ref _activeLaunchAttemptId, null);
+        Interlocked.Exchange(ref _activeLaunchCommandSent, 0);
+        if (!LaunchSingleFlight.Exit(ref _launchInProgress))
+            return;
+        if (!string.IsNullOrWhiteSpace(attemptId))
+            AddDiagnostic($"Launch attempt ended: id={attemptId}");
+        if (Dispatcher.HasShutdownStarted)
+            return;
 
         void UpdateButton()
         {
@@ -3906,6 +4047,17 @@ public partial class MainWindow : Window
             cancellationToken);
     }
 
+    private void ReleaseActiveLunarBackground(bool cancelService = true)
+    {
+        _lunarWindowCancellation?.Cancel();
+        _lunarWindowCancellation?.Dispose();
+        _lunarWindowCancellation = null;
+        _lunarWindowTask = null;
+        if (cancelService)
+            _activeLunarBackground?.Cancel();
+        _activeLunarBackground = null;
+    }
+
     private void RevealActiveLunar(bool force, bool interactionRequired = false)
     {
         if (!force && !_settings.RevealLunarWhenActionRequired)
@@ -3932,7 +4084,7 @@ public partial class MainWindow : Window
         _launchWaitCancelledByUser = true;
         _monitorCancellation?.Cancel();
         RevealActiveLunar(force: true);
-        _activeLunarBackground?.Cancel();
+        ReleaseActiveLunarBackground();
     }
 
     private void CreatePackageCrashBundle(
@@ -4222,8 +4374,7 @@ public partial class MainWindow : Window
         foreach (var watcher in _packageWatchers)
             watcher.Dispose();
         _packageWatchers.Clear();
-        _lunarWindowCancellation?.Cancel();
-        _lunarWindowCancellation?.Dispose();
+        ReleaseActiveLunarBackground();
         _bwhApiRelay?.Dispose();
         _bwhApiRelay = null;
         if (_trayIcon is not null)

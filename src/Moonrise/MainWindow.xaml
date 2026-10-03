@@ -223,7 +223,96 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- Use the same window button states; omit only the primary click sweep's motion. -->
+        <Style x:Key="DialogSecondaryButton" TargetType="Button" BasedOn="{StaticResource ButtonBase}">
+            <Setter Property="Height" Value="50"/>
+            <Setter Property="FontSize" Value="14"/>
+        </Style>
+        <Style x:Key="DialogPrimaryButton" TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{DynamicResource PrimaryButtonRadius}" Effect="{DynamicResource PrimaryButtonShadow}"/>
+                            <Border x:Name="ClickGlow" Margin="2" Background="#D9E5FF" CornerRadius="10" Opacity="0" IsHitTestVisible="False"/>
+                            <Border x:Name="HoverLight" Background="{DynamicResource TextPrimary}" CornerRadius="{DynamicResource PrimaryButtonRadius}" Opacity="0" IsHitTestVisible="False"/>
+                            <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <EventTrigger RoutedEvent="MouseEnter">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="HoverLight" Storyboard.TargetProperty="Opacity" To="0.16" Duration="0:0:0.16">
+                                            <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                            <EventTrigger RoutedEvent="MouseLeave">
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="HoverLight" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.22">
+                                            <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                            <EventTrigger RoutedEvent="Button.Click">
+                                <BeginStoryboard HandoffBehavior="SnapshotAndReplace">
+                                    <Storyboard>
+                                        <DoubleAnimationUsingKeyFrames Storyboard.TargetName="ClickGlow" Storyboard.TargetProperty="Opacity">
+                                            <DiscreteDoubleKeyFrame KeyTime="0:0:0" Value="0"/>
+                                            <SplineDoubleKeyFrame KeyTime="0:0:0.10" Value="0.24" KeySpline="0.2,0,0.2,1"/>
+                                            <SplineDoubleKeyFrame KeyTime="0:0:0.52" Value="0" KeySpline="0.2,0,0.2,1"/>
+                                        </DoubleAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource PrimaryGradientHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource PrimaryGradientPressed}"/>
+                                <Setter TargetName="Surface" Property="Opacity" Value="0.82"/>
+                                <Setter TargetName="HoverLight" Property="Opacity" Value="0.04"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Surface" Property="Opacity" Value="0.38"/>
+                                <Setter TargetName="HoverLight" Property="Opacity" Value="0"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
+
+        <Style x:Key="DialogRememberCheckBox" TargetType="CheckBox" BasedOn="{StaticResource MoonriseCheckBox}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <Grid Background="Transparent" SnapsToDevicePixels="True">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="30"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                        <Grid Width="20" Height="20" HorizontalAlignment="Left" VerticalAlignment="Center">
+                            <Border x:Name="Box" Background="{DynamicResource InputBackground}" BorderBrush="{DynamicResource BorderPrimary}"
+                                    BorderThickness="1" CornerRadius="5" SnapsToDevicePixels="True" UseLayoutRounding="True"/>
+                            <Viewbox x:Name="Check" Width="13" Height="13" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                     Opacity="0" IsHitTestVisible="False" SnapsToDevicePixels="False">
+                                <Path Data="M1,7 L3.3,4.7 L5.7,7.1 L11.8,1 L14,3.2 L5.7,11.6 Z"
+                                      Fill="{DynamicResource PrimaryButtonForeground}"/>
+                            </Viewbox>
+                        </Grid>
+                        <ContentPresenter Grid.Column="1" VerticalAlignment="Center" Margin="0"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Box" Property="Background" Value="{DynamicResource SurfaceHover}"/></Trigger>
+                        <Trigger Property="IsChecked" Value="True"><Setter TargetName="Box" Property="Background" Value="{DynamicResource AccentPurple}"/><Setter TargetName="Box" Property="BorderThickness" Value="0"/><Setter TargetName="Check" Property="Opacity" Value="1"/></Trigger>
+                        <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/><Setter Property="Cursor" Value="Arrow"/></Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        </Style>
         <Style x:Key="LanguageButtonStyle" TargetType="Button" BasedOn="{StaticResource ButtonBase}">
             <Setter Property="Width" Value="98"/>
             <Setter Property="Height" Value="38"/>
@@ -301,11 +390,6 @@
             </Border>
         </ControlTemplate>
 
-        <ControlTemplate x:Key="UnclassifiedIconTemplate" TargetType="ContentControl">
-            <Border Width="44" Height="44" CornerRadius="11" Background="{DynamicResource UnknownIconBackground}" BorderBrush="{DynamicResource UnknownIconBorder}" BorderThickness="{DynamicResource PackageIconBorderThickness}">
-                <Viewbox Width="22" Height="22"><Path Data="{StaticResource IconUnknown}" Stroke="{DynamicResource UnknownIconForeground}" StrokeThickness="1.65" Fill="Transparent" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/></Viewbox>
-            </Border>
-        </ControlTemplate>
 
         <ControlTemplate x:Key="LunarClientIconTemplate" TargetType="ContentControl">
             <Border Width="40" Height="40" CornerRadius="10" Background="{DynamicResource ClientIconBackground}" BorderBrush="{DynamicResource ClientIconBorder}" BorderThickness="{DynamicResource PackageIconBorderThickness}">
@@ -790,7 +874,10 @@
                                 <StackPanel Grid.Column="2">
                                     <TextBlock x:Name="ProfileLabel" Text="LAUNCHER PROFILE" Foreground="{DynamicResource TextMuted}" FontWeight="Bold" FontSize="11"/>
                                     <Border Background="{DynamicResource InputBackground}" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="{DynamicResource InputBorderThickness}" CornerRadius="{DynamicResource ControlRadius}" Height="{DynamicResource ControlHeight}" Margin="0,8,0,0" Padding="12,0">
-                                        <TextBlock x:Name="ProfileStateText" Text="Checking…" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextSecondary}"/>
+                                        <Grid>
+                                            <TextBlock x:Name="ProfileStateText" Text="Checking…" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextSecondary}"/>
+                                            <ComboBox x:Name="LunarProfileComboBox" DisplayMemberPath="DetailLabel" Visibility="Collapsed"/>
+                                        </Grid>
                                     </Border>
                                 </StackPanel>
                             </Grid>
@@ -883,7 +970,7 @@
                     <StackPanel><TextBlock x:Name="LibraryTitle" Text="Package library" Style="{StaticResource Heading}"/><TextBlock x:Name="LibrarySubtitle" Text="Manage local Weave mods and Java agents." Style="{StaticResource Caption}" Margin="0,7,0,0"/></StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal"><Button x:Name="OpenFolderButton" Content="Open folder" Style="{StaticResource ButtonBase}" Margin="0,0,10,0" Click="OpenPackageFolderButton_Click"/><Button x:Name="AddPackageButton" Content="+ Add JAR" Style="{StaticResource PrimaryButton}" Height="42" MinWidth="148" Click="AddPackageButton_Click"/></StackPanel>
                 </Grid>
-                <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="260"/></Grid.ColumnDefinitions><StackPanel Orientation="Horizontal"><RadioButton x:Name="AllKindButton" Content="All" Style="{StaticResource NavButton}" IsChecked="True" Click="PackageKindButton_Click"/><RadioButton x:Name="ModsKindButton" Content="Weave mods" Style="{StaticResource NavButton}" Click="PackageKindButton_Click"/><RadioButton x:Name="AgentsKindButton" Content="Java agents" Style="{StaticResource NavButton}" Click="PackageKindButton_Click"/><RadioButton x:Name="UnclassifiedKindButton" Content="Unclassified" Style="{StaticResource NavButton}" Click="PackageKindButton_Click"/><TextBlock x:Name="LibraryCountText" Text="0 packages" Foreground="{DynamicResource TextMuted}" VerticalAlignment="Center" Margin="10,0,0,0"/></StackPanel><TextBox x:Name="LibrarySearchBox" Grid.Column="1" TextChanged="LibrarySearchBox_TextChanged" ToolTip="Search / Поиск"/></Grid>
+                <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="260"/></Grid.ColumnDefinitions><StackPanel Orientation="Horizontal"><RadioButton x:Name="AllKindButton" Content="All" Style="{StaticResource NavButton}" IsChecked="True" Click="PackageKindButton_Click"/><RadioButton x:Name="ModsKindButton" Content="Weave mods" Style="{StaticResource NavButton}" Click="PackageKindButton_Click"/><RadioButton x:Name="AgentsKindButton" Content="Java agents" Style="{StaticResource NavButton}" Click="PackageKindButton_Click"/><TextBlock x:Name="LibraryCountText" Text="0 packages" Foreground="{DynamicResource TextMuted}" VerticalAlignment="Center" Margin="10,0,0,0"/></StackPanel><TextBox x:Name="LibrarySearchBox" Grid.Column="1" TextChanged="LibrarySearchBox_TextChanged" ToolTip="Search / Поиск"/></Grid>
                 <Border Grid.Row="4" Style="{StaticResource Card}" Padding="0" ClipToBounds="True">
                     <Grid><Grid.RowDefinitions><RowDefinition Height="42"/><RowDefinition/></Grid.RowDefinitions>
                         <Border Background="{DynamicResource SurfaceSecondary}" BorderBrush="{DynamicResource BorderSubtle}" BorderThickness="0,0,0,1" Padding="18,0">
@@ -910,8 +997,6 @@
                                                      <Setter Property="Template" Value="{StaticResource WeaveModIconTemplate}"/>
                                                      <Style.Triggers>
                                                          <DataTrigger Binding="{Binding Kind}" Value="JavaAgent"><Setter Property="Template" Value="{StaticResource AgentIconTemplate}"/></DataTrigger>
-                                                         <DataTrigger Binding="{Binding Kind}" Value="Unclassified"><Setter Property="Template" Value="{StaticResource UnclassifiedIconTemplate}"/></DataTrigger>
-                                                         <DataTrigger Binding="{Binding Kind}" Value="Ambiguous"><Setter Property="Template" Value="{StaticResource UnclassifiedIconTemplate}"/></DataTrigger>
                                                      </Style.Triggers>
                                                  </Style>
                                              </ContentControl.Style>
@@ -1018,6 +1103,7 @@
                     <Border Style="{StaticResource Card}" Margin="0,0,0,14"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="200"/><ColumnDefinition/><ColumnDefinition Width="100"/></Grid.ColumnDefinitions><StackPanel><TextBlock x:Name="LauncherPathTitle" Text="Lunar Launcher" FontWeight="SemiBold"/><TextBlock x:Name="LauncherPathHint" Text="Launcher executable" Style="{StaticResource Caption}" Margin="0,4,0,0"/></StackPanel><TextBox x:Name="LauncherPathTextBox" Grid.Column="1" Margin="14,0" TextChanged="LauncherPathTextBox_TextChanged"/><Button x:Name="BrowseLauncherButton" Grid.Column="2" Content="Browse" Style="{StaticResource ButtonBase}" Click="BrowseLauncherButton_Click"/></Grid></Border>
                     <Border Style="{StaticResource Card}" Margin="0,0,0,14"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock x:Name="CloseAfterTitle" Text="Close after launch" FontWeight="SemiBold"/><TextBlock x:Name="CloseAfterHint" Text="Close Moonrise when the game process starts." Style="{StaticResource Caption}" Margin="0,4,0,0"/></StackPanel><CheckBox x:Name="CloseAfterLaunchCheckBox" Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource SmoothSwitch}" Click="CloseAfterLaunchCheckBox_Click"/></Grid></Border>
                     <Border Style="{StaticResource Card}" Margin="0,0,0,14"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock x:Name="RevealLunarTitle" Text="Show Lunar when action is required" FontWeight="SemiBold"/><TextBlock x:Name="RevealLunarHint" Text="Reveal the official launcher for authentication or updates." Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"/></StackPanel><CheckBox x:Name="RevealLunarCheckBox" Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource SmoothSwitch}" Click="RevealLunarCheckBox_Click"/></Grid></Border>
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,14"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock x:Name="AutoCloseLunarTitle" Text="Automatically close Lunar before launch" FontWeight="SemiBold"/><TextBlock x:Name="AutoCloseLunarHint" Text="Close the official Lunar launcher before Moonrise starts a new session." Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"/></StackPanel><CheckBox x:Name="AutoCloseLunarCheckBox" Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource SmoothSwitch}" Click="AutoCloseLunarCheckBox_Click"/></Grid></Border>
                     <TextBlock x:Name="PackagesSettingsSectionTitle" Text="Packages" FontSize="16" FontWeight="SemiBold" Margin="2,4,0,10"/>
                     <Border Style="{StaticResource Card}" Margin="0,0,0,14"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock x:Name="StorageTitle" Text="Local storage" FontWeight="SemiBold"/><TextBlock x:Name="StorageHint" Text="Open the Moonrise data directory." Style="{StaticResource Caption}" Margin="0,4,0,0"/><TextBlock x:Name="StorageSizeText" Foreground="{DynamicResource TextMuted}" FontSize="11" Margin="0,4,0,0"/></StackPanel><StackPanel Grid.Column="1" Orientation="Horizontal"><Button x:Name="OpenRootButton" Content="Open folder" Style="{StaticResource ButtonBase}" Click="OpenRootButton_Click"/><Button x:Name="ClearTemporaryFilesButton" Content="Clear temporary files" Style="{StaticResource ButtonBase}" Margin="8,0,0,0" Click="ClearTemporaryFilesButton_Click"/></StackPanel></Grid></Border>
                     <Border Style="{StaticResource Card}" Margin="0,0,0,14"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock x:Name="PluginsTitle" Text="Client plugins" FontWeight="SemiBold"/><TextBlock x:Name="PluginsHint" Text="Add clients through the isolated JSON launch protocol." Style="{StaticResource Caption}" Margin="0,4,0,0"/></StackPanel><Button x:Name="OpenPluginsButton" Grid.Column="1" Content="Open folder" Style="{StaticResource ButtonBase}" Click="OpenPluginsButton_Click"/></Grid></Border>
@@ -1317,6 +1403,31 @@
                 </Border>
             </DataTemplate></ItemsControl.ItemTemplate>
         </ItemsControl>
+
+        <Grid x:Name="LunarRunningOverlay" Grid.RowSpan="3" Panel.ZIndex="105" Background="{DynamicResource OverlaySurface}" Visibility="Collapsed">
+            <Border x:Name="LunarRunningDialogPanel" Width="560" Style="{StaticResource DialogSurface}" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                <Border.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1"/></Border.RenderTransform>
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="18"/><RowDefinition Height="Auto"/><RowDefinition Height="18"/><RowDefinition Height="Auto"/><RowDefinition Height="24"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="60"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                        <ContentControl Template="{StaticResource LunarClientIconTemplate}" HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock x:Name="LunarRunningTitle" Text="Lunar Client is already running" Style="{StaticResource SectionTitle}" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="LunarRunningSubtitle" Text="Moonrise needs to close Lunar before starting a new session." Style="{StaticResource Caption}" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Grid>
+                    <Border Grid.Row="2" Background="{DynamicResource SurfaceSecondary}" CornerRadius="{DynamicResource ControlRadius}" Padding="14,12">
+                        <TextBlock x:Name="LunarRunningDetail" Text="Close Lunar automatically and continue?" Style="{StaticResource BodyText}" FontSize="16" FontWeight="SemiBold" LineHeight="24" LineStackingStrategy="BlockLineHeight" TextWrapping="Wrap"/>
+                    </Border>
+                    <CheckBox x:Name="LunarRunningRememberCheckBox" Grid.Row="4" Content="Remember my choice" Style="{StaticResource DialogRememberCheckBox}" FontSize="15" FontWeight="Medium" VerticalAlignment="Center"/>
+                    <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button x:Name="LunarRunningCancelButton" Content="Cancel" Style="{StaticResource DialogSecondaryButton}" MinWidth="104" Margin="0,0,12,0" Click="LunarRunningCancelButton_Click"/>
+                        <Button x:Name="LunarRunningConfirmButton" Content="Close Lunar and continue" Style="{StaticResource DialogPrimaryButton}" MinWidth="190" Click="LunarRunningConfirmButton_Click"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
 
         <Grid x:Name="DeleteConfirmationOverlay" Grid.RowSpan="3" Panel.ZIndex="100" Background="{DynamicResource OverlaySurface}" Visibility="Collapsed">
             <Border x:Name="DeleteDialogPanel" Width="470" Background="{DynamicResource SurfaceFloating}" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="{DynamicResource PopupBorderThickness}" CornerRadius="{DynamicResource PopupRadius}" Padding="24" HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">

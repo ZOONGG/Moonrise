@@ -12,7 +12,7 @@ namespace Moonrise.Tests;
 public sealed class Stage2DRecoveryTests
 {
     [Fact]
-    public void DetachedElectronReplacementOutsideOriginalTreeIsTrackedAndHidden()
+    public void DetachedElectronReplacementOutsideOriginalTreeIsNotAdoptedOrHidden()
     {
         var now = DateTimeOffset.UtcNow;
         var launcherPath = Path.Combine("C:\\", "Programs", "Lunar Client", "Lunar Client.exe");
@@ -32,13 +32,13 @@ public sealed class Stage2DRecoveryTests
 
         var hidden = service.HideOwnedWindows();
 
-        Assert.Equal(1, hidden);
-        Assert.Contains(20, service.OwnedProcessIds);
-        Assert.Contains((nint)200, windows.Hidden);
+        Assert.Equal(0, hidden);
+        Assert.Empty(service.OwnedProcessIds);
+        Assert.DoesNotContain((nint)200, windows.Hidden);
         Assert.Contains(audit, line =>
-            line.Contains("Detached Lunar process tracked", StringComparison.Ordinal));
+            line.Contains("not-a-verified-launch-descendant", StringComparison.Ordinal));
         Assert.Contains(audit, line =>
-            line.Contains("classifiedLunar=True", StringComparison.Ordinal));
+            line.Contains("classifiedLunar=False", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -130,12 +130,13 @@ public sealed class Stage2DRecoveryTests
     }
 
     [Fact]
-    public void ShowLunarStopsHidingForThatAttemptAndFocusesCurrentReplacement()
+    public void ShowLunarStopsHidingForThatAttemptAndFocusesCurrentDescendant()
     {
         var now = DateTimeOffset.UtcNow;
         var launcherPath = Path.Combine("C:\\", "Programs", "Lunar Client", "Lunar Client.exe");
         var processes = new MutableProcesses([
-            new(20, 1, "Lunar Client", launcherPath, now)
+            new(10, 1, "Lunar Client", launcherPath, now),
+            new(20, 10, "Lunar Client", launcherPath, now.AddMilliseconds(100))
         ]);
         var windows = new TestWindows([
             new((nint)200, 20, false, "Chrome_WidgetWin_1", "Lunar Client")
@@ -327,7 +328,7 @@ public sealed class Stage2DRecoveryTests
         var paths = new AppPaths(temp.Path);
         var library = Library(paths);
         var package = library.Import(CreateWeaveJar(temp.Path, "one.jar", "same")).Package!;
-        var duplicate = Path.Combine(paths.UnclassifiedPackagesDirectory, "duplicate.jar");
+        var duplicate = Path.Combine(paths.AgentPackagesDirectory, "duplicate.jar");
         File.Copy(package.FullPath, duplicate);
 
         var result = library.Reconcile();
@@ -343,7 +344,7 @@ public sealed class Stage2DRecoveryTests
             "*.jar",
             SearchOption.AllDirectories));
         Assert.Equal(
-            ["agents", "metadata", "README.txt", "unclassified", "weave"],
+            ["agents", "metadata", "README.txt", "weave"],
             rootEntries);
         Assert.False(Directory.Exists(paths.LegacyOriginalsPackagesDirectory));
         Assert.False(Directory.Exists(paths.LegacyImportedPackagesDirectory));

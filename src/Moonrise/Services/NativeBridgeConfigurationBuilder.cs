@@ -59,6 +59,11 @@ public static class NativeBridgeConfigurationBuilder
 
         foreach (var property in plan.JvmProperties)
         {
+            if (IsBridgeManagedProperty(property.Name))
+            {
+                throw new InvalidOperationException(
+                    $"JVM property '{property.Name}' is managed by the Moonrise bridge.");
+            }
             AppendTaggedLine(
                 builder,
                 "prop",
@@ -68,6 +73,11 @@ public static class NativeBridgeConfigurationBuilder
 
         return builder.ToString();
     }
+
+    private static bool IsBridgeManagedProperty(string name) =>
+        name.Equals("weave.mods.directory", StringComparison.OrdinalIgnoreCase) ||
+        name.Equals("weave.api.minecraft.enabled", StringComparison.OrdinalIgnoreCase) ||
+        name.Equals("weave.dump.bytecode.enabled", StringComparison.OrdinalIgnoreCase);
 
     private static void AppendTaggedLine(
         StringBuilder builder,

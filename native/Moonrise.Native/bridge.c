@@ -30,6 +30,12 @@ static WCHAR *read_process_environment_value(const WCHAR *name);
 
 static void safe_log(const char *event_name, DWORD process_id, DWORD error_code)
 {
+#ifdef MOONRISE_NATIVE_TEST
+    (void)event_name;
+    (void)process_id;
+    (void)error_code;
+    return;
+#else
     WCHAR path[32768];
     DWORD capacity = (DWORD)(sizeof(path) / sizeof(path[0]));
     DWORD length = GetEnvironmentVariableW(L"LOCALAPPDATA", path, capacity);
@@ -71,6 +77,7 @@ static void safe_log(const char *event_name, DWORD process_id, DWORD error_code)
         WriteFile(file, line, (DWORD)line_length, &written, NULL);
     }
     CloseHandle(file);
+#endif
 }
 
 static void ready_event_name(DWORD process_id, WCHAR *buffer, size_t capacity)
@@ -185,6 +192,28 @@ static BOOL is_safe_mnr4_field(const WCHAR *value, BOOL allow_empty)
            wcschr(value, L'\n') == NULL &&
            wcschr(value, L'\t') == NULL &&
            wcschr(value, L'"') == NULL;
+}
+
+static BOOL contains_mnr4_value(
+    WCHAR *const *values,
+    size_t count,
+    const WCHAR *candidate)
+{
+    for (size_t index = 0; index < count; index++)
+    {
+        if (_wcsicmp(values[index], candidate) == 0)
+        {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+static BOOL is_weave_managed_property(const WCHAR *name)
+{
+    return _wcsicmp(name, L"weave.mods.directory") == 0 ||
+           _wcsicmp(name, L"weave.api.minecraft.enabled") == 0 ||
+           _wcsicmp(name, L"weave.dump.bytecode.enabled") == 0;
 }
 
 static BOOL append_option_text(WCHAR *destination, size_t capacity, const WCHAR *value)
@@ -356,6 +385,23 @@ static WCHAR *read_mnr4_options(WCHAR *cursor, size_t wide_length)
         return NULL;
     }
 
+    size_t seen_capacity = wide_length + 1;
+    WCHAR **seen_values = HeapAlloc(
+        GetProcessHeap(),
+        HEAP_ZERO_MEMORY,
+        seen_capacity * 3 * sizeof(WCHAR *));
+    if (seen_values == NULL)
+    {
+        HeapFree(GetProcessHeap(), 0, options);
+        return NULL;
+    }
+    WCHAR **seen_agent_paths = seen_values;
+    WCHAR **seen_runtime_ids = seen_values + seen_capacity;
+    WCHAR **seen_property_names = seen_values + (seen_capacity * 2);
+    size_t seen_agent_count = 0;
+    size_t seen_runtime_count = 0;
+    size_t seen_property_count = 0;
+
     if (!weave_disabled)
     {
         if (!append_option_text(options, options_capacity, L"-Dweave.mods.directory=\"") ||
@@ -425,6 +471,14 @@ static WCHAR *read_mnr4_options(WCHAR *cursor, size_t wide_length)
                 }
             }
 
+            if (contains_mnr4_value(seen_agent_paths, seen_agent_count, path) ||
+                contains_mnr4_value(seen_runtime_ids, seen_runtime_count, runtime_id))
+            {
+                goto invalid_data;
+            }
+            seen_agent_paths[seen_agent_count++] = path;
+            seen_runtime_ids[seen_runtime_count++] = runtime_id;
+
             if (!append_mnr4_agent(options, options_capacity, path, agent_options))
             {
                 goto invalid_options;
@@ -452,10 +506,13 @@ static WCHAR *read_mnr4_options(WCHAR *cursor, size_t wide_length)
             if (name == NULL || value == NULL || field_cursor != NULL ||
                 !is_safe_mnr4_field(name, FALSE) ||
                 !is_safe_mnr4_field(value, TRUE) ||
-                wcschr(name, L'=') != NULL)
+                wcschr(name, L'=') != NULL ||
+                contains_mnr4_value(seen_property_names, seen_property_count, name) ||
+                is_weave_managed_property(name))
             {
                 goto invalid_data;
             }
+            seen_property_names[seen_property_count++] = name;
             if (!append_mnr4_property(options, options_capacity, name, value))
             {
                 goto invalid_options;
@@ -473,11 +530,13 @@ static WCHAR *read_mnr4_options(WCHAR *cursor, size_t wide_length)
         goto invalid_data;
     }
 
+    HeapFree(GetProcessHeap(), 0, seen_values);
     return options;
 
 invalid_data:
     SetLastError(ERROR_INVALID_DATA);
 invalid_options:
+    HeapFree(GetProcessHeap(), 0, seen_values);
     SecureZeroMemory(options, options_capacity * sizeof(WCHAR));
     HeapFree(GetProcessHeap(), 0, options);
     return NULL;
@@ -524,6 +583,12 @@ static WCHAR *read_bridge_options(void)
     if (!read_ok || bytes_read == 0 || bytes_read >= sizeof(buffer))
     {
         safe_log("bridge-config-read-invalid", GetCurrentProcessId(), ERROR_INVALID_DATA);
+        SetLastError(ERROR_INVALID_DATA);
+        return NULL;
+    }
+    if (memchr(buffer, '\0', bytes_read) != NULL)
+    {
+        safe_log("bridge-config-content-invalid", GetCurrentProcessId(), ERROR_INVALID_DATA);
         SetLastError(ERROR_INVALID_DATA);
         return NULL;
     }

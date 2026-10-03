@@ -6,7 +6,7 @@ namespace Moonrise.Services;
 public sealed class NativeBridgeDeploymentService
 {
     public const string ResourceName = "Moonrise.NativeBridge.dll";
-    public const string ExpectedSha256 = "816AB85E642440563229D64413DF81CCD038AA78AB1D620FE534101319DD7506";
+    public const string ExpectedSha256 = "F9C3F2185DDBCE9A58B8D11F2C78769E06AA820F45F6595C0109B80AB84411FC";
 
     private readonly Func<Stream> _openResource;
     private readonly string _expectedSha256;
@@ -77,3 +77,4 @@ public sealed class NativeBridgeDeploymentService
         typeof(NativeBridgeDeploymentService).Assembly.GetManifestResourceStream(ResourceName)
         ?? throw new InvalidDataException($"Embedded resource '{ResourceName}' is missing.");
 }
+

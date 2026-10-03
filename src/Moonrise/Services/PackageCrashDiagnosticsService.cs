@@ -62,6 +62,10 @@ public sealed partial class PackageCrashDiagnosticsService
         }
 
         var captured = new List<(string Name, FileInfo Source, string Text)>();
+        foreach (var crash in candidates.Where(file =>
+                     (file.Name.StartsWith("crash-", StringComparison.OrdinalIgnoreCase) && file.Extension.Equals(".txt", StringComparison.OrdinalIgnoreCase)) ||
+                     (file.Name.StartsWith("hs_err_pid", StringComparison.OrdinalIgnoreCase) && file.Extension.Equals(".log", StringComparison.OrdinalIgnoreCase))).Take(4))
+            CaptureExplicit(captured, $"runtime-crash-{captured.Count:00}.txt", crash);
         CaptureCategory(captured, candidates, "recent-weave-log.txt", file => ContainsAny(file, "weave"));
         CaptureCategory(captured, candidates, "recent-mixin-log.txt", file => ContainsAny(file, "mixin"));
         CaptureCategory(captured, candidates, "recent-lunar-log.txt", file =>
@@ -266,10 +270,12 @@ public sealed partial class PackageCrashDiagnosticsService
         {
             var version = request.MinecraftVersion.Trim();
             roots.Add(Path.Combine(userProfile, ".lunarclient", "profiles", version, "logs"));
+            roots.Add(Path.Combine(userProfile, ".lunarclient", "profiles", version, "crash-reports"));
             var components = version.Split('.', StringSplitOptions.RemoveEmptyEntries);
             if (components.Length >= 2)
             {
                 var profileFamily = $"{components[0]}.{components[1]}";
+                roots.Add(Path.Combine(userProfile, ".lunarclient", "profiles", profileFamily, "crash-reports"));
                 roots.Add(Path.Combine(
                     userProfile,
                     ".lunarclient",
@@ -285,6 +291,21 @@ public sealed partial class PackageCrashDiagnosticsService
         }
 
         var files = new List<FileInfo>();
+        foreach (var directory in new[]
+                 {
+                     Path.Combine(userProfile, ".lunarclient"),
+                     Path.Combine(userProfile, ".lunarclient", "jre"),
+                     Path.Combine(userProfile, ".lunarclient", "profiles", request.MinecraftVersion),
+                     Path.Combine(userProfile, ".lunarclient", "profiles", string.Join(".", request.MinecraftVersion.Split('.').Take(2)))
+                 }.Where(Directory.Exists))
+        {
+            try
+            {
+                foreach (var path in Directory.EnumerateFiles(directory, "hs_err_pid*.log", SearchOption.TopDirectoryOnly))
+                    files.Add(new FileInfo(path));
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
+        }
         foreach (var root in roots.Where(Directory.Exists))
             EnumerateSafeLogFiles(root, files, depth: 0);
         return files.Where(file => IsInLaunchWindow(file, request)).ToArray();
