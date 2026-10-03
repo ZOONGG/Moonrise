@@ -64,6 +64,7 @@ public sealed class LunarBackgroundLaunchService
 {
     private static readonly TimeSpan BackgroundPollInterval = TimeSpan.FromMilliseconds(500);
     private static readonly TimeSpan ProcessStartTolerance = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan LaunchStartTolerance = TimeSpan.FromSeconds(5);
     private const int MaximumHideAttempts = 3;
 
     private readonly LunarLaunchIdentity _identity;
