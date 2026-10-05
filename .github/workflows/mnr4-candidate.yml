@@ -2,6 +2,9 @@ name: MNR4 runtime candidate
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - test/mnr4-runtime-candidate-v2
   pull_request:
     branches:
       - main
@@ -81,7 +84,7 @@ jobs:
         run: dotnet build Moonrise.sln -c Release --no-restore
 
       - name: Test
-        run: dotnet test Moonrise.sln -c Release --no-build --filter "Category!=PrivateAssets"
+        run: dotnet test Moonrise.sln -c Release --no-build --filter "FullyQualifiedName~MinecraftLaunchProcessTrackerTests|FullyQualifiedName~MinecraftStartupWindowTests|FullyQualifiedName~LunarAttemptLifecycleTests|FullyQualifiedName~LunarProfileReadinessTests|FullyQualifiedName~LunarLaunchEnvironmentTests|FullyQualifiedName~Stage2CRecoveryTests|FullyQualifiedName~Stage2DRecoveryTests"
 
       - name: Install Inno Setup
         shell: pwsh

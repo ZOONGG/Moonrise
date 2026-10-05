@@ -3098,7 +3098,12 @@ public partial class MainWindow : Window
             launchReport.Set("enabledJavaAgentCount", enabledAgents.Count);
             AddDiagnostic($"Enabled Weave mods: {enabledMods.Count}");
             AddDiagnostic($"Enabled Java agents: {enabledAgents.Count}");
-            var initialProcesses = _processInspector.Snapshot().Keys.ToHashSet();
+            var prelaunchProcesses = _processInspector.Snapshot();
+            if (prelaunchProcesses.Values.Any(process => IsJavaProcess(process.Name) &&
+                (process.MainWindowTitle.Contains("Minecraft", StringComparison.OrdinalIgnoreCase) ||
+                 process.MainWindowTitle.Contains("Lunar", StringComparison.OrdinalIgnoreCase))))
+                throw new InvalidOperationException(T("Сначала закройте Minecraft.", "Close Minecraft before launching."));
+            var initialProcesses = prelaunchProcesses.Keys.ToHashSet();
 
             _monitorCancellation?.Cancel();
             _monitorCancellation?.Dispose();
@@ -3422,6 +3427,7 @@ public partial class MainWindow : Window
         }
         finally
         {
+            if (!monitorOwnsLaunchGate) ReleaseActiveLunarBackground();
             profileSelection?.Dispose();
             if (launchSession is not null)
             {
@@ -3585,13 +3591,15 @@ public partial class MainWindow : Window
     {
         var deadline = DateTimeOffset.UtcNow +
             TimeSpan.FromSeconds(Math.Clamp(_settings.LaunchTimeoutSeconds, 30, 600));
-        var visibleSamples = new Dictionary<int, int>();
         var exitTasks = new Dictionary<int, Task<int?>>();
         var minecraftStartupWindows = new MinecraftStartupWindowService(AddDiagnostic);
+        var processTracker = new MinecraftLaunchProcessTracker();
+        var observedJava = new HashSet<(int, DateTimeOffset?, bool)>();
+        var javaObservations = new List<object>();
+        var javaExitObservations = new Dictionary<(int, DateTimeOffset?), Task<int?>>();
+        var reportedJavaExits = new HashSet<(int, DateTimeOffset?)>();
         var sawGameJvm = false;
         var gameOwnsSession = false;
-        DateTimeOffset? candidatesMissingSince = null;
-        DateTimeOffset? launcherMissingSince = null;
         int? earlyExitCode = null;
         string? failureStage = null;
         try
@@ -3601,90 +3609,58 @@ public partial class MainWindow : Window
                 await Task.Delay(500, cancellationToken);
                 var candidates = await Task.Run(() =>
                 {
-                    var snapshot = _processInspector.Snapshot().Values.Where(process =>
-                        !initialProcessIds.Contains(process.ProcessId) && IsJavaProcess(process.Name)).ToArray();
-                    minecraftStartupWindows.Observe(snapshot);
-                    return snapshot;
+                    var snapshot = _processInspector.Snapshot();
+                    var java = processTracker.Observe(snapshot,
+                        _activeLunarBackground?.OwnedProcessIds ?? Array.Empty<int>(), initialProcessIds);
+                    minecraftStartupWindows.Observe(java);
+                    return java;
                 }, cancellationToken);
                 foreach (var candidate in candidates)
                 {
-                    if (!exitTasks.ContainsKey(candidate.ProcessId))
-                        exitTasks[candidate.ProcessId] = ObserveExitCodeAsync(candidate.ProcessId);
-                }
-                if (candidates.Length > 0)
-                {
-                    sawGameJvm = true;
-                    candidatesMissingSince = null;
-                }
-                else if (sawGameJvm)
-                {
-                    candidatesMissingSince ??= DateTimeOffset.UtcNow;
-                    if (DateTimeOffset.UtcNow - candidatesMissingSince >= TimeSpan.FromSeconds(5))
+                    if (observedJava.Add((candidate.ProcessId, candidate.StartTimeUtc, processTracker.IsMinecraft(candidate))))
                     {
-                        AddDiagnostic("Game JVM exited before a usable window appeared.");
-                        earlyExitCode = await MostRecentExitCodeAsync(exitTasks);
-                        failureStage = "java-exited-before-usable-window";
-                        SetStatus(
-                            selection.WeaveMods.Count + selection.JavaAgents.Count > 0
-                                ? T("Игра завершилась во время загрузки пакетов.", "The game exited while loading packages.")
-                                : T("Minecraft не запустился", "Minecraft did not launch"),
-                            StatusLevel.Error,
-                            T("Игровой процесс завершился до открытия окна.", "The game process ended before its window opened."));
-                        return;
+                        AddDiagnostic($"Launch Java observed: pid={candidate.ProcessId}; parentPid={candidate.ParentProcessId}; startUtc={candidate.StartTimeUtc:O}; minecraftWindow={processTracker.IsMinecraft(candidate)}");
+                        javaObservations.Add(new { candidate.ProcessId, candidate.ParentProcessId,
+                            candidate.StartTimeUtc, candidate.Name, candidate.MainWindowClass,
+                            MinecraftWindow = processTracker.IsMinecraft(candidate) });
+                        launchReport.Set("observedJavaProcesses", javaObservations.ToArray());
                     }
+                    var identity = (candidate.ProcessId, candidate.StartTimeUtc);
+                    if (!javaExitObservations.ContainsKey(identity))
+                        javaExitObservations[identity] = ObserveExitCodeAsync(candidate.ProcessId);
+                    if (processTracker.IsMinecraft(candidate))
+                        exitTasks[candidate.ProcessId] = javaExitObservations[identity];
                 }
-
+                foreach (var (identity, exit) in javaExitObservations)
+                    if (exit.IsCompleted && reportedJavaExits.Add(identity))
+                    {
+                        var code = await exit;
+                        AddDiagnostic($"Launch Java exited: pid={identity.Item1}; startUtc={identity.Item2:O}; code={code}; monitoring continues until game evidence or launch deadline.");
+                        javaObservations.Add(new { ProcessId = identity.Item1, StartTimeUtc = identity.Item2,
+                            Event = "exited", ExitCode = code });
+                        launchReport.Set("observedJavaProcesses", javaObservations.ToArray());
+                    }
+                sawGameJvm = processTracker.SawMinecraft;
                 var launcherTreeRunning = candidates.Length > 0
                     ? true
                     : await Task.Run(
                         () => _activeLunarBackground?.IsLauncherTreeRunning(),
                         cancellationToken);
-                if (candidates.Length == 0 && launcherTreeRunning == false)
+                failureStage = processTracker.FailureStage(DateTimeOffset.UtcNow, deadline,
+                    candidates, launcherTreeRunning);
+                if (failureStage == "minecraft-timeout") break;
+                if (failureStage is not null)
                 {
-                    launcherMissingSince ??= DateTimeOffset.UtcNow;
-                    if (DateTimeOffset.UtcNow - launcherMissingSince >= TimeSpan.FromSeconds(5))
-                    {
-                        failureStage = "lunar-exited-before-java";
-                        AddDiagnostic("Official Lunar exited before the target Java process appeared.");
-                        SetStatus(
-                            T("Запуск завершился ошибкой", "Launch failed"),
-                            StatusLevel.Error,
-                            T(
-                                "Официальный Lunar завершился до запуска Minecraft.",
-                                "The official Lunar launcher exited before Minecraft started."));
-                        return;
-                    }
+                    earlyExitCode = failureStage == "java-exited-before-usable-window"
+                        ? await MostRecentExitCodeAsync(exitTasks) : null;
+                    AddDiagnostic($"Launch monitoring failed: {failureStage}; javaExitCode={earlyExitCode}");
+                    SetStatus(T("Запуск завершился ошибкой", "Launch failed"), StatusLevel.Error,
+                        failureStage == "java-exited-before-usable-window"
+                            ? T("Игровой процесс завершился до открытия пригодного окна.", "The game process ended before a usable window appeared.")
+                            : T("Официальный Lunar завершился до запуска Minecraft.", "The official Lunar launcher exited before Minecraft started."));
+                    return;
                 }
-                else
-                {
-                    launcherMissingSince = null;
-                }
-
-                var liveCandidateIds = candidates.Select(process => process.ProcessId).ToHashSet();
-                foreach (var staleProcessId in visibleSamples.Keys.Where(id => !liveCandidateIds.Contains(id)).ToArray())
-                    visibleSamples.Remove(staleProcessId);
-
-                ProcessRecord? game = null;
-                foreach (var candidate in candidates)
-                {
-                    if (candidate.MainWindowHandle == 0 ||
-                        !candidate.IsMainWindowVisible ||
-                        !candidate.IsResponding ||
-                        string.IsNullOrWhiteSpace(candidate.MainWindowTitle))
-                    {
-                        visibleSamples.Remove(candidate.ProcessId);
-                        continue;
-                    }
-
-                    var samples = visibleSamples.GetValueOrDefault(candidate.ProcessId) + 1;
-                    visibleSamples[candidate.ProcessId] = samples;
-                    if (samples >= 6)
-                    {
-                        game = candidate;
-                        break;
-                    }
-                }
-
+                var game = processTracker.ObserveUsableWindow(candidates);
                 if (game is null) continue;
                 AddDiagnostic($"Game JVM detected: PID {game.ProcessId}");
                 AddDiagnostic("The target Java process was detected; package functionality remains unconfirmed until the user checks Minecraft.");
@@ -3736,14 +3712,15 @@ public partial class MainWindow : Window
                 return;
             }
             failureStage = "minecraft-timeout";
+            AddDiagnostic($"Minecraft launch timeout: observedLaunchJava={processTracker.SawJava}; observedMinecraftWindow={processTracker.SawMinecraft}; no usable Minecraft window before the launch deadline.");
             RevealActiveLunar(force: true, interactionRequired: true);
             SetLaunchProgress(T("Требуется действие в Lunar", "Action required in Lunar"));
             SetStatus(
                 T("Требуется действие в Lunar", "Action required in Lunar"),
                 StatusLevel.Warning,
                 T(
-                    "Может требоваться вход, обновление или другое действие. Официальный лаунчер показан.",
-                    "Authentication, an update, or another action may be required. The official launcher is visible."));
+                    "Время ожидания истекло: пригодное окно Minecraft не появилось. Проверьте вход, обновление или ошибку в официальном Lunar.",
+                    "Launch timed out: no usable Minecraft window appeared. Check authentication, updates, or errors in the official Lunar launcher."));
             OpenDiagnosticsButton.Visibility = Visibility.Visible;
         }
         catch (OperationCanceledException)
@@ -3763,6 +3740,7 @@ public partial class MainWindow : Window
         }
         finally
         {
+            ReleaseActiveLunarBackground();
             await Task.Run(minecraftStartupWindows.RestoreAll);
             if (!gameOwnsSession)
             {

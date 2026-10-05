@@ -9,10 +9,13 @@ public sealed class ProcessInspector
     public IReadOnlyDictionary<int, ProcessRecord> Snapshot()
     {
         var result = new Dictionary<int, ProcessRecord>();
-        foreach (var process in Process.GetProcesses())
+        var windows = new WindowsMinecraftStartupWindowOperations();
+        foreach (var entry in new WindowsProcessTreeSnapshot().Capture())
         {
+            Process? process = null;
             try
             {
+                process = Process.GetProcessById(entry.ProcessId);
                 string? path = null;
                 long mainWindowHandle = 0;
                 string mainWindowTitle = string.Empty;
@@ -30,10 +33,11 @@ public sealed class ProcessInspector
                 catch { }
                 result[process.Id] = new ProcessRecord(
                     process.Id, process.ProcessName, path, mainWindowHandle, mainWindowTitle,
-                    isMainWindowVisible, isResponding);
+                    isMainWindowVisible, isResponding, entry.ParentProcessId, entry.StartTimeUtc,
+                    mainWindowHandle == 0 ? "" : windows.GetClassName(new nint(mainWindowHandle)));
             }
             catch { }
-            finally { process.Dispose(); }
+            finally { process?.Dispose(); }
         }
         return result;
     }
