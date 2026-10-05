@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Globalization;
 using Moonrise.Models;
 
 namespace Moonrise.Services;
@@ -54,7 +55,7 @@ public sealed partial class PackageCrashDiagnosticsService
             try
             {
                 crashIdentifier ??= FindCrashIdentifier(
-                    SanitizeCapturedText(ReadTail(candidate.FullName, 32 * 1024)));
+                    SanitizeCapturedText(ReadTail(candidate.FullName, 32 * 1024)), request.LaunchStartedUtc, request.FailureUtc);
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
@@ -86,7 +87,7 @@ public sealed partial class PackageCrashDiagnosticsService
             var bounded = BoundText(SanitizeCapturedText(text), MaximumCapturedTextBytes);
             WriteSanitizedText(Path.Combine(directory, name), bounded);
             writtenTextBytes += Encoding.UTF8.GetByteCount(bounded);
-            crashIdentifier ??= FindCrashIdentifier(bounded);
+            crashIdentifier ??= FindCrashIdentifier(bounded, request.LaunchStartedUtc, request.FailureUtc);
         }
 
         var packages = request.EnabledPackages.Select(package => new
@@ -404,8 +405,18 @@ public sealed partial class PackageCrashDiagnosticsService
             .TrimStart('\uFFFD');
     }
 
-    private static string? FindCrashIdentifier(string text)
+    internal static string? FindCrashIdentifier(string text, DateTimeOffset started, DateTimeOffset failed)
     {
+        // A shared launcher log can be appended during this attempt while still
+        // containing a crash upload from the previous one. File mtime is insufficient.
+        text = string.Join('\n', text.Split('\n').Where(line =>
+        {
+            var closingBracket = line.IndexOf(']');
+            if (!line.StartsWith('[') || closingBracket < 0) return true;
+            if (!DateTimeOffset.TryParse(line[1..closingBracket], CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeLocal, out var timestamp)) return true;
+            return timestamp >= started && timestamp <= failed;
+        }));
         var lunarMatches = LunarCrashIdentifierPattern().Matches(text);
         if (lunarMatches.Count > 0)
             return lunarMatches[^1].Value.ToUpperInvariant();

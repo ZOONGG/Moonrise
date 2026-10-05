@@ -6,8 +6,6 @@ namespace Moonrise.Services;
 
 public sealed partial class LunarProfileReadinessService
 {
-    private static readonly TimeSpan LauncherReadyFallbackDelay = TimeSpan.FromSeconds(1);
-
     public static string GetDefaultLauncherLogPath() => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".lunarclient", "logs", "launcher", "main.log");
 
@@ -32,6 +30,8 @@ public sealed partial class LunarProfileReadinessService
         var pending = new StringBuilder();
         var expectedProfileObserved = false;
         DateTimeOffset? launcherReadyObservedUtc = null;
+        var lunarVersionsObserved = false;
+        var launchMetadataReady = false;
         void ResetLog()
         {
             offset = 0;
@@ -40,6 +40,8 @@ public sealed partial class LunarProfileReadinessService
             pending.Clear();
             expectedProfileObserved = false;
             launcherReadyObservedUtc = null;
+            lunarVersionsObserved = false;
+            launchMetadataReady = false;
         }
         while (DateTimeOffset.UtcNow < deadline)
         {
@@ -71,18 +73,23 @@ public sealed partial class LunarProfileReadinessService
                     {
                         var complete = text[..(lastLine + 1)];
                         pending.Clear(); pending.Append(text[(lastLine + 1)..]);
-                        if (TryParseSelectedProfile(complete, out var selected))
-                            return selected;
-
+                        (string Client, string Version)? selected = null;
                         foreach (var line in complete.Split('\n', StringSplitOptions.RemoveEmptyEntries))
                         {
+                            if (line.Contains("[Metadata] Lunar versions metadata fetched successfully", StringComparison.OrdinalIgnoreCase))
+                                lunarVersionsObserved = true;
+                            if (lunarVersionsObserved && line.Contains("[Metadata] Setting up virtual profiles", StringComparison.OrdinalIgnoreCase))
+                                launchMetadataReady = true;
+                            if (launchMetadataReady && TryParseSelectedProfile(line, out var observation))
+                                selected = observation;
                             if (IsExpectedProfileEvidence(line, expectedProfile.Id))
                                 expectedProfileObserved = true;
                             if (IsLauncherReadyEvidence(line))
                                 launcherReadyObservedUtc ??= DateTimeOffset.UtcNow;
                         }
 
-                        if (expectedProfileObserved && launcherReadyObservedUtc is not null)
+                        if (selected is { } confirmed) return confirmed;
+                        if (launchMetadataReady && expectedProfileObserved && launcherReadyObservedUtc is not null)
                             return Expected(expectedProfile);
                     }
                 }
@@ -90,17 +97,8 @@ public sealed partial class LunarProfileReadinessService
             }
             catch (IOException) { }
 
-            // Moonrise writes the exact existing profile ID into Lunar's own
-            // settings before launch. If a future launcher update changes only
-            // the profile log sentence, a ready official launcher is enough to
-            // continue after a short grace period instead of timing out for a
-            // full minute. Authentication or launch failures remain observable
-            // in the subsequent Java/Minecraft monitor.
-            if (launcherReadyObservedUtc is { } readyUtc &&
-                DateTimeOffset.UtcNow - readyUtc >= LauncherReadyFallbackDelay)
-            {
-                return Expected(expectedProfile);
-            }
+            // Renderer readiness and the startup profile precede launch metadata.
+            // Dispatching here makes Lunar discard the deeplink without spawning Java.
             await Task.Delay(150, cancellationToken).ConfigureAwait(false);
         }
         throw new TimeoutException(

@@ -13,7 +13,7 @@ public sealed class Stage2CRecoveryTests
     [Fact]
     public async Task LateElectronWindow_AndReshownWindow_AreHidden()
     {
-        var processes = new MutableProcessTree([new(10, 1, "Lunar Client")]);
+        var processes = new MutableProcessTree([new(10, 1, "Lunar Client", Path.GetFullPath("Lunar Client.exe"))]);
         var windows = new MutableWindows([]);
         var events = new FakeWindowEvents();
         var service = new LunarBackgroundLaunchService(10, processes, windows, events);
@@ -34,7 +34,7 @@ public sealed class Stage2CRecoveryTests
     public async Task NewLunarChildWindow_IsTracked_WhileJavaAndUnrelatedWindowsAreIgnored()
     {
         var processes = new MutableProcessTree([
-            new(10, 1, "Lunar Client"),
+            new(10, 1, "Lunar Client", Path.GetFullPath("Lunar Client.exe")),
             new(20, 1, "unrelated")
         ]);
         var windows = new MutableWindows([
@@ -63,8 +63,8 @@ public sealed class Stage2CRecoveryTests
     [Fact]
     public async Task ShowLunar_ChangesStateAndPreventsImmediateRehide()
     {
-        var processes = new MutableProcessTree([new(10, 1, "Lunar Client")]);
-        var windows = new MutableWindows([new((nint)100, 10, true)]);
+        var processes = new MutableProcessTree([new(10, 1, "Lunar Client", Path.GetFullPath("Lunar Client.exe"))]);
+        var windows = new MutableWindows([new((nint)100, 10, true, "Chrome_WidgetWin_1", Width: 900, Height: 600)]);
         var events = new FakeWindowEvents();
         var service = new LunarBackgroundLaunchService(10, processes, windows, events);
         using var cancellation = new CancellationTokenSource();
@@ -83,8 +83,8 @@ public sealed class Stage2CRecoveryTests
     [Fact]
     public void NewLaunchStartsHidden_AndRequiredInteractionRevealsLunar()
     {
-        var processes = new MutableProcessTree([new(10, 1, "Lunar Client")]);
-        var windows = new MutableWindows([new((nint)100, 10, false)]);
+        var processes = new MutableProcessTree([new(10, 1, "Lunar Client", Path.GetFullPath("Lunar Client.exe"))]);
+        var windows = new MutableWindows([new((nint)100, 10, false, "Chrome_WidgetWin_1", Width: 900, Height: 600)]);
         var first = new LunarBackgroundLaunchService(10, processes, windows);
         first.ShowLunar();
         var next = new LunarBackgroundLaunchService(10, processes, windows);
@@ -98,7 +98,7 @@ public sealed class Stage2CRecoveryTests
     [Fact]
     public async Task LauncherExitIsDetectedWithoutClosingOrTerminatingIt()
     {
-        var processes = new MutableProcessTree([new(10, 1, "Lunar Client")]);
+        var processes = new MutableProcessTree([new(10, 1, "Lunar Client", Path.GetFullPath("Lunar Client.exe"))]);
         var service = new LunarBackgroundLaunchService(
             10,
             processes,

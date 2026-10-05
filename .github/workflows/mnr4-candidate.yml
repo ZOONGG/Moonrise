@@ -84,7 +84,7 @@ jobs:
         run: dotnet build Moonrise.sln -c Release --no-restore
 
       - name: Test
-        run: dotnet test Moonrise.sln -c Release --no-build --filter "FullyQualifiedName~MinecraftLaunchProcessTrackerTests|FullyQualifiedName~MinecraftStartupWindowTests|FullyQualifiedName~LunarAttemptLifecycleTests|FullyQualifiedName~LunarAttemptTerminationTests|FullyQualifiedName~LunarLaunchLifecycleTests|FullyQualifiedName~LunarProfileReadinessTests|FullyQualifiedName~LunarReadinessCompatibilityTests|FullyQualifiedName~LunarLaunchEnvironmentTests|FullyQualifiedName~RecoveryStage3DiagnosticsTests|FullyQualifiedName~Stage2CRecoveryTests|FullyQualifiedName~Stage2DRecoveryTests"
+        run: dotnet test Moonrise.sln -c Release --no-build --filter "FullyQualifiedName~MinecraftLaunchProcessTrackerTests|FullyQualifiedName~MinecraftStartupWindowTests|FullyQualifiedName~LunarAttemptLifecycleTests|FullyQualifiedName~LunarAttemptTerminationTests|FullyQualifiedName~LunarLaunchLifecycleTests|FullyQualifiedName~LunarProfileReadinessTests|FullyQualifiedName~LunarReadinessCompatibilityTests|FullyQualifiedName~LunarLaunchEnvironmentTests|FullyQualifiedName~RecoveryStage3DiagnosticsTests|FullyQualifiedName~Stage2BRecoveryTests|FullyQualifiedName~Stage2CRecoveryTests|FullyQualifiedName~Stage2DRecoveryTests"
 
       - name: Install Inno Setup
         shell: pwsh

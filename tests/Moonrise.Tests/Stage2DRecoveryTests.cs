@@ -139,7 +139,7 @@ public sealed class Stage2DRecoveryTests
             new(20, 10, "Lunar Client", launcherPath, now.AddMilliseconds(100))
         ]);
         var windows = new TestWindows([
-            new((nint)200, 20, false, "Chrome_WidgetWin_1", "Lunar Client")
+            new((nint)200, 20, false, "Chrome_WidgetWin_1", "Lunar Client", Width: 900, Height: 600)
         ]);
         var events = new FakeWindowEvents();
         var service = new LunarBackgroundLaunchService(

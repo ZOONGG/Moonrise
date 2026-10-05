@@ -30,7 +30,12 @@ internal sealed record WindowEntry(
     bool IsVisible,
     string ClassName = "",
     string Title = "",
-    int OwnerProcessId = 0);
+    int OwnerProcessId = 0,
+    nint OwnerHandle = 0,
+    int Width = 0,
+    int Height = 0,
+    long Style = 0,
+    long ExtendedStyle = 0);
 
 internal sealed record LunarLaunchIdentity(
     string InitialExecutablePath,
@@ -268,6 +273,7 @@ public sealed class LunarBackgroundLaunchService
             foreach (var window in _windows.Enumerate())
             {
                 var classification = ClassifyWindow(window, processes);
+                if (classification.IsLunar) _ = IsMainLauncherWindow(window, processes);
                 var hideResult = "not-requested";
                 if (window.IsVisible && classification.IsLunar)
                 {
@@ -349,6 +355,7 @@ public sealed class LunarBackgroundLaunchService
             if (window is null)
                 return;
             var classification = ClassifyWindow(window, processes);
+            if (classification.IsLunar) _ = IsMainLauncherWindow(window, processes);
             var hideResult = "not-requested";
             if (window.IsVisible && classification.IsLunar)
             {
@@ -367,14 +374,37 @@ public sealed class LunarBackgroundLaunchService
         RefreshOwnedProcessIds(snapshot);
         var processes = snapshot.ToDictionary(item => item.ProcessId);
         var candidates = _windows.Enumerate()
-            .Where(window => ClassifyWindow(window, processes).IsLunar)
+            .Where(window => IsMainLauncherWindow(window, processes))
             .OrderByDescending(window => window.ProcessId == _identity.InitialProcessId)
             .ThenByDescending(window => window.IsVisible)
             .ToArray();
-        foreach (var window in candidates)
-            _windows.Restore(window.Handle);
-        return candidates.Length > 0 && _windows.Focus(candidates[0].Handle);
+        if (candidates.Length == 0) return false;
+        _windows.Restore(candidates[0].Handle);
+        return _windows.Focus(candidates[0].Handle);
     }
+
+    private bool IsMainLauncherWindow(WindowEntry window, IReadOnlyDictionary<int, ProcessTreeEntry> processes)
+    {
+        var ownership = ClassifyWindow(window, processes);
+        var process = processes.GetValueOrDefault(window.ProcessId);
+        var reason = !ownership.IsLunar ? ownership.Reason
+            : process is null || !IsLunarExecutable(process) ? "rejected: not-launcher-executable"
+            : window.OwnerHandle != 0 || window.OwnerProcessId != 0 ? "rejected: owned-window"
+            : (window.ExtendedStyle & 0x80) != 0 || (window.Style & 0x40000000) != 0 ? "rejected: tool-or-child-window"
+            : !string.Equals(window.ClassName, "Chrome_WidgetWin_1", StringComparison.Ordinal) ? "rejected: helper-window-class"
+            : window.Width < 400 || window.Height < 250 ? "rejected: invalid-main-window-size"
+            : "accepted: verified-launcher-main-window";
+        var accepted = reason.StartsWith("accepted:", StringComparison.Ordinal);
+        // The confirmed main launcher can be hidden by background launch. Hidden helper
+        // windows never qualify merely through process ancestry or their title.
+        AuditWindow(window, process, new WindowClassification(accepted, reason), "main-window-selection");
+        return accepted;
+    }
+
+    private bool IsLunarExecutable(ProcessTreeEntry process) =>
+        process.ExecutablePath is { } path &&
+        PathsEqual(path, _identity.InitialExecutablePath) &&
+        !(process.CommandLine?.Contains("--type=", StringComparison.OrdinalIgnoreCase) ?? false);
 
     private bool HideWithBoundedRetry(nint handle, out int attempts)
     {
@@ -585,13 +615,16 @@ public sealed class LunarBackgroundLaunchService
         var sanitizedTitle = SanitizeTitle(window.Title);
         var stateKey =
             $"{window.Handle}|{window.ProcessId}|{window.IsVisible}|{classification.IsLunar}|" +
-            $"{classification.Reason}|{hideResult}";
+            $"{classification.Reason}|{hideResult}|{window.ClassName}|{window.OwnerHandle}|" +
+            $"{window.Width}|{window.Height}|{window.Style}|{window.ExtendedStyle}";
         if (!_auditedWindowStates.Add(stateKey))
             return;
         Audit(
             $"Lunar window candidate: pid={window.ProcessId}; parentPid={parentPid}; " +
             $"startUtc={start}; executable={executable}; pathHash={pathHash}; " +
             $"class={SanitizeClass(window.ClassName)}; title={sanitizedTitle}; " +
+            $"hwnd=0x{window.Handle:X}; ownerHwnd=0x{window.OwnerHandle:X}; " +
+            $"dimensions={window.Width}x{window.Height}; style=0x{window.Style:X}; extendedStyle=0x{window.ExtendedStyle:X}; " +
             $"ownerPid={window.OwnerProcessId}; visible={window.IsVisible}; " +
             $"classifiedLunar={classification.IsLunar}; reason={classification.Reason}; hide={hideResult}");
     }
@@ -855,13 +888,16 @@ internal sealed class WindowsWindowOperations : IWindowOperations
             var ownerProcessId = 0u;
             if (ownerHandle != 0)
                 _ = GetWindowThreadProcessId(ownerHandle, out ownerProcessId);
+            _ = GetWindowRect(handle, out var rectangle);
             result.Add(new WindowEntry(
                 handle,
                 checked((int)processId),
                 IsWindowVisible(handle),
                 GetClass(handle),
                 GetTitle(handle),
-                checked((int)ownerProcessId)));
+                checked((int)ownerProcessId), ownerHandle,
+                rectangle.Right - rectangle.Left, rectangle.Bottom - rectangle.Top,
+                GetWindowLongPtrW(handle, -16).ToInt64(), GetWindowLongPtrW(handle, -20).ToInt64()));
             return true;
         }, 0);
         return result;
@@ -896,6 +932,15 @@ internal sealed class WindowsWindowOperations : IWindowOperations
     }
 
     private delegate bool EnumWindowsCallback(nint windowHandle, nint parameter);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WindowRectangle { public int Left, Top, Right, Bottom; }
+
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(nint handle, out WindowRectangle rectangle);
+
+    [DllImport("user32.dll")]
+    private static extern nint GetWindowLongPtrW(nint handle, int index);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

@@ -8,6 +8,18 @@ namespace Moonrise.Tests;
 public sealed class RecoveryStage3DiagnosticsTests
 {
     [Fact]
+    public void AppendedLauncherLogDoesNotAttributePreviousCrashToCurrentTimeout()
+    {
+        var started = DateTimeOffset.Parse("2026-10-05T12:33:40+06:00");
+        var failed = DateTimeOffset.Parse("2026-10-05T12:37:10+06:00");
+        const string log = "[2026-10-05T12:32:37+06:00] Upload (ID: LCLU-CBWNBIHNVYQX)\n" +
+                           "[2026-10-05T12:33:54+06:00] Attempted to launch without metadata, skipping...\n";
+        Assert.Null(PackageCrashDiagnosticsService.FindCrashIdentifier(log, started, failed));
+        Assert.Equal("LCLU-NEW123", PackageCrashDiagnosticsService.FindCrashIdentifier(
+            log + "[2026-10-05T12:36:00+06:00] Upload (ID: LCLU-NEW123)\n", started, failed));
+    }
+
+    [Fact]
     public void SameNameProfiles_SelectExactIdAndRestoreSettings()
     {
         var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));

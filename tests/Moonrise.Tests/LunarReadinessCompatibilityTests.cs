@@ -9,7 +9,8 @@ namespace Moonrise.Tests;
 public sealed class LunarReadinessCompatibilityTests
 {
     private static readonly LauncherProfile Profile = new("synthetic-profile-a", "Synthetic", "lunar", "1.8", "1.8.9");
-    private const string Selected = "[Metadata] Profile selected (type: lunar, version: 1.8.9)";
+    private const string Metadata = "[Metadata] Lunar versions metadata fetched successfully\n[Metadata] Setting up virtual profiles\n";
+    private const string Selected = Metadata + "[Metadata] Profile selected (type: lunar, version: 1.8.9)";
     private const string Ready = "[Window] Renderer ready for window 'main'\n";
 
     private static Task<(string Client, string Version)> Wait(SyntheticLunarFiles files, long checkpoint = 0,
@@ -23,7 +24,7 @@ public sealed class LunarReadinessCompatibilityTests
     public async Task CompleteCurrentAndChangedWordingLines_AreParsed(string line)
     {
         using var files = new SyntheticLunarFiles();
-        File.WriteAllText(files.Log, line + "\r\n");
+        File.WriteAllText(files.Log, Metadata + line + "\r\n");
         Assert.Equal(("lunar", "1.8.9"), await Wait(files));
     }
 
@@ -50,7 +51,7 @@ public sealed class LunarReadinessCompatibilityTests
         var waiting = Wait(files, checkpoint);
         await Task.Delay(250);
         Assert.False(waiting.IsCompleted);
-        await File.AppendAllTextAsync(files.Log, "[Metadata] Profile changed (type: vanilla, version: 1.20.1)\n");
+        await File.AppendAllTextAsync(files.Log, Metadata + "[Metadata] Profile changed (type: vanilla, version: 1.20.1)\n");
         // Report the actual structured observation so the caller can reject a mismatch.
         Assert.Equal(("vanilla", "1.20.1"), await waiting);
     }
@@ -174,7 +175,7 @@ public sealed class LunarReadinessCompatibilityTests
     public async Task ExactIdEvidence_WithReadyAvoidsGraceDelay()
     {
         using var files = new SyntheticLunarFiles();
-        File.WriteAllText(files.Log, "[FutureProfiles] Prepared profile synthetic-profile-a\n" + Ready);
+        File.WriteAllText(files.Log, Metadata + "[FutureProfiles] Prepared profile synthetic-profile-a\n" + Ready);
         Assert.Equal(("lunar", "1.8.9"), await Wait(files, seconds: 0.7));
     }
 
@@ -185,20 +186,20 @@ public sealed class LunarReadinessCompatibilityTests
     public async Task SimilarButNotExactId_DoesNotBypassGraceDelay(string id)
     {
         using var files = new SyntheticLunarFiles();
-        File.WriteAllText(files.Log, $"[FutureProfiles] Prepared profile {id}\n" + Ready);
+        File.WriteAllText(files.Log, Metadata + $"[FutureProfiles] Prepared profile {id}\n" + Ready);
         await Assert.ThrowsAsync<TimeoutException>(() => Wait(files, seconds: 0.65));
     }
 
     [Theory]
     [InlineData("[Window] Renderer ready for window 'main'\n")]
     [InlineData("[Launcher] Ready signal received\n")]
-    public async Task ReadyOnlyFallback_DoesNotClaimPackageCompatibility(string ready)
+    public async Task ReadyOnlyCannotDispatchWithoutMetadataOrClaimPackageCompatibility(string ready)
     {
         using var files = new SyntheticLunarFiles();
         File.WriteAllText(files.Log, ready);
         var waiting = Wait(files);
         Assert.False(waiting.IsCompleted);
-        Assert.Equal(("lunar", "1.8.9"), await waiting);
+        await Assert.ThrowsAsync<TimeoutException>(() => waiting);
         var report = new SanitizedLaunchReport(Path.Combine(files.Root, "reports"));
         report.Set("launchStage", "launcher-ready");
         report.Save();
