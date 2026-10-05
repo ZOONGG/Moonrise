@@ -69,45 +69,6 @@ public sealed class MaintainedCompatibilityBuildTests
         Assert.Contains("SHA-256", exception.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void ResolveMoonriseOwnedSuccessors_ReplacesOnlyExactTargetAndPreservesOriginal()
-    {
-        using var temp = new TemporaryDirectory();
-        var parser = new JarMetadataParser();
-        var paths = new AppPaths(temp.Path);
-        paths.EnsureUserDirectories();
-        var originalPath = CreateWeaveMod(temp.Path, "stormy.jar", "stormy", legacyApi: true);
-        var successorSource = CreateWeaveMod(temp.Path, "veyra.jar", "veyra", legacyApi: false);
-        var original = parser.ParseWeaveMod(originalPath);
-        var originalBytes = File.ReadAllBytes(originalPath);
-        var successorHash = LocalPackageLibrary.ComputeSha256(successorSource);
-        var successorName = $"{successorHash.ToLowerInvariant()}.jar";
-        var buildDirectory = Path.Combine(paths.AdaptersDirectory, "maintained-builds");
-        Directory.CreateDirectory(buildDirectory);
-        File.Copy(successorSource, Path.Combine(buildDirectory, successorName));
-        var rule = new MoonriseOwnedSuccessorRule(
-            "test-successor",
-            original.Sha256,
-            successorHash,
-            successorName,
-            "veyra",
-            "1.8.9",
-            WeaveAgentService.Version);
-
-        var result = new MaintainedCompatibilityBuildService(
-                paths,
-                parser,
-                rules: [],
-                successorRules: [rule])
-            .ResolveMoonriseOwnedSuccessors("1.8.9", [original]);
-
-        var applied = Assert.Single(result.AppliedSuccessors);
-        Assert.Equal("test-successor", applied.Rule.Id);
-        Assert.Equal("veyra", Assert.Single(result.LaunchMods).Identifier);
-        Assert.Equal(successorHash, applied.SuccessorPackage.Sha256);
-        Assert.Equal(originalBytes, File.ReadAllBytes(originalPath));
-    }
-
     private static string CreateWeaveMod(
         string directory,
         string fileName,

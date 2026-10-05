@@ -6,8 +6,6 @@ namespace Moonrise.Services;
 
 public sealed partial class LunarProfileReadinessService
 {
-    private static readonly TimeSpan LauncherReadyFallbackDelay = TimeSpan.FromSeconds(1);
-
     public static string GetDefaultLauncherLogPath() => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".lunarclient", "logs", "launcher", "main.log");
 
@@ -24,11 +22,27 @@ public sealed partial class LunarProfileReadinessService
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var deadline = DateTimeOffset.UtcNow + timeout;
         var offset = Math.Max(0, checkpoint);
+        byte[]? boundary = null;
+        DateTime? creationTime = null;
         var pending = new StringBuilder();
         var expectedProfileObserved = false;
         DateTimeOffset? launcherReadyObservedUtc = null;
+        var lunarVersionsObserved = false;
+        var launchMetadataReady = false;
+        void ResetLog()
+        {
+            offset = 0;
+            boundary = null;
+            creationTime = null;
+            pending.Clear();
+            expectedProfileObserved = false;
+            launcherReadyObservedUtc = null;
+            lunarVersionsObserved = false;
+            launchMetadataReady = false;
+        }
         while (DateTimeOffset.UtcNow < deadline)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -37,50 +51,66 @@ public sealed partial class LunarProfileReadinessService
                 if (File.Exists(logPath))
                 {
                     using var stream = new FileStream(logPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                    if (stream.Length < offset) { offset = 0; pending.Clear(); }
+                    var currentCreationTime = File.GetCreationTimeUtc(logPath);
+                    // Length alone misses rotation to a larger file and truncate/refill
+                    // between polls. Compare a bounded byte anchor at the last offset.
+                    if (stream.Length < offset ||
+                        (creationTime is not null && creationTime != currentCreationTime) ||
+                        (boundary is not null && !boundary.AsSpan().SequenceEqual(ReadBoundary(stream, offset))))
+                        ResetLog();
+                    creationTime = currentCreationTime;
                     stream.Position = offset;
                     using var reader = new StreamReader(stream, Encoding.UTF8, true, leaveOpen: true);
-                    pending.Append(await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false));
+                    // At EOF, capture the checkpoint anchor before yielding: a
+                    // same-length replacement may arrive during an async EOF read.
+                    if (stream.Length > offset)
+                        pending.Append(await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false));
                     offset = stream.Position;
+                    boundary = ReadBoundary(stream, offset);
                     var text = pending.ToString();
                     var lastLine = text.LastIndexOf('\n');
                     if (lastLine >= 0)
                     {
                         var complete = text[..(lastLine + 1)];
                         pending.Clear(); pending.Append(text[(lastLine + 1)..]);
-                        if (TryParseSelectedProfile(complete, out var selected))
-                            return selected;
-
+                        (string Client, string Version)? selected = null;
                         foreach (var line in complete.Split('\n', StringSplitOptions.RemoveEmptyEntries))
                         {
+                            if (line.Contains("[Metadata] Lunar versions metadata fetched successfully", StringComparison.OrdinalIgnoreCase))
+                                lunarVersionsObserved = true;
+                            if (lunarVersionsObserved && line.Contains("[Metadata] Setting up virtual profiles", StringComparison.OrdinalIgnoreCase))
+                                launchMetadataReady = true;
+                            if (launchMetadataReady && TryParseSelectedProfile(line, out var observation))
+                                selected = observation;
                             if (IsExpectedProfileEvidence(line, expectedProfile.Id))
                                 expectedProfileObserved = true;
                             if (IsLauncherReadyEvidence(line))
                                 launcherReadyObservedUtc ??= DateTimeOffset.UtcNow;
                         }
 
-                        if (expectedProfileObserved && launcherReadyObservedUtc is not null)
+                        if (selected is { } confirmed) return confirmed;
+                        if (launchMetadataReady && expectedProfileObserved && launcherReadyObservedUtc is not null)
                             return Expected(expectedProfile);
                     }
                 }
+                else ResetLog();
             }
             catch (IOException) { }
 
-            // Moonrise writes the exact existing profile ID into Lunar's own
-            // settings before launch. If a future launcher update changes only
-            // the profile log sentence, a ready official launcher is enough to
-            // continue after a short grace period instead of timing out for a
-            // full minute. Authentication or launch failures remain observable
-            // in the subsequent Java/Minecraft monitor.
-            if (launcherReadyObservedUtc is { } readyUtc &&
-                DateTimeOffset.UtcNow - readyUtc >= LauncherReadyFallbackDelay)
-            {
-                return Expected(expectedProfile);
-            }
+            // Renderer readiness and the startup profile precede launch metadata.
+            // Dispatching here makes Lunar discard the deeplink without spawning Java.
             await Task.Delay(150, cancellationToken).ConfigureAwait(false);
         }
         throw new TimeoutException(
             $"Lunar Launcher did not become ready for the selected profile within {Math.Ceiling(timeout.TotalSeconds)} seconds.");
+    }
+
+    private static byte[] ReadBoundary(FileStream stream, long offset)
+    {
+        var bytes = new byte[(int)Math.Min(offset, 128)];
+        stream.Position = offset - bytes.Length;
+        stream.ReadExactly(bytes);
+        return bytes;
     }
 
     internal static bool TryParseSelectedProfile(
@@ -101,13 +131,20 @@ public sealed partial class LunarProfileReadinessService
     }
 
     private static bool IsExpectedProfileEvidence(string line, string expectedProfileId) =>
-        line.Contains(expectedProfileId, StringComparison.OrdinalIgnoreCase) &&
+        !string.IsNullOrEmpty(expectedProfileId) &&
+        Regex.IsMatch(line, $@"(?<![A-Za-z0-9._-]){Regex.Escape(expectedProfileId)}(?![A-Za-z0-9._-])", RegexOptions.CultureInvariant) &&
         line.Contains("profile", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsLauncherReadyEvidence(string line) =>
-        line.Contains("ready", StringComparison.OrdinalIgnoreCase) &&
+        ReadyWordRegex().IsMatch(line) && !NegativeReadyRegex().IsMatch(line) &&
         (line.Contains("[Window]", StringComparison.OrdinalIgnoreCase) ||
          line.Contains("Ready signal", StringComparison.OrdinalIgnoreCase));
+
+    [GeneratedRegex(@"\bready\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ReadyWordRegex();
+
+    [GeneratedRegex(@"\b(?:not|never)[\s-]+(?:yet[\s-]+)?ready\b|\bready\s*[:=]\s*false\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex NegativeReadyRegex();
 
     private static (string Client, string Version) Expected(LauncherProfile profile) =>
         (profile.Client.ToLowerInvariant(), profile.GameVersion);

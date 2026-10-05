@@ -10,6 +10,8 @@ $minHookCommit = "c3fcafdc10146beb5919319d0683e44e3c30d537"
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $bridgeSource = Join-Path $repoRoot "native\Moonrise.Native\bridge.c"
 if (-not (Test-Path -LiteralPath $bridgeSource)) { throw "Native bridge source was not found: $bridgeSource" }
+$bridgeTestSource = Join-Path $repoRoot "native\Moonrise.Native\bridge_tests.c"
+if (-not (Test-Path -LiteralPath $bridgeTestSource)) { throw "Native bridge tests were not found: $bridgeTestSource" }
 
 $programFilesX86 = [Environment]::GetFolderPath("ProgramFilesX86")
 $vswhere = Join-Path $programFilesX86 "Microsoft Visual Studio\Installer\vswhere.exe"
@@ -24,10 +26,11 @@ if (-not (Test-Path -LiteralPath $vcvars)) { throw "vcvars64.bat was not found: 
 $working = [System.IO.Path]::GetFullPath($WorkingRoot)
 $minHook = Join-Path $working "minhook"
 $obj = Join-Path $working "obj"
+$testObj = Join-Path $obj "tests"
 $out = [System.IO.Path]::GetFullPath($OutputPath)
 $outDir = Split-Path -Parent $out
 if (Test-Path -LiteralPath $working) { Remove-Item -LiteralPath $working -Recurse -Force }
-New-Item -ItemType Directory -Path $working, $obj, $outDir -Force | Out-Null
+New-Item -ItemType Directory -Path $working, $obj, $testObj, $outDir -Force | Out-Null
 
 Write-Output "[native] Fetching MinHook $minHookCommit"
 & git clone --filter=blob:none --no-checkout https://github.com/TsudaKageyu/minhook.git $minHook
@@ -54,12 +57,26 @@ $includeHde = Join-Path $minHook "src\hde"
 $pdb = Join-Path $obj "Moonrise.Native.pdb"
 $headersPath = Join-Path $working "headers.txt"
 $cmdFile = Join-Path $working "build-native.cmd"
+$testExecutable = Join-Path $working "Moonrise.Native.Tests.exe"
+$reproducibilityBaseline = Join-Path $working "Moonrise.Native.first.dll"
 $quotedSources = ($sources | ForEach-Object { '"' + $_ + '"' }) -join " "
+$quotedTestSources = (@($bridgeTestSource) + $sources[1..($sources.Count - 1)] |
+    ForEach-Object { '"' + $_ + '"' }) -join " "
+$bridgeCompileCommand = 'cl /nologo /LD /O2 /GL /GS /guard:cf /DUNICODE /D_UNICODE /D_CRT_SECURE_NO_WARNINGS /W4 /WX /wd4201 /wd4244 /wd4310 /wd4701 /MT /I"{0}" /I"{1}" /I"{2}" {3} /link /LTCG /Brepro /DYNAMICBASE /NXCOMPAT /OUT:"{4}" /PDB:"{5}"' -f $includeRoot, $includeSrc, $includeHde, $quotedSources, $out, $pdb
 
 $commands = @(
     "@echo off",
     ('call "{0}" >nul' -f $vcvars),
-    ('cl /nologo /LD /O2 /GL /GS /guard:cf /DUNICODE /D_UNICODE /D_CRT_SECURE_NO_WARNINGS /W4 /WX /wd4201 /wd4244 /wd4310 /wd4701 /MT /I"{0}" /I"{1}" /I"{2}" {3} /link /LTCG /DYNAMICBASE /NXCOMPAT /OUT:"{4}" /PDB:"{5}"' -f $includeRoot, $includeSrc, $includeHde, $quotedSources, $out, $pdb),
+    $bridgeCompileCommand,
+    "if errorlevel 1 exit /b %errorlevel%",
+    ('copy /y "{0}" "{1}" >nul' -f $out, $reproducibilityBaseline),
+    "if errorlevel 1 exit /b %errorlevel%",
+    "timeout /t 2 /nobreak >nul",
+    $bridgeCompileCommand,
+    "if errorlevel 1 exit /b %errorlevel%",
+    ('cl /nologo /O2 /GS /guard:cf /DUNICODE /D_UNICODE /D_CRT_SECURE_NO_WARNINGS /W4 /WX /wd4201 /wd4244 /wd4310 /wd4701 /MT /I"{0}" /I"{1}" /I"{2}" {3} /Fo"{4}\\" /Fe:"{5}" /link /DYNAMICBASE /NXCOMPAT' -f $includeRoot, $includeSrc, $includeHde, $quotedTestSources, $testObj, $testExecutable),
+    "if errorlevel 1 exit /b %errorlevel%",
+    ('"{0}"' -f $testExecutable),
     "if errorlevel 1 exit /b %errorlevel%",
     ('dumpbin /headers "{0}" > "{1}"' -f $out, $headersPath)
 )
@@ -69,14 +86,21 @@ Write-Output "[native] Building x64 Moonrise.Native.dll"
 & cmd.exe /d /c $cmdFile
 if ($LASTEXITCODE -ne 0) { throw "Native bridge build failed with exit code $LASTEXITCODE." }
 if (-not (Test-Path -LiteralPath $out)) { throw "Native bridge build did not produce $out." }
+if (-not (Test-Path -LiteralPath $reproducibilityBaseline)) { throw "Native bridge reproducibility baseline was not produced." }
 
 $headers = Get-Content -LiteralPath $headersPath -Raw
 if ($headers -notmatch "(?im)\b8664 machine \(x64\)") { throw "Native bridge is not an x64 PE image." }
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $out).Hash
+$baselineHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $reproducibilityBaseline).Hash
+if ($hash -ne $baselineHash) {
+    throw "Native bridge build is not reproducible: first=$baselineHash second=$hash."
+}
 $size = (Get-Item -LiteralPath $out).Length
 if ($size -lt 50000) { throw "Native bridge output is unexpectedly small: $size bytes." }
 
 Write-Output "[native] Build succeeded"
+Write-Output "[native] Parser tests passed"
+Write-Output "[native] Reproducibility check passed"
 Write-Output "[native] Output: $out"
 Write-Output "[native] SHA-256: $hash"
 Write-Output "[native] Size: $size bytes"

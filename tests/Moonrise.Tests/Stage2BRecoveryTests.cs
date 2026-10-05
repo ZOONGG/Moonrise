@@ -47,7 +47,7 @@ public sealed class Stage2BRecoveryTests
             "var confirmed = await WaitForProfileWithLauncherAsync(",
             StringComparison.Ordinal);
         var dispatch = source.IndexOf(
-            "await DispatchLaunchToExistingLunarAsync(launcherPath, backgroundLaunch, token)",
+            "await DispatchLaunchToExistingLunarAsync(launcherPath, backgroundLaunch, launchAttemptId, token)",
             launchFlowStart,
             StringComparison.Ordinal);
         var restore = source.IndexOf(
@@ -65,8 +65,8 @@ public sealed class Stage2BRecoveryTests
     public void BackgroundLaunch_HidesOnlyLunarProcessTreeWindows()
     {
         var processes = new FakeProcessTree([
-            new(10, 1, "Lunar Client"),
-            new(11, 10, "Lunar Client"),
+            new(10, 1, "Lunar Client", Path.GetFullPath("Lunar Client.exe")),
+            new(11, 10, "Lunar Client", Path.GetFullPath("Lunar Client.exe")),
             new(12, 11, "javaw"),
             new(20, 1, "unrelated")
         ]);
@@ -90,17 +90,17 @@ public sealed class Stage2BRecoveryTests
     public void ShowLunar_RestoresAndFocusesTheRootLauncherWindow()
     {
         var processes = new FakeProcessTree([
-            new(10, 1, "Lunar Client"),
-            new(11, 10, "Lunar Client")
+            new(10, 1, "Lunar Client", Path.GetFullPath("Lunar Client.exe")),
+            new(11, 10, "Lunar Client", Path.GetFullPath("Lunar Client.exe"))
         ]);
         var windows = new FakeWindows([
-            new((nint)110, 11, false),
-            new((nint)100, 10, false)
+            new((nint)110, 11, false, "Chrome_WidgetWin_0"),
+            new((nint)100, 10, false, "Chrome_WidgetWin_1", Width: 900, Height: 600)
         ]);
         var service = new LunarBackgroundLaunchService(10, processes, windows);
 
         Assert.True(service.RevealAndFocus());
-        Assert.Equal([(nint)100, (nint)110], windows.Restored.Order().ToArray());
+        Assert.Equal([(nint)100], windows.Restored.ToArray());
         Assert.Equal((nint)100, windows.Focused);
     }
 
@@ -146,13 +146,14 @@ public sealed class Stage2BRecoveryTests
 
         Assert.True(Directory.Exists(paths.WeavePackagesDirectory));
         Assert.True(Directory.Exists(paths.AgentPackagesDirectory));
-        Assert.True(Directory.Exists(paths.UnclassifiedPackagesDirectory));
+        Assert.False(Directory.Exists(paths.UnclassifiedPackagesDirectory));
         Assert.True(Directory.Exists(paths.PackageMetadataDirectory));
         Assert.False(Directory.Exists(paths.LegacyAddPackagesDirectory));
         Assert.False(Directory.Exists(paths.LegacyInstalledPackagesDirectory));
         var readme = File.ReadAllText(paths.PackageReadmePath);
         Assert.Contains("Копируйте Weave-моды в папку weave", readme, StringComparison.Ordinal);
         Assert.Contains("Copy Java agents into the agents folder", readme, StringComparison.Ordinal);
+        Assert.Contains("Only Weave mods and Java agents are supported", readme, StringComparison.Ordinal);
     }
 
     [Fact]

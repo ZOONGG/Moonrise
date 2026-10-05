@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Globalization;
 using Moonrise.Models;
 
 namespace Moonrise.Services;
@@ -54,7 +55,7 @@ public sealed partial class PackageCrashDiagnosticsService
             try
             {
                 crashIdentifier ??= FindCrashIdentifier(
-                    SanitizeCapturedText(ReadTail(candidate.FullName, 32 * 1024)));
+                    SanitizeCapturedText(ReadTail(candidate.FullName, 32 * 1024)), request.LaunchStartedUtc, request.FailureUtc);
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
@@ -62,6 +63,10 @@ public sealed partial class PackageCrashDiagnosticsService
         }
 
         var captured = new List<(string Name, FileInfo Source, string Text)>();
+        foreach (var crash in candidates.Where(file =>
+                     (file.Name.StartsWith("crash-", StringComparison.OrdinalIgnoreCase) && file.Extension.Equals(".txt", StringComparison.OrdinalIgnoreCase)) ||
+                     (file.Name.StartsWith("hs_err_pid", StringComparison.OrdinalIgnoreCase) && file.Extension.Equals(".log", StringComparison.OrdinalIgnoreCase))).Take(4))
+            CaptureExplicit(captured, $"runtime-crash-{captured.Count:00}.txt", crash);
         CaptureCategory(captured, candidates, "recent-weave-log.txt", file => ContainsAny(file, "weave"));
         CaptureCategory(captured, candidates, "recent-mixin-log.txt", file => ContainsAny(file, "mixin"));
         CaptureCategory(captured, candidates, "recent-lunar-log.txt", file =>
@@ -82,7 +87,7 @@ public sealed partial class PackageCrashDiagnosticsService
             var bounded = BoundText(SanitizeCapturedText(text), MaximumCapturedTextBytes);
             WriteSanitizedText(Path.Combine(directory, name), bounded);
             writtenTextBytes += Encoding.UTF8.GetByteCount(bounded);
-            crashIdentifier ??= FindCrashIdentifier(bounded);
+            crashIdentifier ??= FindCrashIdentifier(bounded, request.LaunchStartedUtc, request.FailureUtc);
         }
 
         var packages = request.EnabledPackages.Select(package => new
@@ -266,10 +271,12 @@ public sealed partial class PackageCrashDiagnosticsService
         {
             var version = request.MinecraftVersion.Trim();
             roots.Add(Path.Combine(userProfile, ".lunarclient", "profiles", version, "logs"));
+            roots.Add(Path.Combine(userProfile, ".lunarclient", "profiles", version, "crash-reports"));
             var components = version.Split('.', StringSplitOptions.RemoveEmptyEntries);
             if (components.Length >= 2)
             {
                 var profileFamily = $"{components[0]}.{components[1]}";
+                roots.Add(Path.Combine(userProfile, ".lunarclient", "profiles", profileFamily, "crash-reports"));
                 roots.Add(Path.Combine(
                     userProfile,
                     ".lunarclient",
@@ -285,6 +292,21 @@ public sealed partial class PackageCrashDiagnosticsService
         }
 
         var files = new List<FileInfo>();
+        foreach (var directory in new[]
+                 {
+                     Path.Combine(userProfile, ".lunarclient"),
+                     Path.Combine(userProfile, ".lunarclient", "jre"),
+                     Path.Combine(userProfile, ".lunarclient", "profiles", request.MinecraftVersion),
+                     Path.Combine(userProfile, ".lunarclient", "profiles", string.Join(".", request.MinecraftVersion.Split('.').Take(2)))
+                 }.Where(Directory.Exists))
+        {
+            try
+            {
+                foreach (var path in Directory.EnumerateFiles(directory, "hs_err_pid*.log", SearchOption.TopDirectoryOnly))
+                    files.Add(new FileInfo(path));
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
+        }
         foreach (var root in roots.Where(Directory.Exists))
             EnumerateSafeLogFiles(root, files, depth: 0);
         return files.Where(file => IsInLaunchWindow(file, request)).ToArray();
@@ -383,8 +405,18 @@ public sealed partial class PackageCrashDiagnosticsService
             .TrimStart('\uFFFD');
     }
 
-    private static string? FindCrashIdentifier(string text)
+    internal static string? FindCrashIdentifier(string text, DateTimeOffset started, DateTimeOffset failed)
     {
+        // A shared launcher log can be appended during this attempt while still
+        // containing a crash upload from the previous one. File mtime is insufficient.
+        text = string.Join('\n', text.Split('\n').Where(line =>
+        {
+            var closingBracket = line.IndexOf(']');
+            if (!line.StartsWith('[') || closingBracket < 0) return true;
+            if (!DateTimeOffset.TryParse(line[1..closingBracket], CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeLocal, out var timestamp)) return true;
+            return timestamp >= started && timestamp <= failed;
+        }));
         var lunarMatches = LunarCrashIdentifierPattern().Matches(text);
         if (lunarMatches.Count > 0)
             return lunarMatches[^1].Value.ToUpperInvariant();

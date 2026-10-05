@@ -30,19 +30,50 @@ public sealed class LauncherProfileService
         using var connection = new SqliteConnection(
             $"Data Source={ProfilesDatabasePath};Mode=ReadOnly;Pooling=False");
         connection.Open();
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var schema = connection.CreateCommand())
+        {
+            schema.CommandText = "PRAGMA table_info(profiles)";
+            using var fields = schema.ExecuteReader();
+            while (fields.Read()) columns.Add(fields.GetString(1));
+        }
+        var required = new[] { "id", "name", "type", "major_game_version", "game_version" };
+        if (required.Any(column => !columns.Contains(column))) return [];
+        string Optional(string column) => columns.Contains(column) ? column : "NULL";
         using var command = connection.CreateCommand();
-        command.CommandText = "SELECT id, name, type, major_game_version, game_version FROM profiles WHERE type = 'lunar' ORDER BY major_game_version, game_version";
+        command.CommandText = $"SELECT id, name, type, major_game_version, game_version, {Optional("loaders")}, {Optional("loader_version")}, {Optional("lunar_module")} FROM profiles WHERE type = 'lunar' ORDER BY major_game_version, game_version, id";
         using var reader = command.ExecuteReader();
         while (reader.Read())
-            profiles.Add(new LauncherProfile(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4)));
+            profiles.Add(new LauncherProfile(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4))
+            {
+                Loaders = ParseLoaders(reader.IsDBNull(5) ? null : reader.GetString(5)),
+                LoaderVersion = reader.IsDBNull(6) ? null : reader.GetString(6),
+                LunarModule = reader.IsDBNull(7) ? null : reader.GetString(7)
+            });
         return profiles;
     }
 
-    public LauncherProfileSelection BeginExactProfileSelection(string client, string version)
+    internal static IReadOnlyList<string> ParseLoaders(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return [];
+        try
+        {
+            using var json = JsonDocument.Parse(value);
+            if (json.RootElement.ValueKind != JsonValueKind.Array) return [];
+            return json.RootElement.EnumerateArray()
+                .Where(item => item.ValueKind == JsonValueKind.String)
+                .Select(item => item.GetString()!)
+                .Where(item => !string.IsNullOrWhiteSpace(item)).ToArray();
+        }
+        catch (JsonException) { return []; }
+    }
+
+    public LauncherProfileSelection BeginExactProfileSelection(string client, string version, string? profileId = null)
     {
         var profile = GetProfiles().FirstOrDefault(item =>
             string.Equals(item.Client, client, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(item.GameVersion, version, StringComparison.OrdinalIgnoreCase));
+            string.Equals(item.GameVersion, version, StringComparison.OrdinalIgnoreCase) &&
+            (profileId is null || string.Equals(item.Id, profileId, StringComparison.Ordinal)));
         if (profile is null)
             throw new InvalidOperationException($"The official launcher has no {client} {version} profile yet. Open Lunar once, create that profile, then return to Moonrise.");
 
@@ -65,8 +96,13 @@ public sealed class LauncherProfileService
             return new JsonObject();
         try
         {
-            return JsonNode.Parse(File.ReadAllText(LauncherSettingsPath))?.AsObject()
-                ?? throw new InvalidDataException("Lunar launcher.json must contain a JSON object.");
+            if (JsonNode.Parse(File.ReadAllText(LauncherSettingsPath)) is not JsonObject root)
+                throw new InvalidDataException("Lunar launcher.json must contain a JSON object.");
+            // Missing settings can be initialized; an existing unsupported value
+            // must never be silently replaced (including during restoration).
+            if (root.TryGetPropertyValue("settings", out var settings) && settings is not JsonObject)
+                throw new InvalidDataException("Lunar launcher.json settings must contain a JSON object; Moonrise did not modify it.");
+            return root;
         }
         catch (JsonException exception)
         {

@@ -38,6 +38,8 @@ public sealed class LunarProfileReadinessTests
 
         await File.AppendAllTextAsync(
             temporary.Path,
+            $"[Metadata] Lunar versions metadata fetched successfully{Environment.NewLine}" +
+            $"[Metadata] Setting up virtual profiles{Environment.NewLine}" +
             $"[Metadata] Profile selected, using Minecraft 1.8 (ID: {ProfileId}, type: lunar, version: 1.8.9)...{Environment.NewLine}");
 
         var selected = await readiness;
@@ -58,10 +60,34 @@ public sealed class LunarProfileReadinessTests
         await File.AppendAllTextAsync(
             temporary.Path,
             $"[FutureProfiles] Prepared profile {ProfileId}{Environment.NewLine}" +
-            $"[Window] Renderer ready for window 'main'{Environment.NewLine}");
+            $"[Window] Renderer ready for window 'main'{Environment.NewLine}" +
+            $"[Metadata] Lunar versions metadata fetched successfully{Environment.NewLine}" +
+            $"[Metadata] Setting up virtual profiles{Environment.NewLine}");
 
         var selected = await readiness;
         Assert.Equal(("lunar", "1.8.9"), selected);
+    }
+
+    [Fact]
+    public async Task StartupProfileAndRendererDoNotDispatchBeforeLaunchMetadata()
+    {
+        using var temporary = new TemporaryLog();
+        await File.WriteAllTextAsync(temporary.Path,
+            $"[Metadata] Profile selected (ID: {ProfileId}, type: lunar, version: 1.8.9){Environment.NewLine}" +
+            $"[Window] Renderer ready for window 'main'{Environment.NewLine}");
+        var readiness = new LunarProfileReadinessService().WaitForSelectedProfileAsync(
+            temporary.Path, 0, ExpectedProfile, TimeSpan.FromSeconds(3), CancellationToken.None);
+        // Wait beyond the old renderer fallback; the real metadata event controls readiness.
+        await Task.Delay(1200);
+        Assert.False(readiness.IsCompleted);
+        await File.AppendAllTextAsync(temporary.Path,
+            $"[Metadata] Lunar versions metadata fetched successfully{Environment.NewLine}");
+        await Task.Delay(200);
+        Assert.False(readiness.IsCompleted);
+        await File.AppendAllTextAsync(temporary.Path,
+            $"[Metadata] Setting up virtual profiles{Environment.NewLine}" +
+            $"[Metadata] Profile selected (ID: {ProfileId}, type: lunar, version: 1.8.9){Environment.NewLine}");
+        Assert.Equal(("lunar", "1.8.9"), await readiness);
     }
 
     private sealed class TemporaryLog : IDisposable

@@ -25,6 +25,7 @@ public sealed class MoonriseServicesTests
             MinecraftVersion = "1.8.9",
             Language = "en",
             LauncherExecutablePath = @"C:\Apps\Lunar Client.exe",
+            AutoCloseLunarBeforeLaunch = true,
             DisabledMods = ["one.jar"],
             DisabledAgents = ["agent.jar"]
         });
@@ -33,9 +34,21 @@ public sealed class MoonriseServicesTests
         Assert.Equal("lunar", settings.Client);
         Assert.Equal("1.8.9", settings.MinecraftVersion);
         Assert.Equal("en", settings.Language);
+        Assert.True(settings.AutoCloseLunarBeforeLaunch);
         Assert.Equal(["one.jar"], settings.DisabledMods);
         Assert.Equal(["agent.jar"], settings.DisabledAgents);
         Assert.False(File.Exists(path + ".tmp"));
+    }
+
+    [Fact]
+    public void Settings_AutoCloseLunarDefaultsOff()
+    {
+        using var temp = new TemporaryDirectory();
+        var path = Path.Combine(temp.Path, "moonrise-settings.json");
+
+        var settings = new AppSettingsService(path).Load();
+
+        Assert.False(settings.AutoCloseLunarBeforeLaunch);
     }
 
     [Fact]
@@ -230,6 +243,7 @@ public sealed class MoonriseServicesTests
         Assert.Equal(Path.Combine(temp.Path, "packages", "weave"), paths.WeavePackagesDirectory);
         Assert.Equal(Path.Combine(temp.Path, "packages", "agents"), paths.AgentPackagesDirectory);
         Assert.Equal(Path.Combine(temp.Path, "packages", "unclassified"), paths.UnclassifiedPackagesDirectory);
+        Assert.False(Directory.Exists(paths.UnclassifiedPackagesDirectory));
         Assert.Equal(Path.Combine(temp.Path, "packages", "metadata"), paths.PackageMetadataDirectory);
         Assert.Equal(Path.Combine(temp.Path, "adapters"), paths.AdaptersDirectory);
         Assert.Equal(Path.Combine(temp.Path, "cache", "catalog"), paths.CatalogCacheDirectory);
@@ -239,7 +253,7 @@ public sealed class MoonriseServicesTests
         Assert.False(Directory.Exists(paths.UserAgentsDirectory));
         Assert.False(Directory.Exists(paths.MoonriseOwnedPackagesDirectory));
         Assert.Equal(
-            ["agents", "metadata", "unclassified", "weave"],
+            ["agents", "metadata", "weave"],
             Directory.EnumerateDirectories(paths.PackagesDirectory)
                 .Select(path => Path.GetFileName(path)!)
                 .Order(StringComparer.OrdinalIgnoreCase)

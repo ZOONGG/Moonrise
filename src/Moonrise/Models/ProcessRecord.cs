@@ -7,4 +7,7 @@ public sealed record ProcessRecord(
     long MainWindowHandle,
     string MainWindowTitle,
     bool IsMainWindowVisible,
-    bool IsResponding);
+    bool IsResponding,
+    int ParentProcessId = 0,
+    DateTimeOffset? StartTimeUtc = null,
+    string MainWindowClass = "");
