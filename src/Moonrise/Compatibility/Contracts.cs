@@ -30,6 +30,12 @@ public sealed record BackendCapabilities(bool Java, bool ClassPath, bool Ordered
 }
 public sealed record PlanField<T>(ResolutionState State, T? Value, string Reason);
 public sealed record BaseLoader(string Id, string? Version, ImmutableArray<Evidence> Evidence);
+public sealed record ControlledGenesisRuntimeSnapshot(
+    string LunarRoot, string OfflineRoot, string RuntimeSnapshotId, string GenesisVersion,
+    ImmutableArray<ArtifactSnapshot> ClassPath, ImmutableArray<ArtifactSnapshot> IchorClassPath,
+    ImmutableArray<ArtifactSnapshot> IchorExternalFiles, ImmutableArray<ArtifactSnapshot> NativeArtifacts,
+    string GameDirectory, string WorkingDirectory, string AssetIndex, string MainClass,
+    string LoaderId, ImmutableArray<Evidence> Evidence);
 public sealed record JavaCandidate(string Executable, string RuntimeRoot, string? Version, string? Vendor, string? Architecture,
     int? Major, ImmutableArray<Evidence> Evidence);
 public sealed record JavaRequirement(int? Minimum = null, int? Maximum = null, string? Architecture = null);
@@ -59,6 +65,8 @@ public sealed record LaunchPlan(
     ImmutableArray<ArgumentProvenance> ArgumentProvenance)
 {
     public PreflightStatus Status => !Errors.IsEmpty ? PreflightStatus.Invalid : !Warnings.IsEmpty ? PreflightStatus.ValidWithWarnings : PreflightStatus.Valid;
+    public ImmutableArray<RuntimeResourceRoot> ResourceRoots { get; init; } = [];
+    public string? RuntimeFileDirectory { get; init; }
 }
 public sealed record PlanRequest(string ContractId, string MinecraftVersion, string ProfileId, Backend Backend,
     BaseLoader BaseLoader, ImmutableArray<PackageInput> Packages, ImmutableArray<Agent> Agents, WeaveSelection Weave,
@@ -68,4 +76,8 @@ public sealed record PlanRequest(string ContractId, string MinecraftVersion, str
     string? WorkingDirectory = null, string? GameDirectory = null, string? MainClass = null, string? AssetIndex = null,
     ImmutableArray<ArtifactSnapshot> ClassPath = default, ImmutableArray<ArtifactSnapshot> IchorClassPath = default,
     ImmutableArray<ArtifactSnapshot> IchorExternalFiles = default, ImmutableArray<ArtifactSnapshot> NativeArtifacts = default,
-    ImmutableArray<string> GenesisGameArgs = default);
+    ImmutableArray<string> GenesisGameArgs = default)
+{
+    public ImmutableArray<RuntimeResourceRoot> ResourceRoots { get; init; } = [];
+    public string? RuntimeFileDirectory { get; init; }
+}

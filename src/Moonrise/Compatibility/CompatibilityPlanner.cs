@@ -143,6 +143,8 @@ public static class CompatibilityPlanner
         foreach (var arg in memory) provenance.Add(new(arg, "settings.memory", "managed"));
         var artifacts = packages.Select(p => p.Artifact).Concat(ordered.Select(a => a.Artifact))
             .Concat(Safe(request.NativeArtifacts)).Concat(Safe(request.ClassPath)).Concat(Safe(request.IchorClassPath)).Concat(Safe(request.IchorExternalFiles)).ToList();
+        if (capabilities.ClassPath && !string.IsNullOrWhiteSpace(request.AssetIndex) && File.Exists(request.AssetIndex))
+            artifacts.Add(ArtifactSnapshots.Capture(request.AssetIndex, "minecraft.assetIndex", false));
         if (request.Weave.Strategy != WeaveStrategy.Off && request.Weave.Artifact != null) artifacts.Add(request.Weave.Artifact);
         // Freeze the selected Java executable and its release metadata as runtime artifacts.
         var runtime = capabilities.Java ? java.Runtime : null;
@@ -159,6 +161,7 @@ public static class CompatibilityPlanner
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { issues.Add(new("java.snapshot", Severity.Error, "Java runtime could not be snapshotted.")); }
         }
+        if (request.Backend == Backend.ControlledGenesis) artifacts.AddRange(request.ResourceRoots.SelectMany(r => r.Files));
         var fingerprints = artifacts.DistinctBy(a => (a.CanonicalPath, a.Sha256)).OrderBy(a => a.CanonicalPath, StringComparer.Ordinal).ThenBy(a => a.Sha256, StringComparer.Ordinal).ToImmutableArray();
         issues.AddRange(ArtifactSnapshots.Validate(fingerprints));
         PlanField<T> Field<T>(T value, bool supported, string name) => new(supported ? ResolutionState.Resolved : ResolutionState.Delegated, value, supported ? "contract." + name : "Delegated to OfficialLunar");
@@ -180,6 +183,7 @@ public static class CompatibilityPlanner
             args.Tokens, ordered, request.Weave with { Requirements = request.Weave.Requirements.AddRange(mods.Select(p => p.Artifact.Inspection!.Requirements)) }, packages, mods.ToImmutable(),
             main, Field(capabilities.GameArgs ? Safe(request.GenesisGameArgs) : [], capabilities.GameArgs, "genesisGameArgs"), new("RequireExplicitResolutionBeforeExecution", request.Environment.OrderBy(e => e.Name, StringComparer.Ordinal).ToImmutableArray()),
             fingerprints, frozenIssues.Where(i => i.Severity == Severity.Error).ToImmutableArray(), frozenIssues.Where(i => i.Severity == Severity.Warning).ToImmutableArray(), provenance.ToImmutable());
+        if (request.Backend == Backend.ControlledGenesis) plan = plan with { ResourceRoots = request.ResourceRoots, RuntimeFileDirectory = request.RuntimeFileDirectory };
         return plan with { PlanId = PlanSerialization.Hash(PlanSerialization.Canonical(plan)) };
     }
     private static ImmutableArray<T> Safe<T>(ImmutableArray<T> values) => values.IsDefault ? [] : values;
