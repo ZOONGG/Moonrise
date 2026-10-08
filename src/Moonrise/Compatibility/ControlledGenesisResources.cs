@@ -14,9 +14,9 @@ public sealed record RuntimeResourceRoot(string SourceRoot, string PreparedRoot,
 /// <summary>Resource-only view for the pinned Genesis contract. Never imports settings or account state.</summary>
 public static class ControlledGenesisResources
 {
-    private const string SupportedLunarSha256 = "0763a381214da346e889565c695b12c794e08cfa2eb4053c3c46e3208774630e";
-    // Current installed launcher main.log repeatedly confirms this source archive on
-    // 2026-10-04/05. Scoped to the pinned lunar.jar, not a Genesis-wide default.
+    private const string SupportedLunarSha256 = "bb37980cdf62e4576adcd700268dc24359a7d7ca48090b9b698696df9d89932f";
+    // Installed launcher main.log confirms reuse of this source archive on
+    // 2026-10-08 for 2.23.1-2641. Scoped to the pinned lunar.jar.
     private const string SupportedUiSourceSha1 = "b6d39b271abae35e95be9bdadf2270e908d59548";
     private static readonly string[] WebFiles = ["cacert.pem", "icudt67l.dat", "mediaControls.css", "mediaControls.js", "mediaControlsLocalizedStrings.js"];
     private static readonly HashSet<string> Extensions = new(StringComparer.OrdinalIgnoreCase)

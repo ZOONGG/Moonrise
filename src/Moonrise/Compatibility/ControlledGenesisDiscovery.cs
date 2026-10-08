@@ -9,7 +9,8 @@ public static class ControlledGenesisDiscovery
 {
     public const string ContractId = "lunar-genesis-9.10.1-mc-1.8.9";
     public const string GenesisMain = "com.moonsworth.lunar.genesis.Genesis";
-    private const string GenesisSha256 = "a86d3446fdce9012bcb4715ca7ea2045db58913dd2e89d3b94e3cf226b2fac80";
+    // Installed 2.23.1-2641 Genesis rebuild; manifest remains 9.10.1.
+    private const string GenesisSha256 = "e3f34c4ad92f1c3bae83c17bbacb45952c156df359cb39d6c34d086b05e83c44";
 
     public static ControlledGenesisRuntimeSnapshot Discover(string lunarRoot, string gameDirectory,
         string runtimeDirectory, string sessionDirectory, string profileId, string gameVersion,

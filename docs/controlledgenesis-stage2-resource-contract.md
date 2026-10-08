@@ -124,3 +124,61 @@ required identity-checked termination after ordinary close; its exit code was -1
 The development harness prints `NORMAL EXIT` for any exit returned by WaitForExitAsync;
 that label does not establish a graceful exit. Sanitized audit diagnostics remain;
 foreign processes were not closed or terminated.
+
+## Lunar 2.23.1-2641 runtime revalidation (2026-10-08)
+
+Installed program snapshots now pinned by discovery/resource checks:
+
+- Genesis 9.10.1 rebuild SHA-256:
+  `e3f34c4ad92f1c3bae83c17bbacb45952c156df359cb39d6c34d086b05e83c44`.
+- Lunar 2.23.1-2641 SHA-256:
+  `bb37980cdf62e4576adcd700268dc24359a7d7ca48090b9b698696df9d89932f`.
+- Full game revision: `2ec98ab2c42227206e3c132417b7e6441044dad2`.
+
+Compared with the final October 5 frozen plan, Genesis, lunar, common, legacy,
+OptiFine module and language JAR hashes changed, together with texture
+`cosmetics.json` and `jit_index`. Genesis manifest remains 9.10.1; the complete
+1.8.9 versions.conf block is identical. Saved/current javap dumps of Genesis
+and ClientGameBootstrap match after normalizing obfuscated identifiers and
+constant-pool indexes. Current GameUI still checks web/resources/icudt67l.dat,
+then UI/ul-resources/resources/icudt67l.dat. The UI Git revision is unchanged;
+October 8 launcher resource-only records explicitly reuse archive
+`b6d39b271abae35e95be9bdadf2270e908d59548`. No new resource layout is required.
+Only the two program hash pins and their evidence comments changed.
+
+The existing uncommitted production auth gate rejects isolated-account launches
+before JVM creation. It was preserved. The user explicitly authorized a separate
+local runtime-only smoke using the previous HEAD factory/executor path. Ignored
+harness copies rename those classes and retain the baseline ownership/path
+checks; current discovery, resources, Java resolution and planner are used.
+This validates the installed runtime, not production authenticated launch.
+No GameIPC/auth behavior or account integration was changed.
+
+Smoke: Java Auto selected Zulu 17.0.18 x64; packages=0, agents=0, Weave=Off.
+Frozen plan `5db3c3fd0277f7a1be71b46108a5987c0921164b3b26ad18997ca22d4e15eb5a`;
+owned JVM PID 23260. Genesis/Ichor completed bake, WebOSR loaded native
+components and created Lunar Context, and Lunar reported initialization complete
+and LUNARCLIENT_STATUS_STARTED. The responding window identifies 2.23.1-2641.
+Computer Use capture failed with FrameArrived timeout; the recovery attempt was
+stopped by the user with physical Escape. The user confirmed a normal readable main menu and working Lunar settings. IPC handshake errors are expected without a broker and do not establish
+account readiness. No world/server/account actions were attempted.
+
+All 553 frozen source resource/runtime/native files were rehashed with zero
+mismatches. Installed bake-cache paths/sizes/timestamps are unchanged; one
+bake.zip exists under the owned runtime/cache. Original artifacts were not
+modified. Real account files/tokens were not read, copied, linked or modified.
+The user closed the game manually: JVM exited with code 0 and the harness
+removed the complete owned resource/data/runtime view. PID 23260 is absent;
+exit.json records the exit. No process was terminated by the agent.
+
+Validation: Release solution build using the repository's Stage1BuildRoot
+isolated output succeeded with zero warnings/errors; all 32 targeted
+ControlledGenesis tests passed; git diff --check passed. Initial default build
+was blocked by the already-open Moonrise executable; a shared-output test attempt
+had a local runtime lookup collision. Separate per-project outputs resolved both
+without closing Moonrise. Full suite was not run.
+
+READY FOR LUNAR ACCOUNT INTEGRATION: **YES** as the next separate investigation
+stage: current runtime/menu and normal exit are confirmed. This does not authorize
+connecting the real account store or establish a safe integration mechanism; the
+account-lifecycle contract and production auth gate remain in force.
