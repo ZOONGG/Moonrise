@@ -850,7 +850,13 @@
                     <Grid.ColumnDefinitions><ColumnDefinition Width="1.45*"/><ColumnDefinition Width="18"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                     <Border x:Name="LaunchProfileCard" Style="{StaticResource LaunchCard}">
                         <Grid VerticalAlignment="Top">
-                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="28"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="28"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                            <StackPanel Grid.Row="3" Margin="0,16,0,0" Loaded="LunarAccounts_Loaded">
+                                <TextBlock x:Name="LunarAccountStatus" Text="Проверка аккаунтов Lunar / Checking Lunar accounts" Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                                <ScrollViewer MaxHeight="110" VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl x:Name="LunarAccountsList" DisplayMemberPath="DisplayLabel"/>
+                                </ScrollViewer>
+                            </StackPanel>
                             <Border Background="{DynamicResource SurfaceSecondary}" CornerRadius="{DynamicResource CardRadius}" Padding="16">
                                 <Grid>
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="50"/><ColumnDefinition/></Grid.ColumnDefinitions>
