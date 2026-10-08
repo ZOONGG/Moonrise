@@ -37,4 +37,3 @@ public partial class MainWindow
         finally { _accountSyncCancellation.Dispose(); }
     }
 }
-
