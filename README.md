@@ -159,8 +159,6 @@ Local unlocking **does not guarantee visibility to other players using ordinary 
 
 Our [Veyra Weave mod](https://github.com/ZOONGG/Moonrise-Veyra) derives from the archived [Stormy project by Tryflle and its contributors](https://github.com/Tryflle/stormy). It is evolving its own identity, UI and configuration. The catalog supplies **0.1.1-moonrise.1** for Minecraft 1.8.9 / Weave 1.3.4; **Enter** opens ClickGUI. Current source registers combat, movement, player and render modules, including AimAssist, AutoClicker, Timer, SpeedMine, AutoTool, Array List and ESP modules, with configuration under `.weave/veyra`. Registration is not a claim that every feature has passed runtime testing. Standalone Veyra operation was user-confirmed; shared mixin targets can still conflict with other mods.
 
-Stormy's original authors retain credit for the source foundation. Owner-confirmed redistribution permission is recorded in [third-party notices](THIRD_PARTY_NOTICES.md); neither upstream repository currently declares a public license, so Moonrise's MIT license does not relicense that code. Some modules may violate server rules; use them only where permitted.
-
 ## Launch configuration
 
 The **Launch** page shows the exact Minecraft version, matching official Lunar profile, active package counts, and current status. Before starting, Moonrise checks declared package version/dependency information. Errors block that launch; warnings are written to diagnostics.
