@@ -20,8 +20,14 @@ public sealed class ControlledGenesisExecutor
 {
     private static readonly Regex Sensitive = new("token|session|password|authorization|credential|secret", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
     private readonly string _sessionRoot;
+    private readonly Func<LaunchPlan, AuthReadiness> _authProbe;
 
-    public ControlledGenesisExecutor(string sessionRoot) => _sessionRoot = Path.GetFullPath(sessionRoot);
+    public ControlledGenesisExecutor(string sessionRoot) : this(sessionRoot, ControlledGenesisAuth.Probe) { }
+    internal ControlledGenesisExecutor(string sessionRoot, Func<LaunchPlan, AuthReadiness> authProbe)
+    {
+        _sessionRoot = Path.GetFullPath(sessionRoot);
+        _authProbe = authProbe;
+    }
 
     public ImmutableArray<string> BuildArguments(LaunchPlan plan)
     {
@@ -70,6 +76,8 @@ public sealed class ControlledGenesisExecutor
     {
         cancellationToken.ThrowIfCancellationRequested();
         var arguments = BuildArguments(plan);
+        var auth = _authProbe(plan);
+        RequireAuthDependency(plan, auth);
         if (string.IsNullOrWhiteSpace(sessionId) || !Regex.IsMatch(sessionId, "^[a-zA-Z0-9_-]{1,80}$"))
             throw new ArgumentException("Session ID contains unsupported characters.", nameof(sessionId));
         Directory.CreateDirectory(_sessionRoot);
@@ -88,6 +96,7 @@ public sealed class ControlledGenesisExecutor
         var stderrPath = Path.Combine(directory, "stderr.log");
         var planPath = Path.Combine(directory, "launch-plan.json");
         File.WriteAllText(planPath, PlanSerialization.Diagnostics(plan));
+        File.WriteAllText(Path.Combine(directory, "auth-readiness.json"), auth.Diagnostics());
         var start = new ProcessStartInfo(plan.Java.Runtime!.Executable)
         {
             WorkingDirectory = plan.WorkingDirectory.Value!,
@@ -124,6 +133,15 @@ public sealed class ControlledGenesisExecutor
             if (!plan.ResourceRoots.IsEmpty) ControlledGenesisResources.Cleanup(_sessionRoot, plan.WorkingDirectory.Value!);
             throw;
         }
+    }
+
+    internal static void RequireAuthDependency(LaunchPlan plan, AuthReadiness auth)
+    {
+        if (!auth.CanAttemptGameHandshake) throw new AuthDependencyException(auth);
+        var portIndex = plan.GenesisGameArgs.Value.IndexOf("--ipcPort");
+        if (portIndex < 0 || portIndex + 1 >= plan.GenesisGameArgs.Value.Length ||
+            plan.GenesisGameArgs.Value[portIndex + 1] != auth.BrokerPort?.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            throw new AuthDependencyException(ControlledGenesisAuth.Evaluate(true, null, null));
     }
 
     public static bool IsOwnedProcess(Process process, ControlledGenesisProcessIdentity identity)
@@ -254,12 +272,18 @@ public sealed class ControlledGenesisExecutor
             await using var output = new StreamWriter(new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read,
                 16 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan)) { AutoFlush = true };
             while (await reader.ReadLineAsync().ConfigureAwait(false) is { } line)
-                await output.WriteLineAsync(RedactSecretValues(line)).ConfigureAwait(false);
+                await output.WriteLineAsync(SanitizeDiagnosticLine(line)).ConfigureAwait(false);
             await output.FlushAsync().ConfigureAwait(false);
         }
         catch (IOException) { }
         catch (ObjectDisposedException) { }
     }
+
+    // Runtime output is unstructured and can contain credential-bearing lines.
+    // Drop sensitive lines entirely rather than attempting partial Bearer/JSON redaction.
+    internal static string SanitizeDiagnosticLine(string line) =>
+        Regex.IsMatch(line, "token|session|password|authorization|credential|secret|cookie|account|bearer", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
+            ? "[redacted: sensitive runtime diagnostic]" : line;
 
     private static string Sanitize(string argument) => Sensitive.IsMatch(argument)
         ? RedactSecretValues(argument)

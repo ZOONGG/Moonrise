@@ -6,7 +6,7 @@ namespace Moonrise.Services;
 public sealed class NativeBridgeDeploymentService
 {
     public const string ResourceName = "Moonrise.NativeBridge.dll";
-    public const string ExpectedSha256 = "F9C3F2185DDBCE9A58B8D11F2C78769E06AA820F45F6595C0109B80AB84411FC";
+    public const string ExpectedSha256 = "43759ACE29C640D650DABC9DA73E9EE35A4ACECCE55562F6477C43CF8F6FB660";
 
     private readonly Func<Stream> _openResource;
     private readonly string _expectedSha256;
@@ -22,7 +22,10 @@ public sealed class NativeBridgeDeploymentService
     public string Ensure(string targetPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(targetPath);
-        var fullPath = Path.GetFullPath(targetPath);
+        // A previous bridge may still be mapped by another process. Windows
+        // refuses to replace a mapped DLL, even when the user has FullControl.
+        var fullPath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(targetPath))!,
+            _expectedSha256, Path.GetFileName(targetPath));
         if (File.Exists(fullPath) && HasExpectedHash(fullPath)) return fullPath;
 
         var directory = Path.GetDirectoryName(fullPath)
@@ -31,6 +34,7 @@ public sealed class NativeBridgeDeploymentService
         var temporaryPath = Path.Combine(
             directory,
             $".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.extracting");
+        var operation = "extract-resource";
         try
         {
             using (var resource = _openResource())
@@ -48,10 +52,19 @@ public sealed class NativeBridgeDeploymentService
 
             if (!HasExpectedHash(temporaryPath))
                 throw new InvalidDataException("The embedded native process bridge failed its SHA-256 check.");
+            operation = "File.Move(overwrite: true)";
             File.Move(temporaryPath, fullPath, overwrite: true);
+            operation = "verify-deployed-sha256";
             if (!HasExpectedHash(fullPath))
                 throw new InvalidDataException("The deployed native process bridge failed its SHA-256 check.");
             return fullPath;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            exception.Data["fileOperation"] = operation;
+            exception.Data["filePath"] = fullPath;
+            exception.Data["temporaryPath"] = temporaryPath;
+            throw;
         }
         finally
         {
@@ -77,4 +90,3 @@ public sealed class NativeBridgeDeploymentService
         typeof(NativeBridgeDeploymentService).Assembly.GetManifestResourceStream(ResourceName)
         ?? throw new InvalidDataException($"Embedded resource '{ResourceName}' is missing.");
 }
-

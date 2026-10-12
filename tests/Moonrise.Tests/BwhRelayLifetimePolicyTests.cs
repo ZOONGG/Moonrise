@@ -5,6 +5,16 @@ namespace Moonrise.Tests;
 
 public sealed class BwhRelayLifetimePolicyTests
 {
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void StandaloneLaunchOrCleanupKeepsHostUntilExplicitExit(bool launchBusy, bool cleanupPending)
+    {
+        Assert.True(BwhRelayLifetimePolicy.ShouldHideInsteadOfClose(false, false, launchBusy, cleanupPending));
+        Assert.False(BwhRelayLifetimePolicy.ShouldHideInsteadOfClose(false, true, launchBusy, cleanupPending));
+        Assert.False(BwhRelayLifetimePolicy.ShouldHideInsteadOfClose(false, false, false, false));
+    }
+
     [Fact]
     public void NormalWindowClose_HidesWhileRelayIsRunning()
     {

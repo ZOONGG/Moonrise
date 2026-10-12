@@ -1,30 +1,24 @@
-name: Release
+name: Prepare manual release assets
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
   DOTNET_NOLOGO: "1"
   NUGET_PACKAGES: ${{ github.workspace }}\.nuget\packages
 
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
-  release:
-    name: Test and publish tagged Windows release
+  build:
+    name: Prepare manual release assets, test, and Velopack package
     runs-on: windows-latest
-    timeout-minutes: 40
+    timeout-minutes: 35
 
     steps:
-      - name: Check out tagged source
+      - name: Check out repository
         uses: actions/checkout@v6
 
       - name: Set up .NET 8
@@ -34,83 +28,63 @@ jobs:
           cache: true
           cache-dependency-path: "**/packages.lock.json"
 
-      - name: Resolve release version
-        id: version
-        shell: pwsh
-        run: |
-          $tagVersion = $env:GITHUB_REF_NAME -replace "^v", ""
-          $version = ($tagVersion -split "-", 2)[0]
-          if ($version -notmatch "^\d+\.\d+\.\d+$") {
-            throw "Release tags must start with v<major>.<minor>.<patch>."
-          }
-          "version=$version" >> $env:GITHUB_OUTPUT
-
       - name: Scan repository safety
         shell: pwsh
         env:
           MOONRISE_PRIVATE_PATTERNS: ${{ secrets.PRIVATE_NAME_PATTERNS }}
         run: ./tools/Test-RepositorySafety.ps1
 
+      - name: Verify native bridge builds from source
+        shell: pwsh
+        run: ./tools/Build-NativeBridge.ps1 -OutputPath "artifacts/native/Moonrise.Native.dll"
+
+      - name: Upload native bridge verification artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Moonrise-Native-Bridge-${{ github.run_number }}
+          path: artifacts/native/Moonrise.Native.dll
+          if-no-files-found: error
+          retention-days: 7
       - name: Restore locked dependencies
         run: dotnet restore Moonrise.sln --locked-mode
 
-      - name: Build Release
+      - name: Prepare manual release assets Release
         run: dotnet build Moonrise.sln -c Release --no-restore
 
       - name: Run tests
         run: dotnet test Moonrise.sln -c Release --no-build --filter "Category!=PrivateAssets" --logger "trx;LogFileName=moonrise.trx" --results-directory artifacts/test-results
 
-      - name: Install Inno Setup
+      - name: Install pinned Velopack
         shell: pwsh
-        run: choco install innosetup --no-progress -y
+        run: dotnet tool install vpk --version 1.2.161 --tool-path artifacts/velopack-tools
 
-      - name: Build Setup and Portable release
+      - name: Prepare manual release assets Setup and Portable artifacts
         shell: pwsh
         run: |
           ./tools/New-MoonriseRelease.ps1 `
-            -Version "${{ steps.version.outputs.version }}" `
+            -Version "0.1.0-beta.1" `
             -OutputRoot "artifacts/release" `
+            -Velopack -VpkPath artifacts/velopack-tools/vpk.exe `
             -SkipRestore `
             -SkipTests
 
-      - name: Test installer lifecycle
-        timeout-minutes: 5
-        shell: pwsh
-        run: |
-          ./tools/Test-MoonriseInstaller.ps1 `
-            -SetupPath "artifacts/release/Moonrise-Setup-${{ steps.version.outputs.version }}-x64.exe" `
-            -LaunchSmokeTest `
-            -TestUserDataDeletion
-
-      - name: Upload installer artifacts for CI testing
+      - name: Upload Windows distribution artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: Moonrise-Windows-${{ steps.version.outputs.version }}
-          path: |
-            artifacts/release/Moonrise-Setup-*
-            artifacts/release/Moonrise-Portable-*
-            artifacts/release/Moonrise-Release-Notes-*
+          name: Moonrise-Windows-${{ github.run_number }}
+          path: artifacts/release/velopack/*
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 14
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          body_path: docs/RELEASE_NOTES.md
-          prerelease: ${{ contains(github.ref_name, '-') }}
-          overwrite_files: true
-          files: |
-            artifacts/release/Moonrise-Setup-${{ steps.version.outputs.version }}-x64.exe
-            artifacts/release/Moonrise-Setup-${{ steps.version.outputs.version }}-x64.exe.sha256
-            artifacts/release/Moonrise-Portable-${{ steps.version.outputs.version }}-x64.zip
-            artifacts/release/Moonrise-Portable-${{ steps.version.outputs.version }}-x64.zip.sha256
-            artifacts/release/Moonrise-Release-Notes-${{ steps.version.outputs.version }}.md
+      - name: Test isolated Velopack install and launch
+        shell: pwsh
+        run: ./tools/Test-MoonriseVelopackInstaller.ps1 -SetupPath artifacts/release/velopack/Moonrise.App-beta-Setup.exe
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: Moonrise-release-test-results
+          name: Moonrise-test-results
           path: artifacts/test-results/*.trx
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 14

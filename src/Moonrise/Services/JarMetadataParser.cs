@@ -23,19 +23,22 @@ public sealed class JarMetadataParser
 
         var entrypoints = ReadStringArray(root, root.TryGetProperty("entryPoints", out _) ? "entryPoints" : "entrypoints");
         var path = Path.GetFullPath(jarPath);
+        var hash = ComputeHash(path);
         return new PackageInfo
         {
-            PackageId = "sha256:" + ComputeHash(path).ToLowerInvariant(),
+            PackageId = "sha256:" + hash.ToLowerInvariant(),
             FileName = Path.GetFileName(path),
             OriginalFileName = Path.GetFileName(path),
             DisplayName = ReadString(root, "name") ?? Path.GetFileNameWithoutExtension(path),
             Identifier = ReadString(root, "modId") ?? Path.GetFileNameWithoutExtension(path),
-            Version = ReadString(root, "version") ?? "—",
+            Version = ReadString(root, "version") ?? PackageCatalogService.LoadBundledCatalog()
+                .FirstOrDefault(package => string.Equals(package.LatestRelease?.Artifact.Sha256, hash, StringComparison.OrdinalIgnoreCase))
+                ?.VersionLabel ?? "—",
             Entrypoint = entrypoints.FirstOrDefault() ?? "Weave entrypoint",
             FullPath = path,
             Kind = PackageKind.WeaveMod,
             Size = new FileInfo(path).Length,
-            Sha256 = ComputeHash(path),
+            Sha256 = hash,
             CompatibleGameVersions = ReadCompatibleGameVersions(root),
             Conflicts = ReadStringArray(root, "conflicts"),
             Requires = ReadDependencies(root)

@@ -1,26 +1,28 @@
 # Application updates
 
-Moonrise checks the official `ZOONGG/Moonrise` GitHub Releases feed. The stable
-channel ignores drafts and prereleases. Users can explicitly enable the
-prerelease channel in Settings.
+## Current Velopack beta path
 
-When a newer version is available, Moonrise shows its version and release notes.
-It does not download or execute anything until the user confirms. The updater:
+The current Settings → Updates UI uses Velopack SDK **1.2.161**. It checks the public [ZOONGG/Moonrise GitHub Releases](https://github.com/ZOONGG/Moonrise/releases) source without a token, includes published prereleases and explicitly selects channel **beta**. Only newer `-beta.N` versions are staged; downgrades are disabled. The stable/prerelease preference retained in settings does not switch this service to a stable channel.
 
-1. Downloads the exact `Moonrise-Setup-<version>-x64.exe` asset and its adjacent
-   `.sha256` file over HTTPS from an approved GitHub host.
-2. Validates the checksum syntax, filename, and SHA-256 digest.
-3. Checks Authenticode trust when a signature is present.
-4. Warns again when the checksum is valid but the release is unsigned.
-5. Starts the normal visible installer and closes Moonrise gracefully.
+- Startup checks run when `CheckForUpdates` is enabled (default: true); manual checks are available in Settings.
+- `AutoDownloadUpdates` defaults to true. A detected update downloads in the background with visible progress; disabling this setting exposes manual Download.
+- Velopack verifies/stages its packages in the installation package directory, outside Moonrise user data. Download failure leaves an error and allows retry.
+- Notifications distinguish available and downloaded updates. Downloading alone does not replace the running version.
+- Install and restart uses Moonrise's activity/game guard. A pending update also attempts guarded application before WPF startup on the next launch. Unconditional Velopack startup auto-apply is disabled.
+- Active launches, tracked games/Minecraft or Lunar JVMs, and current Moonrise operations block application. Unrelated Java programs are not intentionally treated as Minecraft. Tray resources are disposed before the UI-triggered handoff; synchronous handoff errors restore the tray and show an error.
 
-A mismatched hash, a checksum naming a different file, an invalid signature, an
-unapproved host, or a malformed release response aborts the update.
+## Eligibility and publication
 
-Releases are unsigned until a code-signing certificate exists. SHA-256 protects
-against transfer corruption and unintended substitution, but it is not a
-replacement for publisher identity. The UI and documentation state this
-limitation rather than trusting a binary based only on its filename.
+Updates require a real, non-portable Velopack installation. Inno Setup, ZIP, development/uninstalled and FriendPortable builds do not enable this path. A `Moonrise.portable` marker does not turn an extracted ZIP into an updateable installation.
 
-User data is outside the installation directory, so Setup upgrades preserve the
-package library, settings, cache, sessions, and logs.
+The owner must manually publish a matching beta package/feed to GitHub, including `releases.beta.json` and the full `.nupkg` assets. Public GitHub/network access is required. No public release is currently published. Production `New-MoonriseRelease.ps1 -Velopack` packages **Moonrise.App** (display name Moonrise), separate from the Moonrise user-data directory. Publish the generated beta feed and full package together. Supplying LocalUpdateFeed instead produces isolated **Moonrise.UpdateSmoke.App** acceptance packages; never publish them.
+
+Test builds with embedded `MoonriseLocalUpdateFeed` use only that local SimpleFileSource and do not fall back to GitHub. They use a feed-specific isolated data root and must not be published as production builds.
+
+## Data and verification limits
+
+Normal builds keep settings and packages under `%LOCALAPPDATA%\Moonrise`, separate from installed application files. The updater does not migrate or replace that data root. A real isolated installed beta.1 → beta.2 smoke passed through Moonrise UpdateService, the Windows locator and native Update.exe, including rejection of a corrupt download, restart, no-repeat check and preservation of external sentinel hashes. The restarted UI used isolated visual QA data; interactive settings/library loading, tray handoff and automatic rollback remain unverified in this pass. See [final validation](final-release-validation.md) and the [manual acceptance plan](installed-update-smoke.md). Do not describe automatic rollback as proven. Prepared packages are unsigned.
+
+The older Setup-download service and stable/prerelease settings remain in source; they are not the current Velopack UI path. The [update foundation report](github-update-foundation.md) records an earlier milestone before UI wiring and is historical.
+
+Implementation references: `App.xaml.cs`, `MainWindow.xaml.cs`, `Services/UpdateService.cs`, `Services/UpdateUiState.cs`, and `Models/MoonriseSettings.cs`. [Velopack documentation](https://docs.velopack.io/integrating/overview) describes the upstream framework; Moonrise behavior above is based on its current source.

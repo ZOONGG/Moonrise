@@ -18,12 +18,32 @@ public sealed class NativeBridgeDeploymentTests
             () => new MemoryStream(expected, writable: false),
             expectedHash);
 
-        Assert.Equal(target, service.Ensure(target));
-        Assert.Equal(expected, File.ReadAllBytes(target));
+        var deployed = service.Ensure(target);
+        Assert.Equal(Path.Combine(Path.GetDirectoryName(target)!, expectedHash, "Moonrise.Native.dll"), deployed);
+        Assert.Equal(expected, File.ReadAllBytes(deployed));
 
-        File.WriteAllText(target, "corrupt");
-        Assert.Equal(target, service.Ensure(target));
-        Assert.Equal(expected, File.ReadAllBytes(target));
+        File.WriteAllText(deployed, "corrupt");
+        Assert.Equal(deployed, service.Ensure(target));
+        Assert.Equal(expected, File.ReadAllBytes(deployed));
+    }
+
+    [Fact]
+    public void Ensure_DoesNotReplaceLockedPreviousBridge()
+    {
+        using var temp = new TemporaryDirectory();
+        var target = Path.Combine(temp.Path, "Moonrise.Native.dll");
+        File.WriteAllText(target, "previous-bridge");
+        using var locked = new FileStream(target, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var expected = "new-bridge"u8.ToArray();
+        var service = new NativeBridgeDeploymentService(() => new MemoryStream(expected),
+            Convert.ToHexString(SHA256.HashData(expected)));
+
+        var deployed = service.Ensure(target);
+
+        Assert.NotEqual(target, deployed);
+        Assert.Equal(expected, File.ReadAllBytes(deployed));
+        Assert.Equal("previous-bridge", File.ReadAllText(target));
+        Assert.Equal(deployed, service.Ensure(target));
     }
 
     [Fact]
@@ -36,7 +56,13 @@ public sealed class NativeBridgeDeploymentTests
         var deployed = new NativeBridgeDeploymentService().Ensure(paths.NativeBridgeCachePath);
 
         Assert.Equal(NativeBridgeDeploymentService.ExpectedSha256, ComputeSha256(deployed));
-        Assert.True(new FileInfo(deployed).Length > 100_000);
+        using var image = new BinaryReader(File.OpenRead(deployed));
+        Assert.Equal(0x5A4D, image.ReadUInt16());
+        image.BaseStream.Position = 0x3C;
+        var peOffset = image.ReadInt32();
+        image.BaseStream.Position = peOffset;
+        Assert.Equal(0x00004550u, image.ReadUInt32());
+        Assert.Equal(0x8664, image.ReadUInt16());
     }
 
     private static string ComputeSha256(string path)

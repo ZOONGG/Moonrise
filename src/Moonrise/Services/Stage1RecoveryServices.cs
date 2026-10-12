@@ -33,7 +33,7 @@ public sealed class LaunchSession : IDisposable
     {
         var normalizedRoot = tempRoot.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         if (!path.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase) ||
-            !Path.GetFileName(path).StartsWith("launch-", StringComparison.OrdinalIgnoreCase))
+            !LaunchSessionService.IsLaunchDirectory(path))
         {
             throw new InvalidOperationException("Refusing to clean a path outside the Moonrise launch temp root.");
         }
@@ -42,6 +42,15 @@ public sealed class LaunchSession : IDisposable
 
 public sealed class LaunchSessionService
 {
+    public IReadOnlyList<string> LastCleanupWarnings { get; private set; } = [];
+
+    public static bool IsLaunchDirectory(string path)
+    {
+        var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
+        return name.StartsWith("launch-", StringComparison.OrdinalIgnoreCase)
+               && Guid.TryParseExact(name[7..], "N", out _);
+    }
+
     public LaunchSession Create(string tempRoot)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(tempRoot);
@@ -54,17 +63,30 @@ public sealed class LaunchSessionService
 
     public int CleanupStale(string tempRoot)
     {
+        LastCleanupWarnings = [];
         ArgumentException.ThrowIfNullOrWhiteSpace(tempRoot);
         var fullRoot = Path.GetFullPath(tempRoot);
         if (!Directory.Exists(fullRoot))
             return 0;
 
         var cleaned = 0;
+        var warnings = new List<string>();
         foreach (var directory in Directory.EnumerateDirectories(fullRoot, "launch-*", SearchOption.TopDirectoryOnly))
         {
-            using var session = new LaunchSession(fullRoot, directory);
-            cleaned++;
+            if (!IsLaunchDirectory(directory)) continue;
+            try
+            {
+                if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0) continue;
+                var session = new LaunchSession(fullRoot, directory);
+                session.Dispose();
+                if (session.CleanupSucceeded) cleaned++;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                warnings.Add($"Stale launch cleanup skipped {Path.GetFileName(directory)}: {exception.Message}");
+            }
         }
+        LastCleanupWarnings = warnings;
         return cleaned;
     }
 }

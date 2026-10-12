@@ -15,6 +15,9 @@ internal sealed class MinecraftLaunchProcessTracker
     public bool SawMinecraft => _minecraft.Count > 0;
     public bool SawJava { get; private set; }
 
+    internal void SeedVerifiedLauncher(int processId, DateTimeOffset startTimeUtc) =>
+        _ancestors.TryAdd(processId, startTimeUtc);
+
     public string? FailureStage(DateTimeOffset now, DateTimeOffset deadline,
         IReadOnlyList<ProcessRecord> candidates, bool? launcherRunning)
     {
@@ -47,7 +50,10 @@ internal sealed class MinecraftLaunchProcessTracker
         foreach (var candidate in candidates)
         {
             var key = (candidate.ProcessId, candidate.StartTimeUtc);
-            if (!IsMinecraft(candidate) || candidate.MainWindowHandle == 0 ||
+            if (!IsMinecraft(candidate) ||
+                !(candidate.MainWindowClass.Equals("LWJGL", StringComparison.OrdinalIgnoreCase) ||
+                  candidate.MainWindowClass.Equals("GLFW30", StringComparison.OrdinalIgnoreCase)) ||
+                candidate.MainWindowHandle == 0 ||
                 !candidate.IsMainWindowVisible || !candidate.IsResponding ||
                 string.IsNullOrWhiteSpace(candidate.MainWindowTitle))
             {
@@ -104,6 +110,22 @@ internal sealed class MinecraftLaunchProcessTracker
                 candidate.MainWindowClass.Equals("GLFW30", StringComparison.OrdinalIgnoreCase))
                 _minecraft.Add((candidate.ProcessId, candidate.StartTimeUtc));
         return candidates;
+    }
+
+    public void ObserveRuntimeProcess(ProcessRecord process, DateTimeOffset launchStartedUtc)
+    {
+        if (process.StartTimeUtc is not { } start || start < launchStartedUtc ||
+            !(process.Name.Equals("java", StringComparison.OrdinalIgnoreCase) ||
+              process.Name.Equals("javaw", StringComparison.OrdinalIgnoreCase))) return;
+        if (_reusedIds.Contains(process.ProcessId)) return;
+        if (_ancestors.TryGetValue(process.ProcessId, out var expected) && expected != start)
+        {
+            _reusedIds.Add(process.ProcessId);
+            return;
+        }
+        _ancestors.TryAdd(process.ProcessId, start);
+        _minecraft.Add((process.ProcessId, start));
+        SawJava = true;
     }
 
     public bool IsMinecraft(ProcessRecord process) =>

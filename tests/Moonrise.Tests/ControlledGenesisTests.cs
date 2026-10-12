@@ -33,7 +33,7 @@ public sealed class ControlledGenesisTests : IDisposable
         var natives = ImmutableArray.Create(ArtifactSnapshots.Capture(Path.Combine(native, "lwjgl64.dll"), "lunar.native:lwjgl64.dll", false));
         var game = Path.Combine(_root, "Minecraft game folder");
         var work = Path.Combine(_root, "Moonrise launch session");
-        var args = ImmutableArray.Create("--gameDir", game, "--assetIndex", "1.8");
+        var args = ImmutableArray.Create("--gameDir", game, "--assetIndex", "1.8", "--ipcPort", "28190");
         if (token is not null) args = args.Add("--accessToken").Add(token);
         var request = new PlanRequest(ControlledGenesisDiscovery.ContractId, "1.8.9", "fixture-profile", Backend.ControlledGenesis,
             new BaseLoader("optifine", "HD_U_M6_pre2", [new("fixture", "structured profile module metadata")]),
@@ -43,6 +43,27 @@ public sealed class ControlledGenesisTests : IDisposable
             asset, classPath, ichorClassPath, externalFiles, natives, args)
             { ResourceRoots = resources.IsDefault ? [] : resources, RuntimeFileDirectory = runtimeView };
         return CompatibilityPlanner.Build(request);
+    }
+
+    [Fact] public void AuthDependencyBlocksExecutorBeforeCreatingSession()
+    {
+        var plan = Plan();
+        var sessions = Path.Combine(_root, "sessions");
+        var executor = new ControlledGenesisExecutor(sessions, _ => ControlledGenesisAuth.Evaluate(true, true, null));
+        Assert.Throws<AuthDependencyException>(() => executor.Start(plan, "missing-broker"));
+        Assert.False(Directory.Exists(sessions));
+    }
+
+    [Fact] public void BrokerAvailabilityPermitsOnlyFrozenPortAndDirectExecutor()
+    {
+        var plan = Plan();
+        ControlledGenesisExecutor.RequireAuthDependency(plan, ControlledGenesisAuth.Evaluate(true, true, 28190));
+        Assert.Throws<AuthDependencyException>(() => ControlledGenesisExecutor.RequireAuthDependency(plan,
+            ControlledGenesisAuth.Evaluate(true, true, 28191)));
+        Assert.Equal(Backend.ControlledGenesis, plan.Backend);
+        var arguments = new ControlledGenesisExecutor(_root).BuildArguments(plan);
+        Assert.Contains(ControlledGenesisDiscovery.GenesisMain, arguments);
+        Assert.DoesNotContain(arguments, a => a.Contains("lunarclient://", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact] public void DiscoveryUsesVersionedContractAndSelectedOptiFineModule()

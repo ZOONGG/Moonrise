@@ -21,6 +21,11 @@ $javaBin = $javaHomeCandidates | Where-Object { Test-Path (Join-Path $_ "javac.e
 if (-not $javaBin) { throw "A JDK with javac and jar is required." }
 
 New-Item -ItemType Directory -Path $classes,$probeClasses,(Split-Path $weaveJar) -Force | Out-Null
+$installedWeave = Join-Path $env:LOCALAPPDATA 'Moonrise\cache\runtime\weave\weave-loader.jar'
+if (-not (Test-Path $weaveJar) -and (Test-Path $installedWeave) -and
+    (Get-FileHash $installedWeave).Hash.ToLowerInvariant() -eq $expectedWeaveSha256) {
+    Copy-Item -LiteralPath $installedWeave -Destination $weaveJar
+}
 if (-not (Test-Path $weaveJar) -or
     (Get-FileHash -Algorithm SHA256 $weaveJar).Hash.ToLowerInvariant() -ne $expectedWeaveSha256) {
     Invoke-WebRequest -Uri $officialWeaveUrl -OutFile $weaveJar
@@ -31,9 +36,11 @@ if ($actualWeaveSha256 -ne $expectedWeaveSha256) {
 }
 
 if (Test-Path -LiteralPath $classes) {
+    if ([IO.Path]::GetFullPath($classes) -ne [IO.Path]::GetFullPath((Join-Path $buildRoot 'classes'))) { throw 'Unexpected classes cleanup path.' }
     Remove-Item -LiteralPath $classes -Recurse -Force
 }
 if (Test-Path -LiteralPath $probeClasses) {
+    if ([IO.Path]::GetFullPath($probeClasses) -ne [IO.Path]::GetFullPath((Join-Path $buildRoot 'probe-classes'))) { throw 'Unexpected probe cleanup path.' }
     Remove-Item -LiteralPath $probeClasses -Recurse -Force
 }
 New-Item -ItemType Directory -Path $classes,$probeClasses -Force | Out-Null
@@ -42,16 +49,39 @@ $sources = Get-ChildItem (Join-Path $extensionRoot "src") -Recurse -Filter "*.ja
 & (Join-Path $javaBin "javac.exe") --release 8 -Xlint:-options -cp $weaveJar -d $classes $sources
 if ($LASTEXITCODE -ne 0) { throw "Extension compilation failed with code $LASTEXITCODE." }
 
+# Bundle only the exact pinned ASM dependency, never Weave bootstrap/loader code.
+# The original dependency archive is opened read-only and remains unchanged.
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$dependencyArchive = [IO.Compression.ZipFile]::OpenRead($weaveJar)
+try {
+    foreach ($entry in $dependencyArchive.Entries) {
+        if (-not $entry.FullName.StartsWith('net/weavemc/loader/impl/shaded/asm/') -or
+            -not $entry.FullName.EndsWith('.class')) { continue }
+        $destination = [IO.Path]::GetFullPath((Join-Path $classes $entry.FullName))
+        if (-not $destination.StartsWith([IO.Path]::GetFullPath($classes) + [IO.Path]::DirectorySeparatorChar)) { throw 'Dependency entry escapes build directory.' }
+        New-Item -ItemType Directory -Path (Split-Path $destination) -Force | Out-Null
+        [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $destination, $false)
+    }
+} finally { $dependencyArchive.Dispose() }
+Copy-Item -LiteralPath (Join-Path $extensionRoot 'ASM-LICENSE.txt') -Destination (Join-Path $classes 'ASM-LICENSE.txt')
+
 $resolvedOutput = if ([IO.Path]::IsPathRooted($OutputPath)) { $OutputPath } else { Join-Path $repositoryRoot $OutputPath }
 New-Item -ItemType Directory -Path (Split-Path $resolvedOutput) -Force | Out-Null
-& (Join-Path $javaBin "jar.exe") cfm $resolvedOutput (Join-Path $extensionRoot "MANIFEST.MF") -C $classes .
+& (Join-Path $javaBin "jar.exe") --create --file $resolvedOutput --manifest (Join-Path $extensionRoot "MANIFEST.MF") --date=2026-10-12T00:00:00Z -C $classes .
 if ($LASTEXITCODE -ne 0) { throw "Extension packaging failed with code $LASTEXITCODE." }
+
+# A separate JVM with no Weave/classpath dependency must finish premain.
+$standaloneProof = Join-Path $buildRoot ('standalone-proof-' + [guid]::NewGuid().ToString('N'))
+& (Join-Path $javaBin 'java.exe') "-Dmoonrise.proofDir=$standaloneProof" "-javaagent:$resolvedOutput" -version
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $standaloneProof 'cosmetics-agent.ready'))) {
+    throw 'Standalone Cosmetics premain failed.'
+}
 
 if (-not $SkipProbe) {
     $lunarJar = Join-Path $env:USERPROFILE ".lunarclient\offline\multiver\lunar.jar"
     if (Test-Path $lunarJar) {
         $probeSources = Get-ChildItem (Join-Path $extensionRoot "tests") -Recurse -Filter "*.java" | ForEach-Object FullName
-        $compileClasspath = "$weaveJar;$resolvedOutput"
+        $compileClasspath = $resolvedOutput
         & (Join-Path $javaBin "javac.exe") --release 8 -Xlint:-options -cp $compileClasspath -d $probeClasses $probeSources
         if ($LASTEXITCODE -ne 0) { throw "Probe compilation failed with code $LASTEXITCODE." }
         $probeClasspath = "$probeClasses;$compileClasspath"
@@ -59,6 +89,7 @@ if (-not $SkipProbe) {
         if ($LASTEXITCODE -ne 0) { throw "Probe failed with code $LASTEXITCODE." }
         $stateProbeDirectory = Join-Path $buildRoot "state-probe"
         if (Test-Path -LiteralPath $stateProbeDirectory) {
+            if ([IO.Path]::GetFullPath($stateProbeDirectory) -ne [IO.Path]::GetFullPath((Join-Path $buildRoot 'state-probe'))) { throw 'Unexpected state cleanup path.' }
             Remove-Item -LiteralPath $stateProbeDirectory -Recurse -Force
         }
         & (Join-Path $javaBin "java.exe") -cp $probeClasspath moonrise.cosmetics.CosmeticsPersistenceRuntimeProbe $lunarJar $resolvedOutput $stateProbeDirectory

@@ -13,6 +13,23 @@ namespace Moonrise.Tests;
 
 public sealed class MoonriseServicesTests
 {
+    [Theory]
+    [InlineData("{broken")]
+    [InlineData("[]")]
+    [InlineData("null")]
+    public void Settings_CorruptionUsesDefaultsAndCanBeSaved(string corrupt)
+    {
+        using var temp = new TemporaryDirectory();
+        var path = Path.Combine(temp.Path, "moonrise-settings.json");
+        File.WriteAllText(path, corrupt);
+        var service = new AppSettingsService(path);
+        var settings = service.Load();
+        Assert.Equal(corrupt, File.ReadAllText(path));
+        settings.Language = "en";
+        service.Save(settings);
+        Assert.Equal("en", service.Load().Language);
+    }
+
     [Fact]
     public void Settings_RoundTripClientVersionLanguageAndDisabledPackages()
     {

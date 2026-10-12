@@ -6,6 +6,16 @@ namespace Moonrise;
 
 public partial class App : System.Windows.Application
 {
+    [STAThread]
+    public static void Main(string[] args)
+    {
+        if (!Services.UpdateService.IsFriendPortableBuild)
+            Velopack.VelopackApp.Build().SetAutoApplyOnStartup(false).Run();
+        var app = new App();
+        app.InitializeComponent();
+        app.Run();
+    }
+
     private const string InstanceMutexName = @"Local\Moonrise.SingleInstance";
     private const string ActivationPipeName = "Moonrise.Activation.v1";
     private Mutex? _instanceMutex;
@@ -34,6 +44,20 @@ public partial class App : System.Windows.Application
             _ownsMutex = true;
         }
 
+        if (!visualQaMode && !Services.UpdateService.IsFriendPortableBuild)
+        {
+            try
+            {
+                var updates = new Services.UpdateService(Services.UpdateService.CreateGithubManager(),
+                    new Services.UpdateActivityGate(), Services.UpdateService.HasMinecraftProcess);
+                if (updates.TryApplyAndRestart()) return;
+            }
+            catch (Exception)
+            {
+                // A failed handoff must leave the installed application usable.
+            }
+        }
+
         base.OnStartup(e);
         ShutdownMode = ShutdownMode.OnMainWindowClose;
 
@@ -49,6 +73,7 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        (MainWindow as MainWindow)?.DisposeTrayIcon();
         _activationCancellation?.Cancel();
         try
         {

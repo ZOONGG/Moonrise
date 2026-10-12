@@ -106,7 +106,17 @@ public sealed class LunarAccountProviderTests : IDisposable
         File.WriteAllText(Store, "{");
         var refresh = provider.RefreshAsync();
         await Task.Delay(250);
-        File.WriteAllText(Store, Fixture(true));
+        var replacement = Path.Combine(_root, "partial-write-replacement");
+        File.WriteAllText(replacement, Fixture(true));
+        try
+        {
+            for (var attempt = 0; ; attempt++)
+            {
+                try { File.Move(replacement, Store, true); break; }
+                catch (IOException) when (attempt < 50) { await Task.Delay(10); }
+            }
+        }
+        finally { await refresh; } // Never remove the fixture while its reader is active.
         var recovered = await refresh;
         Assert.Null(recovered.Diagnostic);
         Assert.Equal(2, recovered.Accounts.Count);

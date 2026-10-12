@@ -16,10 +16,14 @@ public sealed class MoonriseSettings
     public bool RevealLunarWhenActionRequired { get; set; } = true;
     public bool AutoCloseLunarBeforeLaunch { get; set; }
     public int LaunchTimeoutSeconds { get; set; } = 180;
+    public bool AutoDownloadUpdates { get; set; } = true;
+    public string LastUpdateFoundNotification { get; set; } = "";
+    public string LastUpdateReadyNotification { get; set; } = "";
     public bool CheckForUpdates { get; set; } = true;
     public bool IncludePrereleaseUpdates { get; set; }
     public bool UpdateCatalogAutomatically { get; set; } = true;
     public bool DeveloperMode { get; set; }
+    public bool ExperimentalWeaveCompatibility { get; set; }
     public string CatalogUrl { get; set; } = "https://zoongg.github.io/Moonrise-Catalog/catalog/index.json";
     public string CustomTestCatalogUrl { get; set; } = string.Empty;
     public string ActiveLoadoutId { get; set; } = string.Empty;

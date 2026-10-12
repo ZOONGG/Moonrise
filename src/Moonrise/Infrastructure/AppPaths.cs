@@ -24,6 +24,7 @@ public sealed class AppPaths
         Mode = mode;
     }
 
+    public bool PreserveExistingPackageFiles { get; init; }
     public string RootDirectory { get; }
     public string InstallationDirectory { get; }
     public AppMode Mode { get; }
@@ -86,6 +87,7 @@ public sealed class AppPaths
 
     public void EnsureUserDirectories()
     {
+        StorageFormatGuard.Check(RootDirectory);
         Directory.CreateDirectory(PackagesDirectory);
         Directory.CreateDirectory(WeavePackagesDirectory);
         Directory.CreateDirectory(AgentPackagesDirectory);
@@ -130,8 +132,8 @@ public sealed class AppPaths
             "- Do not edit the metadata folder manually.\r\n" +
             "- Manually changing an installed JAR may fail integrity verification.\r\n" +
             "- Moonrise does not edit package files.\r\n";
-        if (!File.Exists(PackageReadmePath) ||
-            !string.Equals(File.ReadAllText(PackageReadmePath), readme, StringComparison.Ordinal))
+        if (!PreserveExistingPackageFiles && (!File.Exists(PackageReadmePath) ||
+            !string.Equals(File.ReadAllText(PackageReadmePath), readme, StringComparison.Ordinal)))
         {
             File.WriteAllText(PackageReadmePath, readme, new UTF8Encoding(false));
         }
@@ -149,26 +151,27 @@ public sealed class AppPaths
         bool searchForDevelopmentRoot = false)
     {
         installationDirectory = Path.GetFullPath(installationDirectory);
-        if (searchForDevelopmentRoot)
-        {
-            var current = new DirectoryInfo(installationDirectory);
-            while (current is not null)
-            {
-                if (File.Exists(Path.Combine(current.FullName, "Moonrise.sln")))
-                {
-                    var developmentRoot = Path.Combine(
-                        Path.GetFullPath(localApplicationDataDirectory),
-                        ApplicationDirectoryName,
-                        DevelopmentDirectoryName);
-                    return new AppPaths(developmentRoot, current.FullName, AppMode.Development);
-                }
-                current = current.Parent;
-            }
-        }
+        var feed = typeof(AppPaths).Assembly.GetCustomAttributes(
+                typeof(System.Reflection.AssemblyMetadataAttribute), false)
+            .Cast<System.Reflection.AssemblyMetadataAttribute>()
+            .FirstOrDefault(a => a.Key == "MoonriseLocalUpdateFeed")?.Value;
+        return DiscoverLocal(installationDirectory, localApplicationDataDirectory, feed);
+    }
 
+    public static AppPaths DiscoverLocal(string installationDirectory,
+        string localApplicationDataDirectory, string? updateSmokeFeed = null)
+    {
+        installationDirectory = Path.GetFullPath(installationDirectory);
+        if (!string.IsNullOrWhiteSpace(updateSmokeFeed))
+        {
+            var id = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                Encoding.UTF8.GetBytes(Path.GetFullPath(updateSmokeFeed).ToUpperInvariant())))[..16];
+            return new AppPaths(Path.Combine(localApplicationDataDirectory, "Moonrise.UpdateSmoke", id),
+                installationDirectory, AppMode.Installed);
+        }
         var dataRoot = Path.Combine(
             Path.GetFullPath(localApplicationDataDirectory),
             ApplicationDirectoryName);
-        return new AppPaths(dataRoot, installationDirectory, AppMode.Installed);
+        return new AppPaths(dataRoot, installationDirectory, AppMode.Installed) { PreserveExistingPackageFiles = true };
     }
 }

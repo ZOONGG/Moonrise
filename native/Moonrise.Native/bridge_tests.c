@@ -406,6 +406,30 @@ int main(void)
         agent_a);
     test_embedded_nul(config_path, config);
 
+    {
+        WCHAR capture_path[32768];
+        swprintf(capture_path, 32768, L"%s\\capture-test.log", temporary_seed);
+        startup_capture *capture = prepare_startup_capture(NULL);
+        if (!capture) record_failure("capture-pipe", "pipe failed");
+        else {
+            capture->file = CreateFileW(capture_path, GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+            DWORD written;
+            char first[] = "java.lang.NoClassDef";
+            char last[] = "FoundError: missing\n--accessToken SECRET\n\tat Example.premain(Example.java:3)";
+            WriteFile(capture->write, first, (DWORD)strlen(first), &written, NULL);
+            WriteFile(capture->write, last, (DWORD)strlen(last), &written, NULL);
+            CloseHandle(capture->write);
+            pump_startup_output(capture);
+            HANDLE input = CreateFileW(capture_path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+            char result[4096] = {0}; DWORD read = 0;
+            ReadFile(input, result, sizeof(result)-1, &read, NULL); CloseHandle(input);
+            if (!strstr(result, "NoClassDefFoundError") || !strstr(result, "Example.premain") || strstr(result, "SECRET"))
+                record_failure("capture-pump", "fragmentation/EOF/redaction failed");
+            DeleteFileW(capture_path);
+        }
+        if (!capture_is_java(NULL, L"\"C:\\Program Files\\Java\\javaw.exe\" --accessToken SECRET") || capture_is_java(L"launcher.exe", NULL))
+            record_failure("capture-executable", "executable detection failed");
+    }
 cleanup:
     SetEnvironmentVariableW(g_bridge_config_name, NULL);
     DeleteFileW(config_path);
@@ -416,6 +440,16 @@ cleanup:
     RemoveDirectoryW(mods);
     RemoveDirectoryW(temporary_seed);
 
+    {
+        char exception[] = "java.lang.NoClassDefFoundError: org/cadixdev/lorenz/MappingSet\n";
+        char secret[] = "--accessToken SECRET\n";
+        char options[] = "Picked up JAVA_TOOL_OPTIONS: -javaagent:x\n";
+        char stack[] = "\tat dev.moonrise.mapping.MappingAgent.premain(MappingAgent.java:20)\n";
+        if (strcmp(safe_startup_line(exception), exception)) record_failure("capture-exception", "exception lost");
+        if (strstr(safe_startup_line(secret), "SECRET")) record_failure("capture-secret", "secret persisted");
+        if (strstr(safe_startup_line(options), "javaagent")) record_failure("capture-options", "options persisted");
+        if (strcmp(safe_startup_line(stack), stack)) record_failure("capture-stack", "stack lost");
+    }
     if (g_failures == 0)
     {
         printf("Native bridge parser tests passed.\n");

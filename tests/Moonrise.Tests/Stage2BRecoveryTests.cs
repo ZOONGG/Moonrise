@@ -269,8 +269,9 @@ public sealed class Stage2BRecoveryTests
         paths.EnsureUserDirectories();
         var installed = CreateWeaveJar(paths.InstalledWeavePackagesDirectory, "keep.jar", "keep");
         File.WriteAllText(paths.PackageIndexPath, "{}");
-        var recentLaunch = Directory.CreateDirectory(Path.Combine(paths.TempDirectory, "launch-recent")).FullName;
-        var oldLaunch = Directory.CreateDirectory(Path.Combine(paths.TempDirectory, "launch-old")).FullName;
+        var sessions = new LaunchSessionService();
+        var recentLaunch = sessions.Create(paths.TempDirectory).DirectoryPath;
+        var oldLaunch = sessions.Create(paths.TempDirectory).DirectoryPath;
         Directory.SetLastWriteTimeUtc(oldLaunch, DateTime.UtcNow.AddHours(-2));
         var abandoned = Path.Combine(paths.WeavePackagesDirectory, "old.importing");
         File.WriteAllText(abandoned, "partial");

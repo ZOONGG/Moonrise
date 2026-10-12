@@ -6,6 +6,29 @@ namespace Moonrise.Tests;
 public sealed class LunarAttemptTerminationTests
 {
     [Fact]
+    public async Task ManagedGameLifetimeHidesLunarExitShowAndExcludesForeignRootAndJava()
+    {
+        var f = new Fixture();
+        var watch = f.Service.WatchAsync(CancellationToken.None);
+        f.Service.MarkMinecraftDetected(retainForGameLifetime: true);
+        f.Processes.Items.Add(new(20, 1, "Lunar Client", f.Path, f.Start.AddSeconds(1)));
+        f.Processes.Items.Add(new(12, 10, "javaw", "javaw.exe", f.Start.AddSeconds(1)));
+        f.Windows.Items.Add(new((nint)200, 20, true, "Chrome_WidgetWin_1", "Lunar Client"));
+        f.Windows.Items.Add(new((nint)120, 12, true, "LWJGL", "Minecraft"));
+        var before = f.Windows.Hidden.Count;
+        f.Events.Raise((nint)100);
+        Assert.True(f.Service.OwnedWindowShown);
+        Assert.True(f.Windows.Hidden.Count > before);
+        Assert.DoesNotContain((nint)200, f.Windows.Hidden);
+        Assert.DoesNotContain((nint)120, f.Windows.Hidden);
+        Assert.Empty(f.Windows.Restored);
+        Assert.False(watch.IsCompleted);
+        f.Service.Cancel();
+        await watch.WaitAsync(TimeSpan.FromSeconds(2));
+        f.AssertReleased();
+    }
+
+    [Fact]
     public void ConstructionDoesNotSubscribeOrManipulateWindows()
     {
         var fixture = new Fixture();

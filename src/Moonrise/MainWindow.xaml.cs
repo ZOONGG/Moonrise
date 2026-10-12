@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
@@ -25,6 +25,9 @@ namespace Moonrise;
 
 public partial class MainWindow : Window
 {
+    public UpdateService Updates { get; }
+    private readonly UpdateActivityGate _updateActivity = new();
+
     private const string LaunchDeepLink = "lunarclient://launch";
     private const string BwhPackageSha256 = "6DA5B2A67E05E07DEAE2779B4AA3D1B70E5028DED227C41487FF783F5D609A57";
     private const string BwhMaintainedBuildSha256 = "C39F6F1C891825CD309F543D1EE112522CAC3660AC60D9E96A5A21F20756752D";
@@ -39,6 +42,7 @@ public partial class MainWindow : Window
     private readonly LaunchSessionService _launchSessions = new();
     private readonly LauncherExecutableDetector _launcherDetector = new();
     private readonly LunarLaunchLifecycleService _lunarLifecycle = new();
+    private Task _officialLunarCleanup = Task.CompletedTask;
     private readonly LauncherProfileService _profileService = new();
     private readonly LunarProfileReadinessService _profileReadiness = new();
     private readonly WeaveAgentService _weaveAgent = new();
@@ -58,7 +62,6 @@ public partial class MainWindow : Window
     private readonly ThemeService _themeService;
     private readonly MotionController _motion = new();
     private readonly ToastController _toasts;
-    private readonly ApplicationUpdateService _applicationUpdates = new();
     private readonly ObservableCollection<PackageInfo> _visiblePackages = [];
     private readonly ObservableCollection<string> _diagnostics = [];
     private readonly ObservableCollection<PackageManifest> _catalogEntries = [];
@@ -78,6 +81,7 @@ public partial class MainWindow : Window
     private int _launchInProgress;
     private long _launchAttemptSequence;
     private string? _activeLaunchAttemptId;
+    private readonly LaunchUiState _launchUi = new();
     private int _activeLaunchCommandSent;
     private SafeLogger? _logger;
     private SafeLogger? _lunarWindowLogger;
@@ -91,7 +95,11 @@ public partial class MainWindow : Window
     private PackageInfo? _pendingDeletePackage;
     private Action? _pendingConfirmationAction;
     private TaskCompletionSource<bool>? _lunarClosePromptCompletion;
-    private UpdateRelease? _availableUpdate;
+    private Velopack.UpdateInfo? _availableUpdate;
+    private bool _updateBusy;
+    private readonly HashSet<int> _updateManagedGameProcessIds = [];
+    private string _updateCurrentVersion = "";
+    private readonly System.Windows.Threading.DispatcherTimer _updateUiTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private string? _pendingActivationArgument;
     private bool _catalogReady;
     private DeveloperInspection? _developerInspection;
@@ -107,6 +115,7 @@ public partial class MainWindow : Window
     private bool _launchWaitCancelledByUser;
     private BwhApiRelayService? _bwhApiRelay;
     private bool _explicitExitRequested;
+    private bool _settingsControlsReady;
     private readonly bool _visualQaMode;
     private StatusLevel _lastStatusLevel = StatusLevel.Working;
     private HttpClient? _supportHttpClient;
@@ -125,6 +134,12 @@ public partial class MainWindow : Window
         _toasts = new ToastController(Dispatcher);
         _themeService = new ThemeService(_themePacks);
         _visualQaMode = visualQaMode;
+        if (!visualQaMode && Environment.GetCommandLineArgs().Contains(ExperimentalMixedWeaveAdapter.Flag, StringComparer.Ordinal))
+            _paths = new AppPaths(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Moonrise", "dev", "experiments", "raven-bwh"), AppContext.BaseDirectory, AppMode.Development);
+        else if (!visualQaMode && Environment.GetCommandLineArgs().Contains("--dev-bwh-real-baseline", StringComparer.Ordinal))
+            _paths = new AppPaths(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Moonrise", "dev", "experiments", "bwh-baseline"), AppContext.BaseDirectory, AppMode.Development);
         if (visualQaMode && Environment.GetEnvironmentVariable("MOONRISE_VISUAL_QA_DATA_ROOT") is { Length: > 0 } qaRoot)
             _paths = new AppPaths(qaRoot, AppContext.BaseDirectory, AppMode.Development);
         _packages = new PackageCatalogService(_jarParser);
@@ -142,8 +157,15 @@ public partial class MainWindow : Window
         _russian = string.Equals(_languageCode, "ru", StringComparison.OrdinalIgnoreCase);
         ConfigureMotionResources();
         InitializeComponent();
+        var updateManager = UpdateService.CreateGithubManager();
+        Updates = new UpdateService(updateManager, _updateActivity, IsUpdateGameActive);
+        _updateCurrentVersion = updateManager?.CurrentVersion?.ToString()
+            ?? System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(MainWindow).Assembly)?.InformationalVersion.Split('+')[0]
+            ?? "0.1.0";
+        _updateUiTimer.Tick += (_, _) => RefreshUpdateControls();
+        if (Updates.IsEnabled) _updateUiTimer.Start();
+        Closed += (_, _) => _updateUiTimer.Stop();
         InitializeAppearancePacks();
-        if (!_visualQaMode) InitializeTrayIcon();
         var version = typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
         AboutVersionText.Text = $"Moonrise {version}";
         AboutInlineVersionText.Text = version;
@@ -164,6 +186,7 @@ public partial class MainWindow : Window
         ApplyLanguage();
         ApplyTheme();
         ApplyResponsiveLayout(Width, Height);
+        if (!_visualQaMode) InitializeTrayIcon();
     }
 
     private void ConfigureMotionResources()
@@ -200,6 +223,7 @@ public partial class MainWindow : Window
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
+        using var updateOperation = _updateActivity.EnterOperation();
         if (_initialized) return;
         _initialized = true;
         try
@@ -209,6 +233,8 @@ public partial class MainWindow : Window
             AddDiagnostic($"Moonrise data root: {_paths.RootDirectory}");
             var staleLaunches = _launchSessions.CleanupStale(_paths.TempDirectory);
             AddDiagnostic($"Stale launch directories cleaned: {staleLaunches}");
+            foreach (var warning in _launchSessions.LastCleanupWarnings)
+                AddDiagnostic(warning);
             _library.Load();
             if (_library.LastReconciliationResult is { MetadataRebuilt: true })
                 AddDiagnostic("Package metadata was rebuilt from the authoritative category folders.");
@@ -235,11 +261,16 @@ public partial class MainWindow : Window
             _settings.BackgroundLunarLaunch = true;
             RevealLunarCheckBox.IsChecked = _settings.RevealLunarWhenActionRequired;
             AutoCloseLunarCheckBox.IsChecked = _settings.AutoCloseLunarBeforeLaunch;
+            AutoDownloadUpdatesCheckBox.IsChecked = _settings.AutoDownloadUpdates;
             CheckForUpdatesCheckBox.IsChecked = _settings.CheckForUpdates;
             PrereleaseUpdatesCheckBox.IsChecked = _settings.IncludePrereleaseUpdates;
             DeveloperModeCheckBox.IsChecked = _settings.DeveloperMode;
+            ExperimentalWeaveCheckBox.IsChecked = _settings.ExperimentalWeaveCompatibility;
+            ExperimentalWeaveTitle.Text = T("Экспериментальная совместимость Weave", "Experimental Weave compatibility");
+            ExperimentalWeaveHint.Text = T("Проверенные legacy-адаптеры с Weave 1.3.4. Неизвестные legacy-пакеты не поддерживаются.", "Verified legacy adapters with Weave 1.3.4. Unknown legacy packages are unsupported.");
             CustomCatalogUrlTextBox.Text = _settings.CustomTestCatalogUrl;
             DevelopersTabButton.Visibility = _settings.DeveloperMode || _visualQaMode ? Visibility.Visible : Visibility.Collapsed;
+            _settingsControlsReady = true;
             SelectSavedVersion();
             RefreshProfileState();
             RefreshStorageSummary();
@@ -267,6 +298,11 @@ public partial class MainWindow : Window
         }
         if (_visualQaMode)
             await ApplyVisualQaStateAsync();
+        else if (_settings.CheckForUpdates)
+            _ = CheckForUpdatesAsync(showNoUpdateStatus: false);
+        if (!_visualQaMode && LaunchButton.IsEnabled &&
+            Environment.GetCommandLineArgs().Contains("--dev-auto-launch", StringComparer.Ordinal))
+            LaunchButton_Click(LaunchButton, new RoutedEventArgs());
     }
 
     private async Task ApplyVisualQaStateAsync()
@@ -754,7 +790,6 @@ public partial class MainWindow : Window
         LanguageCodeText.Text = _languageCode.Split('-')[0].ToUpperInvariant();
         LanguageButton.ToolTip = _activeLanguage?.Name;
         RefreshLanguageMenu();
-        CatalogComingSoonText.Text = T("Скоро", "Coming soon");
         DiscordButton.ToolTip = T("Открыть Discord Moonrise", "Open Moonrise Discord");
         System.Windows.Automation.AutomationProperties.SetName(DiscordButton, (string)DiscordButton.ToolTip);
         SupportButton.ToolTip = T("Поддержать Moonrise", "Support Moonrise");
@@ -810,11 +845,13 @@ public partial class MainWindow : Window
         DropTargetHint.Text = T("Weave-моды и Java-агенты определяются автоматически.", "Weave mods and Java agents are detected automatically.");
         PackageNameHeader.Text = T("ПАКЕТ", "PACKAGE"); EntrypointHeader.Text = T("ВЕРСИЯ", "VERSION"); PackageTypeHeader.Text = T("ТИП", "TYPE"); StateHeader.Text = T("СТАТУС", "STATUS");
         EmptyLibraryTitle.Text = T("Папка пуста", "This folder is empty"); EmptyLibraryText.Text = T("Добавьте совместимый JAR-пакет.", "Add a compatible JAR to continue.");
+        ExperimentalWeaveTitle.Text = T("Экспериментальная совместимость Weave", "Experimental Weave compatibility");
+        ExperimentalWeaveHint.Text = T("Проверенные legacy-адаптеры с Weave 1.3.4. Неизвестные legacy-пакеты не поддерживаются.", "Verified legacy adapters with Weave 1.3.4. Unknown legacy packages are unsupported.");
         LibraryDetailsTitle.Text = T("Сведения о пакете", "Package details"); DetailsVersionLabel.Text = T("ВЕРСИЯ", "VERSION"); DetailsCompatibilityLabel.Text = T("СОВМЕСТИМОСТЬ", "COMPATIBILITY"); DetailsPathLabel.Text = T("ПУТЬ К ФАЙЛУ", "FILE PATH"); DetailsImportedLabel.Text = T("ДОБАВЛЕН", "IMPORTED"); DrawerEscapeHint.Text = T("Esc — закрыть", "Press Esc to close"); OpenSelectedPackageLocationButton.Content = T("Показать файл", "Open location"); ClosePackageDetailsButton.ToolTip = T("Закрыть сведения", "Close details");
         CatalogTitle.Text = T("Каталог", "Catalog"); CatalogSubtitle.Text = T("Пакеты с явными правилами установки и предупреждениями.", "Packages with explicit install policies and warnings.");
         RefreshCatalogButton.Content = CatalogEmptyRefreshButton.Content = T("Обновить", "Refresh"); CatalogEmptyText.Text = T("Пакеты не найдены", "No packages found"); CatalogStateText.Text = T("Обновите каталог или измените фильтры.", "Refresh the catalog or change the filters."); CatalogLoadingText.Text = T("Загрузка каталога…", "Loading catalog…");
         CatalogAllItem.Content = T("Все", "All"); CatalogModsItem.Content = T("Weave-моды", "Weave mods"); CatalogAgentsItem.Content = T("Java-агенты", "Java agents");
-        CatalogNameSortItem.Content = T("По названию", "Name"); CatalogUpdatedSortItem.Content = T("Недавно обновлённые", "Recently updated"); CatalogDownloadsSortItem.Content = T("Загрузки", "Downloads"); CatalogInstallsSortItem.Content = T("Установки Moonrise", "Moonrise installs");
+        CatalogNameSortItem.Content = T("По названию", "Name"); CatalogUpdatedSortItem.Content = T("Недавно обновлённые", "Recently updated");
         CatalogCompatibilityLabel.Text = T("СОВМЕСТИМОСТЬ", "COMPATIBILITY"); CatalogLicenseLabel.Text = T("ЛИЦЕНЗИЯ", "LICENSE");
         DiagnosticsTitle.Text = T("Диагностика", "Diagnostics"); DiagnosticsSubtitle.Text = T("Локальные события Moonrise.", "Local Moonrise events.");
         CopyDiagnosticsButton.Content = T("Копировать", "Copy"); OpenLogsButton.Content = OpenDiagnosticsLogsButton.Content = T("Открыть логи", "Open logs");
@@ -831,7 +868,14 @@ public partial class MainWindow : Window
         PluginsTitle.Text = T("Плагины клиентов", "Client plugins"); PluginsHint.Text = T("Подключайте новые клиенты через изолированный JSON-протокол запуска.", "Add clients through the isolated JSON launch protocol."); OpenPluginsButton.Content = T("Открыть папку", "Open folder");
         LanguagePacksTitle.Text = T("Языковые пакеты", "Language packs"); LanguagePacksHint.Text = T("Добавьте файл .moonrise-language.json в папку и выберите язык.", "Add a .moonrise-language.json file to the folder and select a language."); OpenLanguagePacksButton.Content = T("Открыть папку", "Open folder");
         ThemesTitle.Text = T("Пакеты тем", "Theme packs"); ThemesHint.Text = T("Встроенные стили и безопасные локальные темы.", "Built-in identities and safe local custom themes.");
-        UpdatesTitle.Text = T("Обновления", "Updates"); UpdatesHint.Text = T("Проверять официальные выпуски Moonrise на GitHub. До появления сертификата выпуски не подписаны.", "Check official Moonrise releases on GitHub. Releases are unsigned until a certificate is available."); PrereleaseUpdatesText.Text = T("Предварительные версии", "Prerelease channel"); CheckUpdateButton.Content = T("Проверить", "Check"); InstallUpdateButton.Content = T("Установить и перезапустить", "Install and restart");
+        UpdatesTitle.Text = T("Обновления", "Updates");
+        UpdatesHint.Text = T("Официальные обновления GitHub · beta", "Official GitHub updates · beta");
+        PrereleaseUpdatesText.Text = T("Канал beta (включая prerelease)", "Beta channel (including prereleases)");
+        CheckUpdateButton.Content = T("Проверить обновления", "Check for updates");
+        DownloadUpdateButton.Content = T("Скачать обновление", "Download update");
+        InstallUpdateButton.Content = T("Перезапустить сейчас", "Restart now");
+        AutoDownloadUpdatesCheckBox.Content = T("Автоматически скачивать обновления", "Automatically download updates");
+        RefreshUpdateControls();
         DiagnosticsSettingsTitle.Text = T("Диагностика", "Diagnostics"); DiagnosticsSettingsHint.Text = T("Локальные события запуска и установки.", "Local launch and installation events."); OpenDiagnosticsSettingsButton.Content = OpenDiagnosticsButton.Content = T("Открыть диагностику", "Open diagnostics");
         DeveloperModeTitle.Text = T("Режим разработчика", "Developer mode"); DeveloperModeHint.Text = T("Показать локальную проверку пакетов и инструменты манифеста.", "Show local package inspection and manifest tools.");
         DevelopersTitle.Text = T("Разработчикам", "Developers"); DevelopersSubtitle.Text = T("Проверяйте метаданные локального JAR без декомпиляции.", "Inspect local JAR metadata without decompiling it."); TestCatalogUrlTitle.Text = T("Тестовый каталог", "Custom test catalog"); ResetProductionCatalogButton.Content = T("Основной каталог", "Use production"); InspectJarButton.Content = T("Проверить JAR", "Inspect JAR"); ListClassesButton.Content = T("Список классов", "List classes"); PreviewCardButton.Content = T("Предпросмотр карточки", "Preview card"); ExportManifestButton.Content = T("Экспорт package JSON", "Export package JSON"); OpenSubmissionButton.Content = T("Открыть отправку", "Open submission");
@@ -1162,6 +1206,8 @@ public partial class MainWindow : Window
             string.Equals(item, profile.GameVersion, StringComparison.OrdinalIgnoreCase));
         if (version is not null) VersionComboBox.SelectedItem = version;
         var matched = _loadouts.Apply(profile, _mods.Concat(_agents));
+        foreach (var package in _library.Packages)
+            _library.SetEnabled(package, package.IsEnabled);
         RefreshVisiblePackages();
         RefreshCounts();
         SaveSettings();
@@ -1228,12 +1274,14 @@ public partial class MainWindow : Window
     private void LoadCachedCatalog()
     {
         _catalogPackages.Clear();
+        _catalogPackages.AddRange(PackageCatalogService.LoadBundledCatalog());
         RefreshCatalogView();
-        CatalogStateText.Text = T("Обновите каталог, чтобы загрузить актуальные данные.", "Refresh the catalog to load current data.");
+        CatalogStateText.Text = T("Пакеты из комплекта Moonrise; включение в библиотеке.", "Bundled Moonrise packages; enable in Library.");
     }
 
     private async Task LoadCatalogAsync(bool forceRefresh)
     {
+        using var updateOperation = _updateActivity.EnterOperation();
         try
         {
             RefreshCatalogButton.IsEnabled = false;
@@ -1249,26 +1297,13 @@ public partial class MainWindow : Window
                         RepeatBehavior = RepeatBehavior.Forever,
                         EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
                     }, HandoffBehavior.SnapshotAndReplace);
-            using var httpClient = new HttpClient();
-            var configuredUrl = _settings.DeveloperMode && !string.IsNullOrWhiteSpace(_settings.CustomTestCatalogUrl)
-                ? _settings.CustomTestCatalogUrl : _settings.CatalogUrl;
-            var client = new CatalogClient(
-                httpClient,
-                _catalogManifests,
-                new Uri(configuredUrl, UriKind.Absolute),
-                _paths.CatalogCacheDirectory,
-                CatalogTrust.ProductionEd25519PublicKeyBase64,
-                allowUnsignedCatalog: _settings.DeveloperMode);
-            var result = await client.GetCatalogAsync(forceRefresh);
+            await Task.Yield();
             _catalogPackages.Clear();
-            _catalogPackages.AddRange(result.Catalog.Packages.Where(package =>
-                !string.Equals(package.Name, "Neutral Weave Demo", StringComparison.OrdinalIgnoreCase)));
+            _catalogPackages.AddRange(PackageCatalogService.LoadBundledCatalog());
             RefreshCatalogView();
             CatalogErrorPanel.Visibility = Visibility.Collapsed;
-            CatalogStateText.Text = result.IsOffline
-                ? T("Сеть недоступна — показаны кешированные данные.", "Network unavailable — showing cached data.")
-                : T("Каталог обновлён.", "Catalog updated.");
-            AddDiagnostic($"Catalog loaded: entries={_catalogPackages.Count}; offline={result.IsOffline}");
+            CatalogStateText.Text = T("Каталог обновлён.", "Catalog updated.");
+            AddDiagnostic($"Bundled catalog loaded: entries={_catalogPackages.Count}");
         }
         catch (Exception exception)
         {
@@ -1315,6 +1350,7 @@ public partial class MainWindow : Window
 
     private async void InstallCatalogPackageButton_Click(object sender, RoutedEventArgs e)
     {
+        using var updateOperation = _updateActivity.EnterOperation();
         if ((sender as Button)?.Tag is not PackageManifest package || package.LatestRelease is not { } release) return;
         if (package.InstallPolicy == PackageInstallPolicy.ConfirmationRequired &&
             !ConfirmCatalogInstall(package, fromDeepLink: false))
@@ -1346,17 +1382,23 @@ public partial class MainWindow : Window
 
     private async Task InstallCatalogPackageAsync(PackageManifest package, PackageRelease release, Button? button)
     {
+        using var updateOperation = _updateActivity.EnterOperation();
+        string? installed = null;
         try
         {
             if (button is not null)
                 button.IsEnabled = false;
             using var httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
-            var installed = await new ManagedPackageInstaller(httpClient, _jarParser).InstallAsync(package, release, _paths.ManagedPackagesDirectory, _mods.Concat(_agents));
-            _library.Import(installed, "catalog");
+            installed = await new ManagedPackageInstaller(httpClient, _jarParser).InstallAsync(package, release, Path.Combine(_paths.TempDirectory, "catalog-install"), _mods.Concat(_agents));
+            var imported = _library.Import(installed, "catalog");
+            if (imported.Status is PackageImportStatus.Invalid or PackageImportStatus.Failed)
+                throw new InvalidDataException(imported.Message);
+            // Installation preserves disabled-by-default Library behavior.
             AddDiagnostic($"Installed catalog package: {Path.GetFileName(installed)}");
             LoadPackages();
             SetStatus(T("Пакет установлен", "Package installed"), StatusLevel.Ready);
-            ShowToast(ToastKind.Success, T("Пакет установлен", "Package installed"), package.Name);
+            ShowToast(ToastKind.Success, T("Пакет установлен", "Package installed"), package.Name + T(" — включите в библиотеке", " - enable in Library"));
+            ShowPage(LibraryPage, LibraryTabButton);
         }
         catch (Exception exception)
         {
@@ -1364,6 +1406,7 @@ public partial class MainWindow : Window
         }
         finally
         {
+            if (installed is not null && File.Exists(installed)) File.Delete(installed);
             if (button is not null)
                 button.IsEnabled = true;
         }
@@ -1371,6 +1414,7 @@ public partial class MainWindow : Window
 
     private async Task HandleDeepLinkAsync(string value)
     {
+        using var updateOperation = _updateActivity.EnterOperation();
         if (!MoonriseDeepLink.TryParse(value, out var deepLink, out var error))
         {
             ShowError(T($"Недопустимая ссылка Moonrise: {error}", $"Invalid Moonrise link: {error}"));
@@ -1524,8 +1568,9 @@ public partial class MainWindow : Window
             return;
         try
         {
-            _library.SetEnabled(package, package.IsEnabled);
-            RefreshCounts();
+            _library.SetEnabled(package, ((System.Windows.Controls.CheckBox)sender).IsChecked == true);
+            LoadPackages();
+            SaveSettings();
         }
         catch (Exception exception)
         {
@@ -1572,6 +1617,7 @@ public partial class MainWindow : Window
     private void GitHubButton_Click(object sender, RoutedEventArgs e) => OpenExternalUrl("https://github.com/ZOONGG/Moonrise");
     private async void SupportButton_Click(object sender, RoutedEventArgs e)
     {
+        using var updateOperation = _updateActivity.EnterOperation();
         if (SupportOverlay.Visibility == Visibility.Visible)
             return;
 
@@ -1891,6 +1937,7 @@ public partial class MainWindow : Window
 
     private async void SupportAssetButton_Click(object sender, RoutedEventArgs e)
     {
+        using var updateOperation = _updateActivity.EnterOperation();
         if (sender is not Button { Tag: SupportAsset asset } || _supportFlow is null)
             return;
         await _supportFlow.BeginDirectCryptoCheckoutAsync(asset, _supportDialogCancellation?.Token ?? default);
@@ -1963,6 +2010,7 @@ public partial class MainWindow : Window
 
     private async void SupportContinueButton_Click(object sender, RoutedEventArgs e)
     {
+        using var updateOperation = _updateActivity.EnterOperation();
         NormalizeSupportCustomAmount();
         if (_supportFlow is null ||
             !_supportFlow.TryNormalizeAmount(
@@ -2084,6 +2132,7 @@ public partial class MainWindow : Window
 
     private async void SupportCopyAddressButton_Click(object sender, RoutedEventArgs e)
     {
+        using var updateOperation = _updateActivity.EnterOperation();
         if (_supportFlow?.Checkout?.WalletAddress is not { Length: > 0 } value)
             return;
         try
@@ -2170,6 +2219,7 @@ public partial class MainWindow : Window
 
     private async void SupportCreateNewButton_Click(object sender, RoutedEventArgs e)
     {
+        using var updateOperation = _updateActivity.EnterOperation();
         if (_supportFlow?.Method is null)
         {
             ShowOnlySupportPanel(SupportLoadingPanel);
@@ -2385,6 +2435,7 @@ public partial class MainWindow : Window
 
     private async Task ScanPackageFoldersAsync(bool showSummary)
     {
+        using var updateOperation = _updateActivity.EnterOperation();
         var summary = await _library.ScanCategoryFoldersAsync(TimeSpan.FromMilliseconds(750));
         var reconciliation = _library.LastReconciliationResult;
         PackageImportResult? firstNewFailure = null;
@@ -2803,6 +2854,7 @@ public partial class MainWindow : Window
 
     private async void ResetProductionCatalogButton_Click(object sender, RoutedEventArgs e)
     {
+        using var updateOperation = _updateActivity.EnterOperation();
         CustomCatalogUrlTextBox.Text = string.Empty;
         _settings.CustomTestCatalogUrl = string.Empty;
         SaveSettings();
@@ -2852,76 +2904,140 @@ public partial class MainWindow : Window
     private async void CheckUpdateButton_Click(object sender, RoutedEventArgs e) =>
         await CheckForUpdatesAsync(showNoUpdateStatus: true);
 
-    private async Task CheckForUpdatesAsync(bool showNoUpdateStatus)
+    private bool IsUpdateGameActive()
     {
-        try
-        {
-            CheckUpdateButton.IsEnabled = false;
-            using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-            var current = typeof(MainWindow).Assembly.GetName().Version ?? new Version(1, 0, 0);
-            _availableUpdate = await _applicationUpdates.CheckAsync(
-                current,
-                httpClient,
-                _settings.IncludePrereleaseUpdates);
-            InstallUpdateButton.Visibility = _availableUpdate is null ? Visibility.Collapsed : Visibility.Visible;
-            UpdateStatusText.Text = _availableUpdate is null
-                ? T("Установлена актуальная версия.", "Moonrise is up to date.")
-                : T($"Доступна версия {_availableUpdate.Version}.", $"Version {_availableUpdate.Version} is available.");
-            if (showNoUpdateStatus || _availableUpdate is not null)
-                SetStatus(UpdateStatusText.Text, StatusLevel.Ready);
-        }
-        catch (Exception exception)
-        {
-            AddDiagnostic($"Update check warning: {exception.Message}");
-            if (showNoUpdateStatus) ShowError(exception.Message);
-        }
-        finally { CheckUpdateButton.IsEnabled = true; }
+        Dispatcher.VerifyAccess();
+        return UpdateUiState.IsGameActive(Volatile.Read(ref _launchInProgress) != 0,
+            _updateManagedGameProcessIds, _activeGameProcessIds) || UpdateService.HasMinecraftProcess();
     }
 
-    private async void InstallUpdateButton_Click(object sender, RoutedEventArgs e)
+    private void RefreshUpdateControls()
     {
-        if (_availableUpdate is null) return;
-        var releaseNotes = string.IsNullOrWhiteSpace(_availableUpdate.ReleaseNotes)
-            ? T("Примечания к выпуску отсутствуют.", "No release notes were provided.")
-            : _availableUpdate.ReleaseNotes.Trim();
-        if (releaseNotes.Length > 2500)
-            releaseNotes = releaseNotes[..2500] + "…";
-        var confirmation = T(
-            $"Будет загружен официальный установщик Moonrise {_availableUpdate.Version} с GitHub и проверен по SHA-256.\n\nДо появления сертификата выпуски Moonrise не подписаны. Windows может показать предупреждение.\n\n{releaseNotes}\n\nПродолжить?",
-            $"Moonrise {_availableUpdate.Version} will download the official Setup from GitHub and verify its SHA-256 checksum.\n\nMoonrise releases are unsigned until a signing certificate is available. Windows may display a warning.\n\n{releaseNotes}\n\nContinue?");
-        if (MessageBox.Show(
-                this,
-                confirmation,
-                T("Обновление Moonrise", "Moonrise update"),
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Information) != MessageBoxResult.Yes)
-            return;
+        if (Updates is null) return;
+        _updateManagedGameProcessIds.IntersectWith(_activeGameProcessIds);
+        var pending = Updates.PendingRestart;
+        var state = UpdateUiState.ForDisplay(Updates.IsEnabled, _updateBusy,
+            _availableUpdate is not null, pending is not null, IsUpdateGameActive);
+        UpdateVersionText.Text = T($"Текущая версия: {_updateCurrentVersion}", $"Current version: {_updateCurrentVersion}");
+        var version = pending?.Version ?? _availableUpdate?.TargetFullRelease.Version;
+        AvailableUpdateText.Text = version is null ? "" : T($"Новая версия: {version}", $"New version: {version}");
+        SettingsTabButton.Content = T("Настройки", "Settings") + (state.Pending ? " ●" : state.Available ? " ○" : "");
+        SettingsTabButton.ToolTip = state.Pending ? T("Обновление готово", "Update ready") : state.Available ? T("Доступно обновление", "Update available") : null;
+        CheckUpdateButton.IsEnabled = state.CanCheck;
+        DownloadUpdateButton.Visibility = state.ShowDownload ? Visibility.Visible : Visibility.Collapsed;
+        DownloadUpdateButton.IsEnabled = state.CanDownload;
+        InstallUpdateButton.Visibility = state.ShowRestart ? Visibility.Visible : Visibility.Collapsed;
+        InstallUpdateButton.IsEnabled = state.CanRestart;
+        UpdateGameHint.Text = state.GameActive ? T("Перезапуск недоступен во время игры или запуска.", "Restart is unavailable while playing or launching.") : "";
+        if (!Updates.IsEnabled)
+            UpdateStatusText.Text = T("Обновления недоступны: Moonrise не установлен через Velopack.", "Updates unavailable: Moonrise is not installed with Velopack.");
+        else if (pending is not null && !_updateBusy)
+            UpdateStatusText.Text = T("Обновление загружено. Готово к перезапуску.", "Update downloaded. Ready to restart.");
+    }
+
+    private async Task CheckForUpdatesAsync(bool showNoUpdateStatus)
+    {
+        if (_updateBusy || !Updates.IsEnabled || Updates.PendingRestart is not null) { RefreshUpdateControls(); return; }
+        using var operation = _updateActivity.EnterOperation();
+        _updateBusy = true;
+        UpdateStatusText.Text = T("Проверка обновлений…", "Checking for updates…");
+        RefreshUpdateControls();
         try
         {
-            InstallUpdateButton.IsEnabled = false;
-            UpdateStatusText.Text = T("Загрузка и проверка SHA-256…", "Downloading and verifying SHA-256…");
-            using var httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
-            var staged = await _applicationUpdates.StageAsync(_availableUpdate, httpClient, _paths.UpdateDirectory);
-            if (!staged.HasTrustedAuthenticodeSignature &&
-                MessageBox.Show(
-                    this,
-                    T(
-                        "Контрольная сумма установщика верна, но цифровая подпись Authenticode отсутствует. Запустить проверенный установщик?",
-                        "The installer checksum is valid, but no trusted Authenticode signature is present. Run the verified installer?"),
-                    T("Неподписанный выпуск", "Unsigned release"),
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning) != MessageBoxResult.Yes)
-                return;
-            _applicationUpdates.StartInstaller(staged);
-            Close();
+            _availableUpdate = await Task.Run(() => Updates.CheckAndDownloadAsync(autoDownload: false));
+            UpdateStatusText.Text = _availableUpdate is null
+                ? T("Установлена актуальная версия.", "Moonrise is up to date.")
+                : T("Доступно обновление.", "An update is available.");
+            if (_availableUpdate is not null && UpdateNotifications.TryClaim(_settings, _availableUpdate.TargetFullRelease.Version.ToString(), ready: false))
+            {
+                SaveSettings();
+                ShowToast(ToastKind.Info, T("Доступно обновление Moonrise", "Moonrise update available"),
+                    T($"Версия {_availableUpdate.TargetFullRelease.Version}. Откройте Настройки → Обновления.", $"Version {_availableUpdate.TargetFullRelease.Version}. Open Settings → Updates."));
+            }
         }
-        catch (Exception exception) { ShowError(exception.Message); }
-        finally { InstallUpdateButton.IsEnabled = true; }
+        catch (Exception)
+        {
+            UpdateStatusText.Text = T("Не удалось проверить обновления. Проверьте сеть и повторите попытку.", "Update check failed. Check your connection and retry.");
+            if (showNoUpdateStatus) ShowToast(ToastKind.Warning, UpdateStatusText.Text);
+        }
+        finally { operation.Dispose(); _updateBusy = false; RefreshUpdateControls(); }
+        if (_settings.AutoDownloadUpdates && _availableUpdate is not null)
+            await DownloadUpdateAsync();
     }
+
+    private void AutoDownloadUpdatesCheckBox_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.AutoDownloadUpdates = AutoDownloadUpdatesCheckBox.IsChecked == true;
+        SaveSettings();
+        if (_settings.AutoDownloadUpdates) _ = DownloadUpdateAsync();
+    }
+
+    private async void DownloadUpdateButton_Click(object sender, RoutedEventArgs e) => await DownloadUpdateAsync();
+
+    private async Task DownloadUpdateAsync()
+    {
+        if (_updateBusy || _availableUpdate is null || !Updates.IsEnabled || Updates.PendingRestart is not null) return;
+        using var operation = _updateActivity.EnterOperation();
+        _updateBusy = true;
+        UpdateDownloadProgress.Value = 0;
+        UpdateDownloadProgress.Visibility = Visibility.Visible;
+        RefreshUpdateControls();
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        var progress = new Progress<int>(value =>
+        {
+            UpdateDownloadProgress.Value = Math.Clamp(value, 0, 100);
+            UpdateStatusText.Text = T($"Загрузка обновления: {Math.Clamp(value, 0, 100)}%", $"Downloading update: {Math.Clamp(value, 0, 100)}%");
+        });
+        UpdateStatusText.Text = T("Загрузка обновления: 0%", "Downloading update: 0%");
+        try
+        {
+            var update = _availableUpdate;
+            await Task.Run(() => Updates.DownloadAsync(update, value => ((IProgress<int>)progress).Report(value), cancellation.Token));
+            if (Updates.PendingRestart is { } pending && UpdateNotifications.TryClaim(_settings, pending.Version.ToString(), ready: true))
+            {
+                SaveSettings();
+                ShowToast(ToastKind.Info, T("Обновление Moonrise загружено", "Moonrise update downloaded"),
+                    T("Готово к следующему запуску. Можно перезапустить сейчас в настройках.", "Ready for next startup. Restart now from Settings."));
+            }
+        }
+        catch (Exception)
+        {
+            UpdateStatusText.Text = T("Не удалось скачать обновление. Повторите попытку.", "Download failed. Please retry.");
+            ShowToast(ToastKind.Warning, UpdateStatusText.Text);
+        }
+        finally
+        {
+            operation.Dispose();
+            _updateBusy = false;
+            UpdateDownloadProgress.Visibility = Visibility.Collapsed;
+            RefreshUpdateControls();
+        }
+    }
+
+    private void InstallUpdateButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_updateBusy) return;
+        try
+        {
+            if (!Updates.TryApplyAndRestart(DisposeTrayIcon, InitializeTrayIcon))
+            {
+                AddDiagnostic($"Update restart blocked: {Updates.RestartBlockReason}; launching={Volatile.Read(ref _launchInProgress) != 0}; managedGameActive={UpdateUiState.IsGameActive(false, _updateManagedGameProcessIds, _activeGameProcessIds)}; minecraftDetected={UpdateService.HasMinecraftProcess()}");
+                ShowToast(ToastKind.Info, T("Перезапуск пока недоступен", "Restart is currently unavailable"),
+                    T("Завершите игру и текущие операции Moonrise.", "Finish the game and current Moonrise operations.") + $" ({Updates.RestartBlockReason})");
+            }
+        }
+        catch (Exception)
+        {
+            ShowToast(ToastKind.Warning, T("Не удалось применить обновление. Повторите попытку.", "Could not apply the update. Please retry."));
+        }
+        RefreshUpdateControls();
+    }
+
+    private void ExperimentalWeaveCheckBox_Click(object sender, RoutedEventArgs e) => SaveSettings();
 
     private void SaveSettings()
     {
-        if (LauncherPathTextBox is null) return;
+        if (!_settingsControlsReady || LauncherPathTextBox is null) return;
         _settings.Language = _languageCode;
         if (ThemeComboBox.SelectedItem is ThemePack theme) _settings.Theme = theme.Id;
         _settings.Client = SelectedClient;
@@ -2937,6 +3053,7 @@ public partial class MainWindow : Window
         _settings.IncludePrereleaseUpdates = PrereleaseUpdatesCheckBox.IsChecked == true;
         _settings.UpdateCatalogAutomatically = false;
         _settings.DeveloperMode = DeveloperModeCheckBox.IsChecked == true;
+        _settings.ExperimentalWeaveCompatibility = ExperimentalWeaveCheckBox.IsChecked == true;
         _settings.CustomTestCatalogUrl = CustomCatalogUrlTextBox.Text.Trim();
         _settings.DisabledMods = _mods.Where(item => !item.IsEnabled).Select(item => item.FileName).ToList();
         _settings.DisabledAgents = _agents.Where(item => !item.IsEnabled).Select(item => item.FileName).ToList();
@@ -2945,6 +3062,7 @@ public partial class MainWindow : Window
 
     private async void LaunchButton_Click(object sender, RoutedEventArgs e)
     {
+        using var updateOperation = _updateActivity.EnterOperation();
         if (!LaunchSingleFlight.TryEnter(ref _launchInProgress))
         {
             AddDiagnostic($"Duplicate launch request blocked; activeAttempt={_activeLaunchAttemptId ?? "unknown"}");
@@ -2954,12 +3072,14 @@ public partial class MainWindow : Window
         var launchStartedUtc = DateTimeOffset.UtcNow;
         var launchAttemptId = $"{launchStartedUtc:yyyyMMddHHmmssfff}-{Interlocked.Increment(ref _launchAttemptSequence)}";
         Interlocked.Exchange(ref _activeLaunchAttemptId, launchAttemptId);
+        _launchUi.Begin(launchAttemptId);
         Interlocked.Exchange(ref _activeLaunchCommandSent, 0);
         AddDiagnostic($"Launch attempt started: id={launchAttemptId}");
         var monitorOwnsLaunchGate = false;
         LaunchSession? launchSession = null;
         SanitizedLaunchReport? launchReport = null;
         LauncherProfileSelection? profileSelection = null;
+        OfficialLunarJvmSignals? pendingJvmSignals = null;
         PackageLaunchSelection selection = new([], []);
         string? weaveHash = null;
         var weaveLoaderPath = _paths.WeaveAgentPath;
@@ -2979,6 +3099,7 @@ public partial class MainWindow : Window
         try
         {
             launchReport = new SanitizedLaunchReport(_paths.LogsDirectory);
+            await _officialLunarCleanup;
             launchReport.Set("launchStage", "preflight");
             launchReport.Set("launchStartedUtc", launchStartedUtc.ToString("O"));
             launchReport.Set("launchAttemptId", launchAttemptId);
@@ -2990,6 +3111,7 @@ public partial class MainWindow : Window
             }
 
             var reconciliation = _library.Reconcile();
+            LoadPackages();
             if (reconciliation.Removed > 0)
             {
                 LoadPackages();
@@ -3015,8 +3137,23 @@ public partial class MainWindow : Window
                 selection = _launchResolver.Resolve(
                     _library.Packages, false);
             }
+            var legacyLoaderSmoke = _paths.Mode == AppMode.Development &&
+                Environment.GetCommandLineArgs().Contains("--dev-legacy-weave-smoke", StringComparer.Ordinal);
+            if (legacyLoaderSmoke && selection.WeaveMods.Count + selection.JavaAgents.Count != 0)
+                throw new InvalidOperationException("Legacy loader smoke requires all packages to be disabled.");
+            if (legacyLoaderSmoke)
+            {
+                var legacyMods = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".weave", "mods");
+                if (Directory.Exists(legacyMods) && Directory.EnumerateFiles(legacyMods, "*.jar", SearchOption.AllDirectories).Any())
+                    throw new InvalidOperationException("Legacy loader smoke requires zero JARs in ~/.weave/mods.");
+            }
+            launchReport.Set("devLegacyLoaderSmoke", legacyLoaderSmoke);
             var enabledMods = selection.WeaveMods;
             var enabledAgents = selection.JavaAgents;
+            var experimentalMixed = _settings.ExperimentalWeaveCompatibility ||
+                (_paths.Mode == AppMode.Development &&
+                Environment.GetCommandLineArgs().Contains(ExperimentalMixedWeaveAdapter.Flag, StringComparer.Ordinal));
+            launchReport.Set("experimentalRavenBwh", experimentalMixed);
             launchReport.Set("selectedPackages", enabledMods.Concat(enabledAgents).Select(item => new
             {
                 item.PackageId, item.Identifier, item.OriginalFileName, Kind = item.Kind.ToString(), item.Sha256
@@ -3033,6 +3170,13 @@ public partial class MainWindow : Window
             // Weave 0.2.x and bypasses the known Weave 1.x compatibility builds.
             var compatibilityResolution = await Task.Run(() =>
                 _compatibilityBuilds.Resolve(selectedVersion, enabledMods));
+            var agentResolution = await Task.Run(() =>
+                _compatibilityBuilds.ResolveAgents(selectedVersion, enabledAgents));
+            enabledAgents = agentResolution.LaunchMods;
+            compatibilityResolution = compatibilityResolution with
+            {
+                AppliedBuilds = compatibilityResolution.AppliedBuilds.Concat(agentResolution.AppliedBuilds).ToArray()
+            };
             if (compatibilityResolution.AppliedBuilds.Count > 0)
             {
                 enabledMods = compatibilityResolution.LaunchMods;
@@ -3065,11 +3209,13 @@ public partial class MainWindow : Window
                 enabledMods.Any(IsBwhPackage);
 
             var runtimeApiInspection = await Task.Run(() => _weaveApiInspector.Inspect(enabledMods));
+            var needsMixedAdapter = experimentalMixed && runtimeApiInspection.HasLegacy;
+            if (needsMixedAdapter) ExperimentalMixedWeaveAdapter.ValidateSelection(enabledMods, enabledAgents);
             launchReport.Set("weaveApiInspection", runtimeApiInspection.Mods.Select(item => new
             {
                 item.Package.PackageId, item.Package.Sha256, Generation = item.Generation.ToString()
             }).ToArray());
-            if (runtimeApiInspection.HasLegacy && runtimeApiInspection.HasCurrent)
+            if (runtimeApiInspection.HasLegacy && runtimeApiInspection.HasCurrent && !experimentalMixed)
             {
                 var legacyNames = string.Join(", ", runtimeApiInspection.Mods
                     .Where(item => item.Generation is WeaveApiGeneration.Legacy02 or WeaveApiGeneration.Mixed)
@@ -3084,12 +3230,12 @@ public partial class MainWindow : Window
                     "Moonrise will not modify third-party JARs; disable one of these groups."));
             }
 
-            var useLegacyWeave = runtimeApiInspection.IsLegacyOnly;
+            var useLegacyWeave = (runtimeApiInspection.IsLegacyOnly && !needsMixedAdapter) || legacyLoaderSmoke;
             if (useLegacyWeave)
             {
                 weaveLoaderRelease = WeaveAgentService.Legacy02;
                 weaveLoaderPath = _paths.LegacyWeaveAgentPath;
-                launchReport.Set("adapterIds", new[] { LegacyWeaveDirectoryAdapterService.Id });
+                if (!legacyLoaderSmoke) launchReport.Set("adapterIds", new[] { LegacyWeaveDirectoryAdapterService.Id });
             }
             launchReport.Set("temporaryPackageExclusion", false);
             launchReport.Set("enabledPackageIds", selectedPackageIds);
@@ -3127,7 +3273,8 @@ public partial class MainWindow : Window
 
             var prelaunchAction = LunarPrelaunchPolicy.Decide(
                 prelaunch,
-                _settings.AutoCloseLunarBeforeLaunch);
+                _settings.AutoCloseLunarBeforeLaunch || _lunarLifecycle.CanQuitControlledLauncher(
+                    launcherPath, new WindowsProcessTreeSnapshot().Capture()));
             if (prelaunchAction == LunarPrelaunchAction.BlockForMinecraft ||
                 _activeGameProcessIds.Count > 0)
             {
@@ -3163,14 +3310,14 @@ public partial class MainWindow : Window
                     $"Lunar close requested: attempt={launchAttemptId}; auto={_settings.AutoCloseLunarBeforeLaunch}; " +
                     $"pids=[{string.Join(",", prelaunch.LauncherProcessIds)}]");
                 launchReport.Set("lunarCloseRequested", true);
-                var closeResult = await _lunarLifecycle.CloseLauncherAsync(
+                AddDiagnostic("Lunar shutdown mechanism: close-launcher deeplink; controlled singleton only; no force fallback.");
+                var closeResult = await _lunarLifecycle.QuitControlledLauncherAsync(
                     launcherPath,
-                    TimeSpan.FromSeconds(3),
-                    TimeSpan.FromSeconds(2),
+                    TimeSpan.FromSeconds(10),
                     token);
                 var afterClose = await Task.Run(() => _lunarLifecycle.Capture(launcherPath), token);
                 AddDiagnostic(
-                    $"Lunar close result: attempt={launchAttemptId}; success={closeResult.Success}; " +
+                    $"Lunar close result: attempt={launchAttemptId}; success={closeResult.Success}; commandCompleted={closeResult.CommandCompleted}; " +
                     $"graceful=[{string.Join(",", closeResult.GracefullyClosedProcessIds)}]; " +
                     $"forced=[{string.Join(",", closeResult.ForceTerminatedProcessIds)}]; " +
                     $"remaining=[{string.Join(",", closeResult.RemainingProcessIds)}]; " +
@@ -3200,13 +3347,13 @@ public partial class MainWindow : Window
             launchSession = _launchSessions.Create(_paths.TempDirectory);
             launchReport.Set("launchStage", "runtime-preparation");
             string? enabledModsDirectory = null;
-            if (enabledMods.Count > 0)
+            if (enabledMods.Count > 0 || legacyLoaderSmoke)
             {
                 await _weaveAgent.EnsureAsync(weaveLoaderPath, weaveLoaderRelease);
                 if (!_weaveAgent.Validate(weaveLoaderPath, weaveLoaderRelease, out var weaveError))
                     throw new InvalidDataException(weaveError);
                 weaveHash = LocalPackageLibrary.ComputeSha256(weaveLoaderPath);
-                if (useLegacyWeave)
+                if (useLegacyWeave && !legacyLoaderSmoke)
                     legacyWeaveAdapterPath = _legacyWeaveAdapter.Ensure();
                 enabledModsDirectory = enabledModDirectoryService.Create(
                     launchSession.DirectoryPath,
@@ -3231,7 +3378,7 @@ public partial class MainWindow : Window
                 selectedProfile.LoaderVersion,
                 selectedProfile.LunarModule
             });
-            launchReport.Set("weaveLoaderFamily", enabledMods.Count == 0 ? "disabled" : useLegacyWeave ? "legacy" : "current");
+            launchReport.Set("weaveLoaderFamily", enabledMods.Count == 0 && !legacyLoaderSmoke ? "disabled" : useLegacyWeave ? "legacy" : "current");
             launchReport.Set("runtimePackages", enabledMods.Concat(enabledAgents).Select(item => new
             {
                 item.PackageId, item.Identifier, item.OriginalFileName, Kind = item.Kind.ToString(), item.Sha256,
@@ -3240,8 +3387,8 @@ public partial class MainWindow : Window
                     enabledMods.Count(mod => string.Equals(mod.FileName, item.FileName, StringComparison.OrdinalIgnoreCase)) > 1
                         ? $"{item.Sha256.ToLowerInvariant()}.jar" : item.FileName)
             }).ToArray());
-            launchReport.Set("weaveLoaderPath", enabledMods.Count > 0 ? weaveLoaderPath : null);
-            launchReport.Set("weaveLoaderVersion", enabledMods.Count > 0 ? weaveLoaderRelease.Version : null);
+            launchReport.Set("weaveLoaderPath", enabledMods.Count > 0 || legacyLoaderSmoke ? weaveLoaderPath : null);
+            launchReport.Set("weaveLoaderVersion", enabledMods.Count > 0 || legacyLoaderSmoke ? weaveLoaderRelease.Version : null);
             launchReport.Set("weaveLoaderSha256", weaveHash);
             launchReport.Set("legacyWeaveDirectoryAdapterPath", legacyWeaveAdapterPath);
             launchReport.Set("enabledMods", enabledMods.Select(item => new { item.PackageId, item.OriginalFileName, item.Sha256 }).ToArray());
@@ -3249,7 +3396,7 @@ public partial class MainWindow : Window
             launchReport.Set("preparedAgentCount", enabledAgents.Count);
             launchReport.Set("agentArgumentPrepared", enabledAgents.Count > 0);
             launchReport.Set("launchSessionPath", launchSession.DirectoryPath);
-            launchReport.Set("launchStage", enabledMods.Count + enabledAgents.Count == 0
+            launchReport.Set("launchStage", enabledMods.Count + enabledAgents.Count == 0 && !legacyLoaderSmoke
                 ? "launcher-start"
                 : "bridge-launch");
 
@@ -3267,7 +3414,7 @@ public partial class MainWindow : Window
                 AddDiagnostic($"BWH ExitLag network adapter prepared: {bwhNetworkAgentPath}");
             }
             SetLaunchProgress(T("Запуск Lunar в фоне", "Starting Lunar in the background"));
-            if (enabledMods.Count + enabledAgents.Count == 0)
+            if (enabledMods.Count + enabledAgents.Count == 0 && !legacyLoaderSmoke)
             {
                 using var process = StartLauncherWithoutBridge(launcherPath, backgroundLaunch);
                 launcherProcessId = process.Id;
@@ -3277,13 +3424,42 @@ public partial class MainWindow : Window
                 var nativeBridgePath = _nativeBridgeDeployment.Ensure(_paths.NativeBridgeCachePath);
                 launchReport.Set("nativeBridgePath", nativeBridgePath);
                 launchReport.Set("nativeBridgeSha256", NativeBridgeDeploymentService.ExpectedSha256);
-                var launchPlan = new CurrentLaunchPlanFactory().Create(
+                var launchPlan = legacyLoaderSmoke
+                    ? new CurrentLaunchPlanFactory().CreateLegacyLoaderSmoke(enabledMods, enabledAgents, weaveLoaderPath,
+                        Environment.GetEnvironmentVariable("MOONRISE_MIXIN_DIAGNOSTIC_AGENT"),
+                        Environment.GetEnvironmentVariable("MOONRISE_MIXIN_DIAGNOSTIC_OPTIONS"))
+                    : new CurrentLaunchPlanFactory().Create(
                     enabledMods,
                     enabledAgents,
-                    enabledMods.Count > 0 ? weaveLoaderPath : null,
+                    enabledMods.Count > 0 || legacyLoaderSmoke ? weaveLoaderPath : null,
                     useLegacyWeave,
                     legacyWeaveAdapterPath,
                     bwhNetworkAgentPath);
+                if (needsMixedAdapter)
+                {
+                    ExperimentalMixedWeaveAdapter.ValidateSelection(enabledMods, enabledAgents);
+                    launchPlan = ExperimentalMixedWeaveAdapter.Prepare(launchPlan, enabledModsDirectory!,
+                        Environment.GetEnvironmentVariable("MOONRISE_MIXED_ADAPTER") ??
+                        Path.Combine(_paths.InstallationDirectory, "runtime", "mixed-weave-adapter", "moonrise-mixed-agent-0.1.0.jar"), enabledMods);
+                    launchReport.Set("adapterIds", compatibilityResolution.AppliedBuilds.Select(item => item.Rule.Id)
+                        .Append(ExperimentalMixedWeaveAdapter.Id).ToArray());
+                    AddDiagnostic("EXPERIMENTAL verified legacy API/metadata adapter / single Weave 1.3.4; unverified legacy packages are rejected.");
+                }
+                if (_paths.Mode == AppMode.Development &&
+                    Environment.GetCommandLineArgs().Contains("--dev-weave-mod-smoke", StringComparer.Ordinal))
+                {
+                    if (enabledMods.Count != 1 || enabledAgents.Count != 0)
+                        throw new InvalidOperationException("Weave mod smoke requires exactly one mod and zero package agents.");
+                    launchPlan = launchPlan with
+                    {
+                        JvmProperties = launchPlan.JvmProperties.Concat(new[]
+                        {
+                            new LaunchJvmProperty("mixin.debug.verbose", "true"),
+                            new LaunchJvmProperty("mixin.debug.export", "true"),
+                            new LaunchJvmProperty("mixin.debug.export.decompile", "false")
+                        }).ToArray()
+                    };
+                }
                 launchReport.Set("bridgeProtocol", "MNR4");
                 launchReport.Set("launchPlanWeaveMode", launchPlan.WeaveMode.ToString());
                 launchReport.Set(
@@ -3308,6 +3484,8 @@ public partial class MainWindow : Window
                 bridgeReady = result.BridgeReady;
                 result.Process.Dispose();
             }
+            if (!_lunarLifecycle.RegisterControlledLauncher(launcherPath, launcherProcessId))
+                AddDiagnostic("Lunar ownership could not be recorded; repeat launch will fail closed.");
             _lunarWindowLogger = new SafeLogger(
                 _paths.LogsDirectory,
                 "lunar-window-classification");
@@ -3339,7 +3517,7 @@ public partial class MainWindow : Window
             foreach (var agent in enabledAgents)
                 AddDiagnostic($"Java agent prepared: {agent.OriginalFileName}; SHA-256={agent.Sha256}; argument=true");
             AddDiagnostic($"Launch session: {launchSession.DirectoryPath}");
-            AddDiagnostic(enabledMods.Count + enabledAgents.Count == 0
+            AddDiagnostic(enabledMods.Count + enabledAgents.Count == 0 && !legacyLoaderSmoke
                 ? $"Official launcher started without package injection; launcher PID: {launcherProcessId}"
                 : $"Native bridge ready: {bridgeReady}; launcher PID: {launcherProcessId}");
             AddDiagnostic("Enabled packages are prepared; runtime loading awaits user confirmation.");
@@ -3360,6 +3538,7 @@ public partial class MainWindow : Window
                 !string.Equals(confirmed.Version, SelectedVersion, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException($"Lunar selected {confirmed.Client} {confirmed.Version}, expected {SelectedClient} {SelectedVersion}.");
 
+            var jvmSignals = pendingJvmSignals = new OfficialLunarJvmSignals(launcherLog, LunarProfileReadinessService.CaptureCheckpoint(launcherLog));
             await DispatchLaunchToExistingLunarAsync(launcherPath, backgroundLaunch, launchAttemptId, token);
             launchReport.Set("deeplinkSendCount", Volatile.Read(ref _activeLaunchCommandSent));
             profileSelection.Restore();
@@ -3376,16 +3555,20 @@ public partial class MainWindow : Window
             var monitoredSession = launchSession;
             launchSession = null;
             _ = MonitorGameAsync(
+                launchAttemptId,
                 initialProcesses,
                 token,
                 monitoredSession,
+                jvmSignals,
                 launchReport,
                 selection,
                 launchStartedUtc,
                 weaveHash,
-                enabledMods.Count > 0 ? weaveLoaderPath : null,
-                enabledMods.Count > 0 ? weaveLoaderRelease.Version : null,
-                backgroundLaunch);
+                enabledMods.Count > 0 || legacyLoaderSmoke ? weaveLoaderPath : null,
+                enabledMods.Count > 0 || legacyLoaderSmoke ? weaveLoaderRelease.Version : null,
+                backgroundLaunch,
+                launcherPath);
+            pendingJvmSignals = null;
             launchReport = null;
         }
         catch (TimeoutException exception)
@@ -3417,6 +3600,11 @@ public partial class MainWindow : Window
             if (_activeLunarBackground is not null)
                 pendingPackageFailureStage = "launch-failed-before-java";
             AddDiagnostic($"Launch error: {exception.Message}");
+            launchReport?.Set("exceptionType", exception.GetType().FullName);
+            launchReport?.Set("exceptionHResult", $"0x{exception.HResult:X8}");
+            launchReport?.Set("exceptionStackTrace", exception.StackTrace);
+            foreach (var key in new[] { "fileOperation", "filePath", "temporaryPath" })
+                if (exception.Data[key] is string detail) launchReport?.Set(key, detail);
             launchReport?.Set("launchStage", "failed");
             launchReport?.Set("sanitizedException", exception.Message);
             if (_settings.RevealLunarWhenActionRequired)
@@ -3449,8 +3637,9 @@ public partial class MainWindow : Window
                         cleanupResult);
                 }
             }
+            pendingJvmSignals?.Dispose();
             launchReport?.Save();
-            if (!monitorOwnsLaunchGate) EndLaunchAttempt();
+            if (!monitorOwnsLaunchGate) EndLaunchAttempt(launchAttemptId);
         }
     }
 
@@ -3507,16 +3696,22 @@ public partial class MainWindow : Window
                 }
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                 {
-                    AddDiagnostic(
-                        $"Lunar IPC sender timeout: attempt={launchAttemptId}; PID {sender.Id}; terminating sender only.");
-                    try
-                    {
-                        sender.Kill(entireProcessTree: false);
-                        await sender.WaitForExitAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(2));
-                    }
-                    catch
-                    {
-                    }
+                    var forced = await LunarLaunchLifecycleService.CloseOwnedSenderAsync(
+                        () => sender.HasExited,
+                        () => { new WindowsLunarProcessBackend().RequestClose(sender.Id); },
+                        async timeout =>
+                        {
+                            try
+                            {
+                                await sender.WaitForExitAsync(cancellationToken).WaitAsync(timeout, cancellationToken);
+                                return true;
+                            }
+                            catch (TimeoutException) { return false; }
+                        },
+                        () => sender.Kill(entireProcessTree: false),
+                        TimeSpan.FromSeconds(3));
+                    AddDiagnostic($"Lunar IPC sender close: attempt={launchAttemptId}; PID {sender.Id}; forced={forced}");
+                    if (!forced) return;
                     throw new InvalidOperationException(
                         "Lunar launch command sender did not exit; the sender was stopped to prevent duplicate launcher windows.");
                 }
@@ -3578,43 +3773,84 @@ public partial class MainWindow : Window
     }
 
     private async Task MonitorGameAsync(
+        string launchAttemptId,
         HashSet<int> initialProcessIds,
         CancellationToken cancellationToken,
         LaunchSession launchSession,
+        OfficialLunarJvmSignals jvmSignals,
         SanitizedLaunchReport launchReport,
         PackageLaunchSelection selection,
         DateTimeOffset launchStartedUtc,
         string? weaveHash,
         string? weaveLoaderPath,
         string? weaveLoaderVersion,
-        bool backgroundLaunch)
+        bool backgroundLaunch,
+        string launcherPath)
     {
         var deadline = DateTimeOffset.UtcNow +
             TimeSpan.FromSeconds(Math.Clamp(_settings.LaunchTimeoutSeconds, 30, 600));
-        var exitTasks = new Dictionary<int, Task<int?>>();
+        var outcome = new MinecraftLaunchOutcome();
+        var monitorFinished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var minecraftStartupWindows = new MinecraftStartupWindowService(AddDiagnostic);
         var processTracker = new MinecraftLaunchProcessTracker();
+        // Use the launch-owned identity, not the window watcher's locking/full-snapshot getter.
+        // Observe validates start time on every lightweight snapshot, including PID reuse.
+        if (_lunarLifecycle.ControlledRootIdentity is { } launcherIdentity)
+            processTracker.SeedVerifiedLauncher(launcherIdentity.Pid, launcherIdentity.Start);
+        var detectionClock = Stopwatch.StartNew();
+        var detectionStages = new HashSet<string>();
+        void DetectionStage(string stage)
+        {
+            if (detectionStages.Add(stage))
+                AddDiagnostic($"Launch detection: attempt={launchAttemptId}; stage={stage}; utc={DateTimeOffset.UtcNow:O}; elapsedMs={detectionClock.ElapsedMilliseconds}");
+        }
         var observedJava = new HashSet<(int, DateTimeOffset?, bool)>();
         var javaObservations = new List<object>();
         var javaExitObservations = new Dictionary<(int, DateTimeOffset?), Task<int?>>();
         var reportedJavaExits = new HashSet<(int, DateTimeOffset?)>();
+        var gameIdentities = new HashSet<(int, DateTimeOffset?)>();
         var sawGameJvm = false;
         var gameOwnsSession = false;
         int? earlyExitCode = null;
         string? failureStage = null;
+        var lifetimeWindows = _activeLunarBackground;
+        var lifetimeWindowCancellation = _lunarWindowCancellation;
+        var lifetimeWindowTask = _lunarWindowTask;
         try
         {
-            while (DateTimeOffset.UtcNow < deadline)
+            while (true)
             {
-                await Task.Delay(500, cancellationToken);
+                await Task.Delay(100, cancellationToken);
+                if (!_launchUi.IsCurrent(launchAttemptId)) return;
+                jvmSignals.Read();
+                launchReport.Set("officialLunarJvmPid", jvmSignals.ProcessId);
+                launchReport.Set("officialLunarJvmExitCode", jvmSignals.ExitCode);
+                var snapshotClock = Stopwatch.StartNew();
+                long processSnapshotMs = 0, trackingMs = 0, startupWindowMs = 0;
                 var candidates = await Task.Run(() =>
                 {
-                    var snapshot = _processInspector.Snapshot();
+                    var workerClock = Stopwatch.StartNew();
+                    var snapshot = _processInspector.Snapshot(minecraftWindowsOnly: true);
+                    processSnapshotMs = workerClock.ElapsedMilliseconds;
+                    if (jvmSignals.ProcessId is { } runtimePid && !initialProcessIds.Contains(runtimePid) &&
+                        snapshot.TryGetValue(runtimePid, out var runtimeJvm))
+                        processTracker.ObserveRuntimeProcess(runtimeJvm, launchStartedUtc);
                     var java = processTracker.Observe(snapshot,
-                        _activeLunarBackground?.OwnedProcessIds ?? Array.Empty<int>(), initialProcessIds);
+                        Array.Empty<int>(), initialProcessIds);
+                    trackingMs = workerClock.ElapsedMilliseconds - processSnapshotMs;
                     minecraftStartupWindows.Observe(java);
+                    startupWindowMs = workerClock.ElapsedMilliseconds - processSnapshotMs - trackingMs;
                     return java;
                 }, cancellationToken);
+                if (!_launchUi.IsCurrent(launchAttemptId)) return;
+                if (snapshotClock.ElapsedMilliseconds >= 250 || detectionStages.Contains("minecraft-window-detected"))
+                    AddDiagnostic($"Launch detection poll: attempt={launchAttemptId}; utc={DateTimeOffset.UtcNow:O}; totalMs={snapshotClock.ElapsedMilliseconds}; processSnapshotMs={processSnapshotMs}; trackingMs={trackingMs}; startupWindowMs={startupWindowMs}; schedulingAndDispatcherMs={snapshotClock.ElapsedMilliseconds - processSnapshotMs - trackingMs - startupWindowMs}");
+                if (candidates.Length > 0) DetectionStage("java-process-observed");
+                if (candidates.Any(p => processTracker.IsMinecraft(p) &&
+                    p.MainWindowHandle != 0 && p.MainWindowClass is "LWJGL" or "GLFW30"))
+                    DetectionStage("minecraft-window-detected");
+                if (detectionStages.Add("snapshot-measured"))
+                    AddDiagnostic($"Launch detection: attempt={launchAttemptId}; snapshotMs={snapshotClock.ElapsedMilliseconds}");
                 foreach (var candidate in candidates)
                 {
                     if (observedJava.Add((candidate.ProcessId, candidate.StartTimeUtc, processTracker.IsMinecraft(candidate))))
@@ -3626,68 +3862,86 @@ public partial class MainWindow : Window
                         launchReport.Set("observedJavaProcesses", javaObservations.ToArray());
                     }
                     var identity = (candidate.ProcessId, candidate.StartTimeUtc);
+                    if (processTracker.IsMinecraft(candidate)) gameIdentities.Add(identity);
                     if (!javaExitObservations.ContainsKey(identity))
-                        javaExitObservations[identity] = ObserveExitCodeAsync(candidate.ProcessId);
-                    if (processTracker.IsMinecraft(candidate))
-                        exitTasks[candidate.ProcessId] = javaExitObservations[identity];
+                        javaExitObservations[identity] = ObserveExitCodeAsync(candidate.ProcessId, candidate.StartTimeUtc);
+
                 }
                 foreach (var (identity, exit) in javaExitObservations)
                     if (exit.IsCompleted && reportedJavaExits.Add(identity))
                     {
                         var code = await exit;
-                        AddDiagnostic($"Launch Java exited: pid={identity.Item1}; startUtc={identity.Item2:O}; code={code}; monitoring continues until game evidence or launch deadline.");
+                        AddDiagnostic($"Launch Java exited: pid={identity.Item1}; startUtc={identity.Item2:O}; code={code}.");
                         javaObservations.Add(new { ProcessId = identity.Item1, StartTimeUtc = identity.Item2,
                             Event = "exited", ExitCode = code });
                         launchReport.Set("observedJavaProcesses", javaObservations.ToArray());
                     }
-                sawGameJvm = processTracker.SawMinecraft;
-                var launcherTreeRunning = candidates.Length > 0
-                    ? true
-                    : await Task.Run(
-                        () => _activeLunarBackground?.IsLauncherTreeRunning(),
-                        cancellationToken);
-                failureStage = processTracker.FailureStage(DateTimeOffset.UtcNow, deadline,
-                    candidates, launcherTreeRunning);
-                if (failureStage == "minecraft-timeout") break;
-                if (failureStage is not null)
+                sawGameJvm = processTracker.SawMinecraft || jvmSignals.ProcessId is not null;
+                var capturedExit = javaExitObservations.Values
+                    .Where(task => task.IsCompletedSuccessfully && MinecraftLaunchOutcome.IsCrash(task.Result))
+                    .Select(task => task.Result).FirstOrDefault();
+                // A clean bootstrap exit is not game termination. Lunar's JVM signal is game-specific.
+                var gameExit = javaExitObservations
+                    .Where(pair => gameIdentities.Contains(pair.Key) && pair.Value.IsCompletedSuccessfully)
+                    .Select(pair => pair.Value.Result).FirstOrDefault(code => code is not null);
+                var terminalExit = capturedExit ?? gameExit ?? jvmSignals.ExitCode;
+                var game = processTracker.ObserveUsableWindow(candidates);
+                if (game is not null) DetectionStage("usable-window-confirmed");
+                failureStage = outcome.Decide(terminalExit, game is not null,
+                    DateTimeOffset.UtcNow >= deadline, sawGameJvm || processTracker.SawJava);
+                if (failureStage is null) continue;
+                if (failureStage != "launched")
                 {
-                    earlyExitCode = failureStage == "java-exited-before-usable-window"
-                        ? await MostRecentExitCodeAsync(exitTasks) : null;
-                    AddDiagnostic($"Launch monitoring failed: {failureStage}; javaExitCode={earlyExitCode}");
-                    SetStatus(T("Запуск завершился ошибкой", "Launch failed"), StatusLevel.Error,
-                        failureStage == "java-exited-before-usable-window"
-                            ? T("Игровой процесс завершился до открытия пригодного окна.", "The game process ended before a usable window appeared.")
-                            : T("Официальный Lunar завершился до запуска Minecraft.", "The official Lunar launcher exited before Minecraft started."));
+                    earlyExitCode = outcome.ExitCode;
+                    if (failureStage is "minecraft-timeout" or "java-startup-unconfirmed") break;
+                    AddDiagnostic($"Launch monitoring ended: {failureStage}; javaExitCode={earlyExitCode}");
+                    _launchUi.Exit(launchAttemptId, earlyExitCode);
+                    LaunchProgressPanel.Visibility = Visibility.Collapsed;
+                    ShowLaunchControls(false);
+                    SetStatus(earlyExitCode == 0 ? T("Minecraft закрыт", "Minecraft closed") : T("Запуск завершился ошибкой", "Launch failed"),
+                        earlyExitCode == 0 ? StatusLevel.Ready : StatusLevel.Error,
+                        T($"Игровой процесс завершился. Код: {earlyExitCode}.", $"Game process exited. Code: {earlyExitCode}."));
                     return;
                 }
-                var game = processTracker.ObserveUsableWindow(candidates);
-                if (game is null) continue;
-                AddDiagnostic($"Game JVM detected: PID {game.ProcessId}");
-                AddDiagnostic("The target Java process was detected; package functionality remains unconfirmed until the user checks Minecraft.");
-                if (_activeLunarBackground is { } lunarBackground)
-                {
-                    await Task.Run(lunarBackground.MarkMinecraftDetected, cancellationToken);
-                    ReleaseActiveLunarBackground(cancelService: false);
-                }
+                if (game is null) throw new InvalidOperationException("Missing confirmed game window.");
+                if (!_launchUi.Running(launchAttemptId)) return;
                 _activeGameProcessIds.Add(game.ProcessId);
-                launchReport.Set("targetJavaProcessDetected", true);
-                launchReport.Set("usableWindowOutcome", "observed-package-functionality-unconfirmed");
-                launchReport.Set("detectedJavaProcessIds", new[] { game.ProcessId });
-                launchReport.Set("launchStage", "java-detected");
-                launchReport.Save();
-                SetLaunchProgress(T("Minecraft запущен", "Minecraft launched"));
+                _updateManagedGameProcessIds.Add(game.ProcessId);
+                DetectionStage("launch-state-updated");
+                LaunchProgressPanel.Visibility = Visibility.Collapsed;
+                LaunchButton.Content = T("Игра запущена", "Game running");
                 ShowLaunchControls(false);
                 CrashActionsPanel.Visibility = Visibility.Collapsed;
                 OpenDiagnosticsButton.Visibility = Visibility.Collapsed;
                 _lastCrashBundlePath = null;
                 _lastCrashReportPath = null;
-                SetStatus(T("Minecraft запущен", "Minecraft launched"), StatusLevel.Ready,
+                SetStatus(T("Игра запущена", "Game running"), StatusLevel.Ready,
                     _activeGameProcessIds.Count == 1
                         ? T("Игровое окно обнаружено. Проверьте включённые пакеты в игре.", "Game window detected. Verify the enabled packages in game.")
                         : T($"Активных экземпляров: {_activeGameProcessIds.Count}.", $"Active instances: {_activeGameProcessIds.Count}."));
+                DetectionStage("ui-notification-dispatched");
+                // Let WPF paint the confirmed status before report I/O or window ownership work.
+                await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Background);
+                AddDiagnostic($"Game JVM detected: PID {game.ProcessId}");
+                AddDiagnostic("The target Java process was detected; package functionality remains unconfirmed until the user checks Minecraft.");
+                if (_activeLunarBackground is { } lunarBackground)
+                {
+                    lunarBackground.MarkMinecraftDetected(retainForGameLifetime: true);
+                    if (lifetimeWindowTask?.IsCompleted == true && lifetimeWindowCancellation is not null)
+                        lifetimeWindowTask = Task.Run(() => lunarBackground.WatchAsync(lifetimeWindowCancellation.Token));
+                    // Transfer the existing hook to the game lifetime without cancelling it.
+                    _activeLunarBackground = null;
+                    _lunarWindowCancellation = null;
+                    _lunarWindowTask = null;
+                }
+                launchReport.Set("targetJavaProcessDetected", true);
+                launchReport.Set("usableWindowOutcome", "observed-package-functionality-unconfirmed");
+                launchReport.Set("detectedJavaProcessIds", new[] { game.ProcessId });
+                launchReport.Set("launchStage", "java-detected");
+                launchReport.Save();
                 gameOwnsSession = true;
-                var gameDetectedUtc = DateTimeOffset.UtcNow;
                 _ = WatchGameLifetimeAsync(
+                    launchAttemptId,
                     game.ProcessId,
                     launchSession,
                     launchReport,
@@ -3696,31 +3950,31 @@ public partial class MainWindow : Window
                     weaveHash,
                     weaveLoaderPath,
                     weaveLoaderVersion,
-                    gameDetectedUtc);
+                    javaExitObservations[(game.ProcessId, game.StartTimeUtc)],
+                    monitorFinished.Task,
+                    () => CleanupOfficialLunarAfterGameAsync(launcherPath, lifetimeWindows,
+                        lifetimeWindowCancellation, lifetimeWindowTask, launchReport));
                 if (_settings.CloseAfterLaunch)
                 {
-                    if (_bwhApiRelay?.IsRunning == true)
-                    {
-                        AddDiagnostic("Moonrise remains in the tray while BWH uses the ExitLag network bridge.");
-                        await Dispatcher.InvokeAsync(Hide);
-                    }
-                    else
-                    {
-                        await Dispatcher.InvokeAsync(Close);
-                    }
+                    AddDiagnostic("Moonrise remains in the tray until the managed OfficialLunar session has been cleaned up.");
+                    await Dispatcher.InvokeAsync(Hide);
                 }
                 return;
             }
-            failureStage = "minecraft-timeout";
-            AddDiagnostic($"Minecraft launch timeout: observedLaunchJava={processTracker.SawJava}; observedMinecraftWindow={processTracker.SawMinecraft}; no usable Minecraft window before the launch deadline.");
+            failureStage ??= "minecraft-timeout";
+            AddDiagnostic($"Minecraft launch deadline ({failureStage}): observedLaunchJava={processTracker.SawJava}; observedMinecraftWindow={processTracker.SawMinecraft}; no usable Minecraft window before the launch deadline.");
             RevealActiveLunar(force: true, interactionRequired: true);
             SetLaunchProgress(T("Требуется действие в Lunar", "Action required in Lunar"));
             SetStatus(
                 T("Требуется действие в Lunar", "Action required in Lunar"),
                 StatusLevel.Warning,
                 T(
-                    "Время ожидания истекло: пригодное окно Minecraft не появилось. Проверьте вход, обновление или ошибку в официальном Lunar.",
-                    "Launch timed out: no usable Minecraft window appeared. Check authentication, updates, or errors in the official Lunar launcher."));
+                    failureStage == "minecraft-timeout"
+                        ? "Время ожидания истекло: запуск игровой JVM не подтверждён. Проверьте официальный Lunar."
+                        : "JVM обнаружена, но готовность игрового окна не подтверждена. Проверьте официальный Lunar.",
+                    failureStage == "minecraft-timeout"
+                        ? "Launch timed out: no game JVM was confirmed. Check official Lunar."
+                        : "JVM detected, but game window readiness was not confirmed. Check official Lunar."));
             OpenDiagnosticsButton.Visibility = Visibility.Visible;
         }
         catch (OperationCanceledException)
@@ -3740,16 +3994,47 @@ public partial class MainWindow : Window
         }
         finally
         {
-            ReleaseActiveLunarBackground();
             await Task.Run(minecraftStartupWindows.RestoreAll);
             if (!gameOwnsSession)
             {
+                if (earlyExitCode is not null)
+                {
+                    _activeLunarBackground = null;
+                    _lunarWindowCancellation = null;
+                    _lunarWindowTask = null;
+                    await CleanupOfficialLunarAfterGameAsync(launcherPath, lifetimeWindows,
+                        lifetimeWindowCancellation, lifetimeWindowTask, launchReport);
+                }
+                // Prefer the captured first JVM failure to a secondary window-monitor timeout.
+                if (Environment.GetCommandLineArgs().Contains("--dev-legacy-weave-smoke", StringComparer.Ordinal) &&
+                    Environment.GetEnvironmentVariable("MOONRISE_DEV_STARTUP_CAPTURE") is { } capture)
+                {
+                    try
+                    {
+                        var resultPath = Path.Combine(capture, "result.json");
+                        if (File.Exists(resultPath))
+                        {
+                            using var result = System.Text.Json.JsonDocument.Parse(File.ReadAllText(resultPath));
+                            var root = result.RootElement;
+                            if (root.TryGetProperty("FirstException", out var first) && first.ValueKind == System.Text.Json.JsonValueKind.String)
+                            {
+                                failureStage = "legacy-weave-bootstrap-failed";
+                                launchReport.Set("firstJvmException", first.GetString());
+                                launchReport.Set("weaveBootstrapStage", root.GetProperty("Stage").GetString());
+                                launchReport.Set("weaveEvidenceDirectory", capture);
+                                SetStatus("Weave bootstrap failed", StatusLevel.Warning, $"{first.GetString()}\n{capture}");
+                                AddDiagnostic($"Weave first JVM failure: {first.GetString()}; evidence: {capture}");
+                            }
+                        }
+                    }
+                    catch (Exception captureError) { AddDiagnostic($"Weave evidence read failed: {captureError.GetType().Name}"); }
+                }
                 launchReport.Set("targetJavaProcessDetected", sawGameJvm);
                 launchReport.Set("launchStage", failureStage ?? "monitor-ended");
                 launchReport.Set("javaExitCode", earlyExitCode);
                 var cleanupResult = CleanupLaunchSession(launchSession, launchReport);
                 launchReport.Save();
-                if (failureStage is "java-exited-before-usable-window" or "lunar-exited-before-java" or "minecraft-timeout" &&
+                if (failureStage == "java-exited-nonzero" && MinecraftLaunchOutcome.IsCrash(earlyExitCode) &&
                     selection.WeaveMods.Count + selection.JavaAgents.Count > 0)
                 {
                     CreatePackageCrashBundle(
@@ -3764,15 +4049,20 @@ public partial class MainWindow : Window
                         cleanupResult);
                 }
             }
-            EndLaunchAttempt();
+            jvmSignals.Dispose();
+            monitorFinished.TrySetResult();
+            if (!gameOwnsSession) EndLaunchAttempt(launchAttemptId);
         }
     }
 
-    private static async Task<int?> ObserveExitCodeAsync(int processId)
+    private static async Task<int?> ObserveExitCodeAsync(int processId, DateTimeOffset? expectedStart = null)
     {
         try
         {
             using var process = Process.GetProcessById(processId);
+            // Open the handle before validating identity and retain it across exit/PID reuse.
+            _ = process.Handle;
+            if (expectedStart is not null && new DateTimeOffset(process.StartTime.ToUniversalTime()) != expectedStart) return null;
             await process.WaitForExitAsync();
             return process.ExitCode;
         }
@@ -3780,19 +4070,6 @@ public partial class MainWindow : Window
         {
             return null;
         }
-    }
-
-    private static async Task<int?> MostRecentExitCodeAsync(
-        IReadOnlyDictionary<int, Task<int?>> exitTasks)
-    {
-        foreach (var task in exitTasks.Values.Reverse())
-        {
-            if (!task.IsCompleted)
-                await Task.WhenAny(task, Task.Delay(1000));
-            if (task.IsCompletedSuccessfully)
-                return task.Result;
-        }
-        return null;
     }
 
     private static bool IsJavaProcess(string processName) =>
@@ -3863,6 +4140,7 @@ public partial class MainWindow : Window
     }
 
     private async Task WatchGameLifetimeAsync(
+        string launchAttemptId,
         int processId,
         LaunchSession launchSession,
         SanitizedLaunchReport launchReport,
@@ -3871,23 +4149,22 @@ public partial class MainWindow : Window
         string? weaveHash,
         string? weaveLoaderPath,
         string? weaveLoaderVersion,
-        DateTimeOffset gameDetectedUtc)
+        Task<int?> observedExit,
+        Task monitorFinished,
+        Func<Task>? cleanupLauncher = null)
     {
         int? exitCode = null;
         var cleanupResult = "unknown";
         try
         {
-            using var process = Process.GetProcessById(processId);
-            await process.WaitForExitAsync();
-            exitCode = process.ExitCode;
-        }
-        catch (ArgumentException)
-        {
-            exitCode = -1;
-        }
-        catch (InvalidOperationException)
-        {
-            exitCode = -1;
+            exitCode = await observedExit;
+            if (_launchUi.Exit(launchAttemptId, exitCode))
+            {
+                LaunchProgressPanel.Visibility = Visibility.Collapsed;
+                ShowLaunchControls(false);
+                if (exitCode == 0) SetStatus(T("Minecraft закрыт", "Minecraft closed"), StatusLevel.Ready,
+                    T("Код завершения: 0. Очистка запуска…", "Exit code: 0. Cleaning up launch…"));
+            }
         }
         catch (Exception exception)
         {
@@ -3896,25 +4173,28 @@ public partial class MainWindow : Window
         }
         finally
         {
-            launchReport.Set("launchStage", "java-exited");
+            launchReport.Set("launchStage", exitCode == 0 ? "normal-exit" : MinecraftLaunchOutcome.IsCrash(exitCode) ? "java-exited-nonzero" : "java-exit-unknown");
             launchReport.Set("javaExitCode", exitCode);
+            if (cleanupLauncher is not null)
+            {
+                _officialLunarCleanup = cleanupLauncher();
+                await _officialLunarCleanup;
+            }
             cleanupResult = CleanupLaunchSession(launchSession, launchReport);
             launchReport.Save();
         }
 
-        if (Dispatcher.HasShutdownStarted) return;
+        await monitorFinished;
+        if (Dispatcher.HasShutdownStarted || !_launchUi.IsCurrent(launchAttemptId)) return;
+        EndLaunchAttempt(launchAttemptId, resetStatus: false);
         var packageCrashCreated = false;
-        var exitedShortlyAfterPackageLoad =
-            DateTimeOffset.UtcNow - gameDetectedUtc <= TimeSpan.FromSeconds(20);
-        if ((exitCode is not 0 || exitedShortlyAfterPackageLoad) &&
+        if (MinecraftLaunchOutcome.IsCrash(exitCode) &&
             selection.WeaveMods.Count + selection.JavaAgents.Count > 0)
         {
             CreatePackageCrashBundle(
                 selection,
                 launchStartedUtc,
-                exitCode is not 0
-                    ? "java-exited-nonzero"
-                    : "java-exited-shortly-after-package-load",
+                "java-exited-nonzero",
                 exitCode,
                 weaveHash,
                 weaveLoaderPath,
@@ -3923,7 +4203,54 @@ public partial class MainWindow : Window
                 cleanupResult);
             packageCrashCreated = true;
         }
-        await Dispatcher.InvokeAsync(() => UpdateGameExitStatus(processId, exitCode, packageCrashCreated));
+        await Dispatcher.InvokeAsync(() =>
+        {
+            if (!_launchUi.IsCurrent(launchAttemptId)) return;
+            UpdateGameExitStatus(processId, exitCode, packageCrashCreated);
+            LaunchButton.IsEnabled = _activeGameProcessIds.Count == 0;
+        });
+        _ = ResetLaunchStatusAsync(launchAttemptId);
+    }
+
+    private async Task CleanupOfficialLunarAfterGameAsync(
+        string launcherPath, LunarBackgroundLaunchService? windows,
+        CancellationTokenSource? windowCancellation, Task? windowTask,
+        SanitizedLaunchReport report)
+    {
+        var rootPid = _lunarLifecycle.ControlledRootProcessId;
+        report.Set("postGameOwnedRootPid", rootPid);
+        AddDiagnostic($"OfficialLunar post-game cleanup: ownedRootPid={rootPid}; graceful=close-launcher; no force fallback.");
+        try
+        {
+            var result = await Task.Run(() => _lunarLifecycle.CleanupAfterGameAsync(
+                launcherPath, TimeSpan.FromSeconds(10), CancellationToken.None));
+            var snapshot = await Task.Run(() => _lunarLifecycle.Capture(launcherPath));
+            report.Set("postGameGracefulShutdownSuccess", result.Success);
+            report.Set("postGameQuitCommandCompleted", result.CommandCompleted);
+            report.Set("postGameGracefullyClosedProcessIds", result.GracefullyClosedProcessIds);
+            report.Set("postGameRemainingProcessIds", result.RemainingProcessIds);
+            report.Set("postGameVisibleLauncherWindows", snapshot.VisibleLauncherWindowCount);
+            AddDiagnostic($"OfficialLunar post-game result: ownedRootPid={rootPid}; graceful={result.Success}; commandCompleted={result.CommandCompleted}; remaining=[{string.Join(",", result.RemainingProcessIds)}]; visibleWindows={snapshot.VisibleLauncherWindowCount}.");
+        }
+        catch (Exception exception)
+        {
+            report.Set("postGameGracefulShutdownSuccess", false);
+            report.Set("postGameCleanupError", exception.GetType().Name);
+            AddDiagnostic($"OfficialLunar post-game cleanup failed: {exception.GetType().Name}.");
+        }
+        finally
+        {
+            report.Set("postGameOwnedWindowShowObserved", windows?.OwnedWindowShown == true);
+            AddDiagnostic($"OfficialLunar owned window show observed={windows?.OwnedWindowShown == true}; see window classification log for hide result.");
+            windows?.Cancel();
+            windowCancellation?.Cancel();
+            if (windowTask is not null)
+            {
+                try { await windowTask; }
+                catch (Exception exception) { AddDiagnostic($"OfficialLunar window watcher ended: {exception.GetType().Name}."); }
+            }
+            windowCancellation?.Dispose();
+        }
     }
 
     private void UpdateGameExitStatus(int processId, int? exitCode, bool packageCrashCreated)
@@ -3945,8 +4272,8 @@ public partial class MainWindow : Window
 
         if (exitCode is 0)
         {
-            SetStatus(T("Готов к запуску", "Ready to launch"), StatusLevel.Ready,
-                T("Minecraft закрыт.", "Minecraft was closed."));
+            SetStatus(T("Minecraft закрыт", "Minecraft closed"), StatusLevel.Ready,
+                T("Код завершения: 0.", "Exit code: 0."));
         }
         else
         {
@@ -3971,8 +4298,10 @@ public partial class MainWindow : Window
         }
     }
 
-    private void EndLaunchAttempt()
+    private void EndLaunchAttempt(string? expectedAttemptId = null, bool resetStatus = true)
     {
+        var endingAttemptId = expectedAttemptId ?? _activeLaunchAttemptId;
+        if (endingAttemptId is null || !_launchUi.Complete(endingAttemptId)) return;
         ReleaseActiveLunarBackground();
         _activeLaunchPackageIds.Clear();
         var attemptId = Interlocked.Exchange(ref _activeLaunchAttemptId, null);
@@ -3986,20 +4315,41 @@ public partial class MainWindow : Window
 
         void UpdateButton()
         {
-            LaunchButton.IsEnabled = true;
+            if (!_launchUi.IsCurrent(endingAttemptId)) return;
+            LaunchButton.IsEnabled = _activeGameProcessIds.Count == 0;
             LaunchButton.Content = T("Запустить", "Launch");
             ShowLaunchControls(false);
             LaunchProgressPanel.Visibility = Visibility.Collapsed;
+            if (resetStatus) _ = ResetLaunchStatusAsync(endingAttemptId);
         }
 
         if (Dispatcher.CheckAccess()) UpdateButton();
         else Dispatcher.BeginInvoke(UpdateButton);
     }
 
+    private async Task ResetLaunchStatusAsync(string attemptId)
+    {
+        if (!await _launchUi.ResetAfterDelayAsync(attemptId) || Dispatcher.HasShutdownStarted) return;
+        await Dispatcher.InvokeAsync(() =>
+        {
+            if (!_launchUi.IsCurrent(attemptId) || _launchUi.Phase != "idle" ||
+                Volatile.Read(ref _launchInProgress) != 0 || _activeGameProcessIds.Count != 0 ||
+                !_officialLunarCleanup.IsCompleted) return;
+            LaunchProgressPanel.Visibility = Visibility.Collapsed;
+            LaunchProgressText.Text = string.Empty;
+            ShowLaunchControls(false);
+            CrashActionsPanel.Visibility = Visibility.Collapsed;
+            LaunchButton.Content = T("Запустить", "Launch");
+            SetStatus(T("Готов к запуску", "Ready to launch"), StatusLevel.Ready);
+        });
+    }
+
     private void SetLaunchProgress(string text)
     {
+        var attemptId = _activeLaunchAttemptId;
         void Update()
         {
+            if (attemptId is null || !_launchUi.IsCurrent(attemptId) || !_launchUi.Waiting) return;
             LaunchProgressText.Text = text;
             LaunchProgressPanel.Visibility = Visibility.Visible;
         }
@@ -4277,12 +4627,13 @@ public partial class MainWindow : Window
             CloseSupportDialog();
         if (!BwhRelayLifetimePolicy.ShouldHideInsteadOfClose(
                 _bwhApiRelay?.IsRunning == true,
-                _explicitExitRequested))
+                _explicitExitRequested, _launchUi.Busy,
+                !_officialLunarCleanup.IsCompleted))
             return;
 
         e.Cancel = true;
         Hide();
-        AddDiagnostic("Moonrise window hidden; BWH network bridge remains active until Minecraft exits.");
+        AddDiagnostic("Moonrise window hidden; launch monitoring and cleanup remain active until Minecraft exits. Use tray Exit for explicit shutdown.");
     }
 
     private void StopBwhRelayAfterLastGame()
@@ -4305,6 +4656,7 @@ public partial class MainWindow : Window
 
     private void InitializeTrayIcon()
     {
+        if (_visualQaMode || _trayIcon is not null) return;
         var resource = System.Windows.Application.GetResourceStream(new Uri("Assets/moonrise-tray.ico", UriKind.Relative));
         if (resource?.Stream is null) return;
 
@@ -4327,6 +4679,7 @@ public partial class MainWindow : Window
         }
 
         _trayIcon.DoubleClick += (_, _) => Dispatcher.BeginInvoke(RestoreFromExternalActivation);
+        AppDomain.CurrentDomain.ProcessExit += OnProcessExit;
         _trayOpenItem.Click += (_, _) => Dispatcher.BeginInvoke(RestoreFromExternalActivation);
         _trayExitItem.Click += (_, _) => Dispatcher.BeginInvoke(() =>
         {
@@ -4337,6 +4690,8 @@ public partial class MainWindow : Window
 
     private void MainWindow_Closed(object? sender, EventArgs e)
     {
+        DisposeTrayIcon();
+        _launchUi.CancelReset();
         _supportDialogCancellation?.Cancel();
         _supportDialogCancellation?.Dispose();
         _supportFlow?.Dispose();
@@ -4355,13 +4710,33 @@ public partial class MainWindow : Window
         ReleaseActiveLunarBackground();
         _bwhApiRelay?.Dispose();
         _bwhApiRelay = null;
-        if (_trayIcon is not null)
+    }
+
+    private void OnProcessExit(object? sender, EventArgs e) => DisposeTrayIcon();
+
+    internal void DisposeTrayIcon()
+    {
+        AppDomain.CurrentDomain.ProcessExit -= OnProcessExit;
+        DisposeTrayIcon(ref _trayIcon);
+    }
+
+    internal static void DisposeTrayIcon(ref Forms.NotifyIcon? ownedIcon)
+    {
+        // ProcessExit may run outside the dispatcher. Claim ownership once without
+        // dispatching back to a UI thread that may already be exiting.
+        var icon = Interlocked.Exchange(ref ownedIcon, null);
+        if (icon is null) return;
+        var image = icon.Icon;
+        var menu = icon.ContextMenuStrip;
+        try
         {
-            _trayIcon.Visible = false;
-            _trayIcon.Icon?.Dispose();
-            _trayIcon.ContextMenuStrip?.Dispose();
-            _trayIcon.Dispose();
-            _trayIcon = null;
+            icon.Visible = false;
+        }
+        finally
+        {
+            icon.Dispose();
+            image?.Dispose();
+            menu?.Dispose();
         }
     }
 

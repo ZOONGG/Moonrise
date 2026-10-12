@@ -6,6 +6,23 @@ public sealed class CurrentLaunchPlanFactory
 {
     private readonly LaunchPlanBuilder _builder = new();
 
+    // Explicit development smoke only; production auto-selection stays in Create.
+    public LaunchPlan CreateLegacyLoaderSmoke(
+        IReadOnlyList<PackageInfo> weaveMods,
+        IReadOnlyList<PackageInfo> javaAgents,
+        string weaveLoaderPath,
+        string? mixinDiagnosticAgentPath = null,
+        string? mixinDiagnosticOptions = null)
+    {
+        if (weaveMods.Count != 0 || javaAgents.Count != 0)
+            throw new InvalidOperationException("Legacy loader smoke requires zero enabled mods and zero package agents.");
+        var diagnostics = string.IsNullOrWhiteSpace(mixinDiagnosticAgentPath)
+            ? Array.Empty<TechnicalLaunchAgentDescriptor>()
+            : [new TechnicalLaunchAgentDescriptor("moonrise-mixin-discovery-diagnostic",
+                mixinDiagnosticAgentPath, LaunchAgentRole.CompatibilityAdapter, mixinDiagnosticOptions)];
+        return _builder.Build([], WeaveRuntimeMode.Legacy, weaveLoaderPath, technicalAgents: diagnostics);
+    }
+
     public LaunchPlan Create(
         IReadOnlyList<PackageInfo> weaveMods,
         IReadOnlyList<PackageInfo> javaAgents,

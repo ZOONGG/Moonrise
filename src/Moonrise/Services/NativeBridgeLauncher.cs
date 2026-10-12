@@ -49,6 +49,25 @@ public sealed class NativeBridgeLauncher
         if (!File.Exists(nativeBridgePath))
             throw new FileNotFoundException("Native process bridge was not found.", nativeBridgePath);
 
+        launchPlan = LegacyMappingResourceAdapter.Prepare(launchPlan,
+            Path.GetDirectoryName(Path.GetFullPath(bridgeConfigPath))!);
+
+        launchPlan = CurrentWeaveSyntheticAdapter.Prepare(launchPlan,
+            Path.GetDirectoryName(Path.GetFullPath(bridgeConfigPath))!);
+
+        launchPlan = PrepareCurrentLinkageDiagnostic(launchPlan,
+            Environment.GetCommandLineArgs().Contains("--dev-jvm-startup-diagnostic", StringComparer.Ordinal),
+            Environment.GetEnvironmentVariable("MOONRISE_CURRENT_LINKAGE_AGENT"),
+            Environment.GetEnvironmentVariable("MOONRISE_DEV_STARTUP_CAPTURE"));
+
+        // Existing package agents can emit opt-in, non-sensitive readiness
+        // evidence into the developer capture directory during real launches.
+        if (Environment.GetCommandLineArgs().Contains("--dev-jvm-startup-diagnostic", StringComparer.Ordinal) &&
+            Environment.GetEnvironmentVariable("MOONRISE_DEV_STARTUP_CAPTURE") is { Length: > 0 } proofDirectory &&
+            Path.IsPathFullyQualified(proofDirectory) && Directory.Exists(proofDirectory))
+            launchPlan = launchPlan with { JvmProperties = launchPlan.JvmProperties.Append(
+                new LaunchJvmProperty("moonrise.proofDir", proofDirectory)).ToArray() };
+
         BridgeConfigurationFile.WriteAtomic(
             bridgeConfigPath,
             launchPlan,
@@ -63,6 +82,20 @@ public sealed class NativeBridgeLauncher
     }
 
     public const string BridgeConfigEnvironmentVariable = "MOONRISE_BRIDGE_CONFIG";
+
+    internal static LaunchPlan PrepareCurrentLinkageDiagnostic(LaunchPlan plan, bool developerCapture,
+        string? agent, string? evidence)
+    {
+        // Explicit developer capture only. No diagnostic agent enters legacy/clean launches.
+        if (plan.WeaveMode != WeaveRuntimeMode.Current || !developerCapture || string.IsNullOrWhiteSpace(agent)) return plan;
+        ValidatePath(agent, nameof(agent));
+        if (!File.Exists(agent)) throw new FileNotFoundException("Current linkage diagnostic missing.", agent);
+        if (string.IsNullOrWhiteSpace(evidence) || !Path.IsPathFullyQualified(evidence) || !Directory.Exists(evidence))
+            throw new InvalidOperationException("Current linkage diagnostic requires an absolute evidence directory.");
+        return plan with { Agents = plan.Agents.Append(new LaunchAgent(agent,
+            Path.Combine(evidence, "current-linkage.log"), "moonrise-current-linkage-diagnostic",
+            LaunchAgentRole.CompatibilityAdapter)).ToArray() };
+    }
     private const uint CreateSuspended = 0x00000004;
     private const uint CreateUnicodeEnvironment = 0x00000400;
     private const uint MemCommit = 0x00001000;
@@ -149,6 +182,16 @@ public sealed class NativeBridgeLauncher
         string? launcherArgument,
         bool hideLauncherWindow)
     {
+        // Explicit developer smoke only; the pinned production bridge is unchanged.
+        if (Environment.GetCommandLineArgs().Contains("--dev-jvm-startup-diagnostic", StringComparer.Ordinal))
+        {
+            var captureDirectory = Environment.GetEnvironmentVariable("MOONRISE_DEV_STARTUP_CAPTURE");
+            if (string.IsNullOrWhiteSpace(captureDirectory) || !Path.IsPathFullyQualified(captureDirectory) || !Directory.Exists(captureDirectory))
+                throw new InvalidOperationException("Startup diagnostic requires an existing absolute evidence directory.");
+            nativeBridgePath = Path.Combine(captureDirectory, "Moonrise.Native.dll");
+            if (!File.Exists(nativeBridgePath))
+                throw new FileNotFoundException("Build/copy the developer startup bridge before this smoke.", nativeBridgePath);
+        }
         var environment = BuildEnvironmentBlock(bridgeConfigPath);
         var environmentPointer = Marshal.StringToHGlobalUni(environment);
         var commandLine = new StringBuilder(JavaToolOptionsBuilder.Quote(Path.GetFullPath(launcherExecutable)));

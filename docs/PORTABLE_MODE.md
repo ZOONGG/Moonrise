@@ -1,39 +1,24 @@
-# Portable mode
+# ZIP distributions and data storage
 
-The portable artifact is named `Moonrise-Portable-<version>-x64.zip`. Extract
-the complete archive to a writable directory and run `Moonrise.exe`; do not run
-the executable from inside the ZIP.
+The production Velopack branch creates `Moonrise.App-beta-Portable.zip` (the legacy Inno branch uses `Moonrise-Portable-<version>-x64.zip`). When published, extract the entire archive to a writable directory and run `Moonrise.exe`. Do not run inside the ZIP or move the EXE away from its bundled resources.
 
-Portable mode is enabled only when this marker is beside the executable:
-
-```text
-Moonrise.portable
-```
-
-With the marker present, Moonrise keeps mutable data beside the application.
-Without it, a packaged build is treated as installed and stores data under
-`%LocalAppData%\Moonrise`.
-
-Both modes use this logical layout:
+**Current discovery uses `%LOCALAPPDATA%\Moonrise` for normal, development and ZIP builds.** The historical `Moonrise.portable` marker no longer selects an executable-relative data root. Therefore this ZIP is a no-install distribution, not a fully self-contained portable library. Copies share the normal library; avoid running older unguarded builds against newer data formats.
 
 ```text
 Moonrise data root
-├─ packages
-│  ├─ user-mods
-│  ├─ user-agents
-│  └─ managed
+├─ packages/weave
+├─ packages/agents
+├─ packages/metadata
+├─ settings
+├─ adapters
 ├─ cache
-├─ sessions
-├─ logs
-└─ settings
+├─ cosmetics
+├─ temp
+└─ logs/crashes
 ```
 
-On first use after upgrading from the legacy layout, Moonrise copies recognized
-Moonrise-owned settings, packages, appearance packs, profiles, cache, and logs
-into the new layout. Existing destination files win, and the old copy is left
-in place as a recovery source. Migration does not inspect or copy Lunar account,
-session, or token files.
+Explicit roots used by tests/visual QA can be isolated. Local update-feed smoke builds use `%LOCALAPPDATA%\Moonrise.UpdateSmoke/<feed-hash>` instead of the main library.
 
-To switch a portable extraction to installed behavior, use Setup rather than
-deleting the marker from an existing portable copy. Back up the portable data
-root before moving between modes.
+ZIP and FriendPortable builds do not receive integrated Velopack updates. Replace application files manually from a trusted future release with Moonrise closed, preserving bundled resource layout and backing up the separate data root. Do not delete the marker as a migration procedure: installing through Setup is a distinct path. See [updates](UPDATES.md) and [consolidated storage](consolidated-user-data.md).
+
+No public ZIP download is currently available; release assets will be published manually by the owner.

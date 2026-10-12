@@ -7,13 +7,13 @@
 <p align="center"><strong>A modern mod manager and launcher for Lunar Client.</strong></p>
 
 <p align="center">
-  <strong>English</strong> | <a href="README_RU.md">Русский</a>
+  <strong>English</strong> | <a href="README_RU.md">Русский</a> | <a href="docs/roadmap.md"><strong>Roadmap</strong></a>
 </p>
 
 <p align="center">
   <a href="https://github.com/ZOONGG/Moonrise/actions/workflows/build.yml"><img alt="Build" src="https://github.com/ZOONGG/Moonrise/actions/workflows/build.yml/badge.svg"></a>
-  <a href="https://github.com/ZOONGG/Moonrise/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/ZOONGG/Moonrise?display_name=tag"></a>
-  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/ZOONGG/Moonrise"></a>
+  <a href="https://github.com/ZOONGG/Moonrise/releases"><img alt="Release in preparation" src="https://img.shields.io/badge/release-in_preparation-lightgrey"></a>
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-green"></a>
   <img alt="Windows" src="https://img.shields.io/badge/platform-Windows-0078D4?logo=windows">
   <img alt=".NET 8" src="https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet">
 </p>
@@ -29,21 +29,23 @@ Moonrise is a companion application, not a replacement for the official launcher
 ## Key features
 
 - Detects the official Lunar Launcher and reads existing Lunar profile metadata.
-- Selects an exact Minecraft version and checks that its Lunar profile already exists.
+- Selects an existing Minecraft 1.8.9 profile.
 - Imports, validates, enables, disables, and removes local Weave mods and Java agents.
 - Saves, applies, imports, and exports local launch loadouts without embedding JAR files.
-- Can open an optional signed package catalog and verifies its signature, HTTPS source, size, and SHA-256 before import.
+- Provides an offline Package Catalog for Cosmetics/Veyra and optional verified remote catalogs.
 - Downloads the official Weave Loader 1.3.4 on demand and verifies its SHA-256 and manifest entry point.
 - Checks declared package compatibility before launch and offers a safe-launch mode with third-party packages disabled.
 - Shows local diagnostics, redacts common token formats, and creates a local redacted crash analysis after an abnormal game exit.
 - Provides equivalent Russian and English controls.
+- Tracks launch/process lifecycle and cleanup; opening Moonrise again activates its existing instance.
+- Includes launch settings, installer packaging and Velopack beta-update controls for eligible installations.
 
 <p align="center">
   <img src="docs/images/en/moonrise-mods.png" width="49%" alt="Moonrise Weave mods library">
   <img src="docs/images/en/moonrise-agents.png" width="49%" alt="Moonrise Java agents library">
 </p>
 
-Screenshots contain synthetic package metadata created only for documentation; Moonrise does not ship those packages or any user JARs.
+Screenshots contain synthetic package metadata created only for documentation; those example packages are not shipped. The current catalog separately includes Cosmetics and Veyra.
 
 ## How Moonrise works
 
@@ -63,28 +65,42 @@ Moonrise reads the official launcher's profile database to find Lunar profiles, 
 
 ## Requirements
 
-- Windows 10 or Windows 11, x64.
-- The current official Lunar Launcher installed.
-- A Lunar Client profile for the exact Minecraft version, created or launched at least once in the official launcher.
-- Trusted Weave mods and/or Java agents compatible with that client build.
+- Windows 10/11 x64; real runtime evidence is from the user's Windows x64 environment, not a certification of every Windows build.
+- Official Lunar Launcher installed, signed in, with Minecraft **1.8.9** launched at least once.
+- An existing Lunar 1.8.9 profile and trusted packages compatible with that build.
 
-Moonrise lists common Minecraft versions from 1.8.9 through 1.21.4 and also discovers versions from the official profile database. A version appearing in the selector is not a compatibility guarantee.
+The documented Lunar Launcher baseline is **3.7.23-ow** (ProductVersion 3.7.23.0), with Lunar's Java **17.0.18**. Current recovery scope is Minecraft **1.8.9 only**. Later Lunar updates require another compatibility check. Self-contained packaged builds include .NET 8; source builds require the SDK.
 
 ## Installation
 
-1. Open the [latest GitHub Release](https://github.com/ZOONGG/Moonrise/releases/latest).
-2. Download `Moonrise-<version>-win-x64.zip` and the matching `.sha256` file.
-3. Compare the published checksum:
+**No public release has been published yet.** The owner will publish release assets manually on [GitHub Releases](https://github.com/ZOONGG/Moonrise/releases). Do not treat this link as an available download today.
+
+When a release is available:
+
+1. Read its notes and choose the Windows x64 installer supplied with that release.
+2. Compare its SHA-256 with the published checksum before running it:
 
    ```powershell
-   (Get-FileHash .\Moonrise-<version>-win-x64.zip -Algorithm SHA256).Hash
-   Get-Content .\Moonrise-<version>-win-x64.zip.sha256
+   (Get-FileHash .\Moonrise.App-beta-Setup.exe -Algorithm SHA256).Hash
+   Get-Content .\Moonrise.App-beta-Setup.exe.sha256
    ```
 
-4. Extract the complete ZIP to a writable folder.
-5. Run `Moonrise.exe`.
+3. Run `Moonrise.App-beta-Setup.exe`, then start Moonrise from its shortcut. Velopack installs per user into `%LOCALAPPDATA%\Moonrise.App` without administrator rights.
+4. Use this production **Velopack** installer for integrated beta updates. Older Inno installations do not become Velopack installations automatically. `Moonrise.UpdateSmoke` builds are local acceptance artifacts and must not be downloaded as a public release.
 
-Published builds are self-contained; users do not need to install .NET. Releases are currently unsigned, so Windows may show a SmartScreen prompt. Verify the release source and checksum before continuing.
+A ZIP can be used without installation if the release supplies one: extract the **whole** archive to a writable folder and run `Moonrise.exe`. ZIP builds have no integrated Velopack updates. Despite the historical `Portable` filename/marker, current builds keep settings and packages in `%LOCALAPPDATA%\Moonrise`, not beside the EXE. See [installation](docs/INSTALLER.md), [ZIP behavior](docs/PORTABLE_MODE.md), and [updates](docs/UPDATES.md).
+
+Prepared installers are unsigned; Windows may show SmartScreen. Check the source and checksum. Packaged builds are self-contained and do not require a separate .NET installation.
+
+## Automatic updates
+
+Installed **Velopack** builds check the public [Moonrise GitHub Releases](https://github.com/ZOONGG/Moonrise/releases) source on startup when **Check for updates** is enabled. The current channel is **beta**: only newer `-beta.N` versions are accepted, including published prereleases; downgrades are disabled. A stable-channel switch is not implemented.
+
+Open **Settings → Updates** to check manually. **Automatically download updates** is enabled by default; turn it off to use **Download** yourself. Moonrise shows availability, download progress and a ready-to-restart notification. Velopack verifies and stages the package in its installation package directory.
+
+After download, finish Minecraft and current Moonrise operations, then use **Install and restart**. A staged update can also be applied on the next startup through Moonrise's guarded apply path. Velopack's unconditional startup auto-apply is disabled. Application/tray cleanup precedes restart; active launch/game or operations block application. Settings and installed packages remain in the separate LocalAppData data root; the updater does not migrate or replace that root. Real installed-update preservation and apply-failure recovery are still pending acceptance tests.
+
+This requires a real Velopack installation, network access to public GitHub, and manually published matching beta feed/package assets (`releases.beta.json` and full `.nupkg`). ZIP, Inno and development builds have Velopack updates disabled. No production feed is available before the owner publishes a release. See [update details](docs/UPDATES.md).
 
 ## First launch
 
@@ -115,7 +131,7 @@ Moonrise requires `weave.mod.json` and reads its generic package metadata. Impor
 2. Select **Add JAR** and choose one or more trusted agent JARs.
 3. Review the detected title and version.
 
-A Java-agent JAR must declare `Premain-Class` or `Agent-Class` in `META-INF/MANIFEST.MF`.
+Import recognizes `Premain-Class` or `Agent-Class` in `META-INF/MANIFEST.MF`, but launch-time `-javaagent` loading requires a valid `Premain-Class`. An attach-only `Agent-Class` declaration is not sufficient for startup.
 
 > [!WARNING]
 > Mods and Java agents are executable code. Only load JAR files from sources you trust.
@@ -123,11 +139,27 @@ A Java-agent JAR must declare `Premain-Class` or `Agent-Class` in `META-INF/MANI
 ## Enabling and removing packages
 
 - Use the switch beside a package to include or exclude it from future launches.
-- Use the remove button to delete Moonrise's local copy from `user-mods/` or `user-agents/`.
-- Use launch loadouts to save the selected version and enabled package filenames. Loadout exports contain configuration metadata, not JAR content.
-- Optional signed catalogs are user-selected; Moonrise has no built-in mod list. A valid catalog signature and package hash prove catalog integrity, not that third-party code is harmless or compatible.
+- Removal deletes the selected Moonrise library copy; keep a backup of imported originals.
+- Launch loadouts save version/package selections; exports contain configuration metadata, not JARs.
+- You can also drag and drop JARs, or open the data folder and put Weave mods in `packages/weave/` and agents in `packages/agents/`. New files are detected automatically; do not edit `packages/metadata/` manually.
 
-Moonrise ships with no mods and no user-provided Java agents.
+## Package Catalog
+
+The built-in catalog supplies **Moonrise Cosmetics 1.3.2** and **Veyra 0.1.1-moonrise.1** from reviewed bundled artifacts, with SHA-256 verification and offline installation. Open **Catalog**, choose the package, confirm installation, then enable it in **Library**. No separate download URL is needed for these bundled versions.
+
+Optional remote catalogs have separate signature/source/hash checks. A valid signature or hash proves integrity, not runtime compatibility or safety. External-source and unavailable packages must not be treated as one-click installable.
+
+### Moonrise Cosmetics
+
+Our Java agent unlocks and displays Lunar cosmetics locally, preserves cosmetics stores during transient reconnects, and saves/replays outfit selections under `%LOCALAPPDATA%\Moonrise\cosmetics`. **1.3.2** is confirmed by the manifest, source/build pipeline and bundled catalog hash. It includes ASM and can run without a Weave mod or loader. Enable it in the Java-agent library and launch the supported Lunar 1.8.9 profile; standalone local cosmetics and ordinary-mode regression were user-confirmed on the documented Lunar baseline.
+
+Local unlocking **does not guarantee visibility to other players using ordinary Lunar without the agent**. Moonrise Cosmetics Network is future work. Details: [agent documentation](extensions/Moonrise.Cosmetics/README.md).
+
+### Veyra
+
+Our [Veyra Weave mod](https://github.com/ZOONGG/Moonrise-Veyra) derives from the archived [Stormy project by Tryflle and its contributors](https://github.com/Tryflle/stormy). It is evolving its own identity, UI and configuration. The catalog supplies **0.1.1-moonrise.1** for Minecraft 1.8.9 / Weave 1.3.4; **Enter** opens ClickGUI. Current source registers combat, movement, player and render modules, including AimAssist, AutoClicker, Timer, SpeedMine, AutoTool, Array List and ESP modules, with configuration under `.weave/veyra`. Registration is not a claim that every feature has passed runtime testing. Standalone Veyra operation was user-confirmed; shared mixin targets can still conflict with other mods.
+
+Stormy's original authors retain credit for the source foundation. Owner-confirmed redistribution permission is recorded in [third-party notices](THIRD_PARTY_NOTICES.md); neither upstream repository currently declares a public license, so Moonrise's MIT license does not relicense that code. Some modules may violate server rules; use them only where permitted.
 
 ## Launch configuration
 
@@ -139,43 +171,52 @@ In **Settings**, **Safe launch** starts a diagnostic session without third-party
 
 ![Moonrise diagnostics in English](docs/images/en/moonrise-diagnostics.png)
 
-The **Diagnostics** page shows local Moonrise initialization, package, compatibility, and launch events. Managed logs are stored under `logs/`; abnormal game exits can produce a redacted text report under `crash-reports/` with an exit code, a basic classification, recommendations, and up to 100 recent managed diagnostic lines.
+The **Diagnostics** page shows local Moonrise initialization, package, compatibility, and launch events. Managed logs are stored under `logs/`; abnormal game exits can produce a redacted text report under `logs/crashes/` with an exit code, a basic classification, recommendations, and up to 100 recent managed diagnostic lines.
 
 Token redaction reduces risk but cannot guarantee that arbitrary third-party text contains no private information. Before sharing a log or crash report, remove personal paths, usernames, account details, identifiers, private package names, and full command lines. Never upload account files or JARs.
 
 ## Security and privacy
 
-> [!IMPORTANT]
-> Moonrise does not request or manage Microsoft, Minecraft, or Lunar account credentials. It must not read, copy, store, log, or modify account/session tokens.
+Moonrise does not request or manage Microsoft, Minecraft or Lunar credentials. Official Lunar components perform authentication and ownership checks. Normal launch uses the existing profile database read-only and changes the selected `gameProfile` launcher setting; it does not implement a replacement login flow.
 
-Moonrise stores only its own local configuration and runtime data:
+Current normal, development and ZIP builds share `%LOCALAPPDATA%\Moonrise`:
 
 ```text
-moonrise-settings.json  language, Lunar client marker, selected version, launcher path,
-                        close/safe-launch preferences, active loadout, disabled filenames
-profiles/               local loadout JSON files; no JAR content
-user-mods/              user-owned Weave mod JARs
-user-agents/            user-owned Java-agent JARs
-runtime/weave/           verified Weave Loader download
-runtime/sessions/        temporary package snapshots and launch proofs
-logs/                    redacted Moonrise-managed logs
-crash-reports/           redacted local Moonrise crash analyses
+packages/weave/         installed/imported Weave JARs
+packages/agents/        installed/imported Java agents
+packages/metadata/      library index and enabled states
+settings/               Moonrise settings and loadouts
+adapters/               separate compatibility dependencies
+cache/                  downloads and runtime preparation
+cosmetics/              local outfit selections
+temp/                   temporary launch sessions
+logs/                   diagnostics; crash analyses in logs/crashes/
 ```
 
-To select an existing profile, Moonrise opens `.lunarclient/db/profiles.db` read-only and changes only `settings.gameProfile` in `.lunarclient/settings/launcher.json`. It does not access the official launcher's account or token files.
-
-All user content and runtime state above are excluded from source control and release archives.
+The executable folder holds bundled application resources. Local update-smoke builds use an isolated data root. Third-party original JARs remain unchanged; adapters and explicitly identified maintained builds are separate. User packages, settings, logs and account data must not be included in release archives. See [storage details](docs/consolidated-user-data.md).
 
 ## Compatibility limitations
 
-- Lunar Client, the official Lunar Launcher, Weave Loader, or profile formats may change without notice.
-- Listing a Minecraft version does not mean that Moonrise, Weave Loader, or a particular package has been verified with it.
-- Package metadata and preflight checks cannot prove runtime compatibility or safety.
-- Moonrise cannot guarantee that every mod or Java agent works with every Lunar build or with every other package.
-- Moonrise does not bypass anti-cheat, authentication, ownership checks, or client restrictions.
-- Back up important local configuration before testing new third-party code.
+- Supported scope: official Lunar Client, Minecraft **1.8.9**, Windows x64. Forge/Fabric and arbitrary mod formats are not supported.
+- Current Weave **1.3.4** and bounded legacy **0.2.6** paths have different API contracts. Ordinary mode rejects unsupported mixed generations; experimental mixed mode is opt-in and limited to exact supported artifacts.
+- Prior user-confirmed combinations include RavenWeave 1.1.4 + maintained BWH and Raven + BWH + unrestricted + Veyra + Cosmetics. These use specific adapters/maintained builds and do not establish direct compatibility of arbitrary upstream JARs. Cosmetics is now 1.3.2; the ordinary-mode regression and repeat launch passed. See [bounded Core evidence](docs/stage1-core-validation-20261012.md).
+- Java-agent manifest validation and package metadata cannot prove safety or runtime compatibility. Lunar updates and shared mixin/ASM targets may break packages.
+- Open investigations include Raven's missing `changeYaw` callsite, BedPlates shader behavior and observed upstream authentication-service connectivity errors. Do not assume every module works because the menu opens.
+- Full standalone close-during-cleanup/tray acceptance and installed Velopack update/apply recovery still need real checks. Stage 1 remains open.
+- Moonrise offers no anti-cheat or server-rule bypass guarantee. Back up important configuration before trying new code.
+
+## Troubleshooting
+
+- **Profile missing:** launch Lunar 1.8.9 once through the official launcher and verify its path in Settings.
+- **Lunar already running:** close an existing unowned launcher normally, including its tray entry. Do not force-kill unrelated processes.
+- **Package fails:** disable the newly added package or use Safe launch, inspect Diagnostics, and check its exact Weave generation and compatibility build. Import success is not runtime success.
+- **Updates unavailable:** confirm the build was installed through Velopack; Inno/ZIP/development builds do not use this updater. Retry network failures from Settings → Updates.
+- **Restart blocked:** finish Minecraft and ongoing Moonrise operations. Keep Moonrise alive until launch cleanup completes; explicit tray Exit stops its monitoring.
+- Before opening an [issue](https://github.com/ZOONGG/Moonrise/issues), include versions and sanitized diagnostics; never upload credentials, account stores or private JARs.
 
 ## Building from source
+
+> The build uses reviewed, hash-pinned runtime artifacts supplied with the current source snapshot, including Cosmetics, Veyra and the mixed-Weave adapters. Preserve those assets and accompanying license/source notices. The earlier [Core QA](docs/final-core-qa-20261012.md) missing-artifact finding predates the Final Catalog & Build Fix, which now explicitly includes these files; this documentation pass did not repeat a clean-checkout build.
 
 Requirements: Windows 10/11 x64, the .NET 8 SDK, Git, and PowerShell.
 
@@ -214,11 +255,17 @@ Do not disclose vulnerabilities, credentials, or private files in a public issue
 
 ## Roadmap
 
-- Broader automated compatibility coverage for official launcher and profile-format changes.
-- More guided privacy review before exporting diagnostic bundles.
-- Expanded end-to-end UI and clean-checkout release validation.
+The [five-stage Roadmap](docs/roadmap.md) tracks Core, Experience, Catalog & Cosmetics, Expansion and Launch. **Stage 1 remains in progress.** Network cosmetics, other clients/platforms and additional mod formats are plans, not available features or release-date commitments.
 
-Roadmap items are intentions, not release commitments.
+## Inspiration & Credits
+
+**Moonrise was inspired by Lunar Client QT.** Thanks to Nilsen84 and the LunarQT contributors for the launcher idea, and to the fork maintainers:
+
+- [Original Lunar Client QT](https://github.com/Nilsen84/lunar-client-qt)
+- [Lunar Client QT 2](https://github.com/Nilsen84/lcqt2)
+- [Lunar Client QT fork by Youded-byte](https://github.com/Youded-byte/lunar-client-qt)
+
+Moonrise developed as a separate application with its own architecture, interface and compatibility mechanisms. Inspiration does not imply that all Moonrise code was written by LunarQT authors. Veyra's Stormy source ancestry is credited above; shipped ASM, modified legacy Weave components and native dependencies retain their notices in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## License
 

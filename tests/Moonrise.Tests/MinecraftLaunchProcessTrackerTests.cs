@@ -6,6 +6,34 @@ namespace Moonrise.Tests;
 
 public sealed class MinecraftLaunchProcessTrackerTests
 {
+    [Fact]
+    public void SeededLaunchIdentityTracksGameWithoutWindowOwnershipRefresh()
+    {
+        var tracker = new MinecraftLaunchProcessTracker();
+        tracker.SeedVerifiedLauncher(10, Start);
+        var root = Process(10, 1, "Lunar Client", 0);
+        var game = Process(30, 10, "javaw", 1, "LWJGL", "Minecraft", true);
+        var unrelated = Process(40, 1, "javaw", 1, "LWJGL", "Minecraft", true);
+        var candidates = tracker.Observe(new[] { root, game, unrelated }.ToDictionary(p => p.ProcessId),
+            Array.Empty<int>(), new HashSet<int>());
+        Assert.Equal(30, Assert.Single(candidates).ProcessId);
+        for (var sample = 0; sample < 5; sample++)
+            Assert.Null(tracker.ObserveUsableWindow(candidates));
+        Assert.Equal(30, tracker.ObserveUsableWindow(candidates)!.ProcessId);
+    }
+
+    [Fact]
+    public void SeededLauncherPidReuseCannotAdoptJavaChild()
+    {
+        var tracker = new MinecraftLaunchProcessTracker();
+        tracker.SeedVerifiedLauncher(10, Start);
+        var reusedRoot = Process(10, 1, "Lunar Client", 10);
+        var game = Process(30, 10, "javaw", 11, "LWJGL", "Minecraft", true);
+        Assert.Empty(tracker.Observe(new[] { reusedRoot, game }.ToDictionary(p => p.ProcessId),
+            Array.Empty<int>(), new HashSet<int>()));
+        Assert.Null(tracker.ObserveUsableWindow([game]));
+    }
+
     private static readonly DateTimeOffset Start = DateTimeOffset.Parse("2026-10-03T19:18:21Z");
     private static ProcessRecord Process(int id, int parent, string name, int seconds,
         string windowClass = "", string title = "", bool visible = false) =>
@@ -93,5 +121,24 @@ public sealed class MinecraftLaunchProcessTrackerTests
         Assert.True(tracker.SawMinecraft);
         Assert.Empty(Observe(tracker, Process(10, 1, "Lunar Client", 0)));
         Assert.True(tracker.SawMinecraft);
+    }
+
+    [Fact]
+    public void RuntimePidFindsGameAfterUnobservedParentAndRejectsOldIdentity()
+    {
+        var tracker = new MinecraftLaunchProcessTracker();
+        var game = Process(30, 999, "javaw", 2, "LWJGL", "Minecraft", true);
+        tracker.ObserveRuntimeProcess(game, Start);
+        Assert.Equal(30, Assert.Single(Observe(tracker, game)).ProcessId);
+        for (var sample = 0; sample < 5; sample++) Assert.Null(tracker.ObserveUsableWindow([game]));
+        Assert.Equal(game, tracker.ObserveUsableWindow([game]));
+        var old = new MinecraftLaunchProcessTracker();
+        old.ObserveRuntimeProcess(game, Start.AddSeconds(3));
+        Assert.Empty(Observe(old, game));
+        Assert.False(old.SawMinecraft);
+        var reused = Process(30, 1, "javaw", 10, "LWJGL", "Minecraft", true);
+        tracker.ObserveRuntimeProcess(reused, Start);
+        Assert.Empty(Observe(tracker, reused));
+        Assert.False(tracker.IsMinecraft(reused));
     }
 }

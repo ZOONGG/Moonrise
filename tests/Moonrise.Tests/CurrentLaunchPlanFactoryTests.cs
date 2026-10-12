@@ -7,6 +7,45 @@ namespace Moonrise.Tests;
 public sealed class CurrentLaunchPlanFactoryTests
 {
     [Fact]
+    public void LegacySmokeDiagnosticOptionsReachStructuredMnr4WithoutPackageAgents()
+    {
+        const string options = @"C:\runtime\weave.jar|C:\logs\discovery.log";
+        var plan = new CurrentLaunchPlanFactory().CreateLegacyLoaderSmoke([], [],
+            @"C:\runtime\weave.jar", @"C:\runtime\diagnostic.jar", options);
+        Assert.Empty(plan.ModPaths);
+        Assert.Equal(["moonrise-mixin-discovery-diagnostic", "weave-loader-legacy"],
+            plan.Agents.Select(agent => agent.RuntimeId).ToArray());
+        Assert.DoesNotContain(plan.Agents, agent => agent.Role == LaunchAgentRole.PackageAgent);
+        var config = NativeBridgeConfigurationBuilder.BuildLaunchPlan(plan, @"C:\runtime\empty-mods");
+        Assert.Contains("\t" + options + "\tmoonrise-mixin-discovery-diagnostic\t", config);
+    }
+
+    [Fact]
+    public void LegacyLoaderSmokeEmitsExactlyOneStructuredAgentAndNoMods()
+    {
+        var plan = new CurrentLaunchPlanFactory().CreateLegacyLoaderSmoke([], [], @"C:\runtime\weave-0.2.6.jar");
+        Assert.Equal(WeaveRuntimeMode.Legacy, plan.WeaveMode);
+        Assert.Empty(plan.ModPaths);
+        var agent = Assert.Single(plan.Agents);
+        Assert.Equal(LaunchAgentRole.WeaveLoader, agent.Role);
+        Assert.Equal("weave-loader-legacy", agent.RuntimeId);
+        var config = NativeBridgeConfigurationBuilder.BuildLaunchPlan(plan, @"C:\runtime\empty-mods");
+        Assert.Single(config.Split('\n'), line => line.StartsWith("agent\t", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(PackageKind.WeaveMod)]
+    [InlineData(PackageKind.JavaAgent)]
+    public void LegacyLoaderSmokeRejectsEnabledPackages(PackageKind kind)
+    {
+        var package = Package("unexpected", kind, @"C:\packages\unexpected.jar");
+        Assert.Throws<InvalidOperationException>(() => new CurrentLaunchPlanFactory().CreateLegacyLoaderSmoke(
+            kind == PackageKind.WeaveMod ? [package] : [],
+            kind == PackageKind.JavaAgent ? [package] : [],
+            @"C:\runtime\weave.jar"));
+    }
+
+    [Fact]
     public void CurrentWeavePlanMatchesExistingLoaderThenAgentOrder()
     {
         var plan = new CurrentLaunchPlanFactory().Create(

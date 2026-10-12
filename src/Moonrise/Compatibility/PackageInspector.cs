@@ -68,10 +68,44 @@ public static class PackageInspector
                 using var doc = JsonDocument.Parse(Read(weave));
                 var root = doc.RootElement;
                 if (root.ValueKind != JsonValueKind.Object) throw new InvalidDataException("Weave metadata must be an object.");
-                foreach (var key in new[] { "name", "modId", "id", "compiledFor", "namespace", "entrypoints", "hooks", "tweakers", "mixins", "dependencies" })
+                foreach (var key in new[] { "name", "modId", "id", "compiledFor", "namespace", "entrypoints", "entryPoints", "hooks", "tweakers", "mixins", "mixinConfigs", "accessWideners", "dependencies" })
                     if (root.TryGetProperty(key, out var value)) metadata["weave." + key] = value.GetRawText();
                 if (root.TryGetProperty("compiledFor", out var compiled)) mc = Scalar(compiled);
                 if (root.TryGetProperty("dependencies", out var dependencies)) ReadDependencies(dependencies, deps);
+                // Validate current declarations and hooks shared by both generations,
+                // without loading bytecode or rewriting the imported archive.
+                foreach (var key in new[] { "entryPoints", "hooks", "mixinConfigs", "accessWideners" })
+                {
+                    if (!root.TryGetProperty(key, out var declarations)) continue;
+                    if (declarations.ValueKind != JsonValueKind.Array)
+                        throw new InvalidDataException(key + " must be an array.");
+                    foreach (var declaration in declarations.EnumerateArray())
+                    {
+                        if (declaration.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(declaration.GetString()))
+                            throw new InvalidDataException(key + " must contain non-empty strings.");
+                        var name = declaration.GetString()!;
+                        var resource = key is "entryPoints" or "hooks" ? name.Replace('.', '/') + ".class" : name;
+                        if (archive.GetEntry(resource) is not { } declaredEntry)
+                        {
+                            issues.Add(new("weave.declaration.missing", Severity.Error, key + " target is absent: " + name, path));
+                            continue;
+                        }
+                        if (key != "mixinConfigs") continue;
+                        using var config = JsonDocument.Parse(Read(declaredEntry));
+                        var configRoot = config.RootElement;
+                        var prefix = configRoot.TryGetProperty("package", out var package) ? package.GetString() + "." : "";
+                        foreach (var side in new[] { "mixins", "client", "server" })
+                        {
+                            if (!configRoot.TryGetProperty(side, out var mixins)) continue;
+                            foreach (var mixin in mixins.EnumerateArray())
+                            {
+                                var target = (prefix + mixin.GetString()).Replace('.', '/') + ".class";
+                                if (archive.GetEntry(target) == null)
+                                    issues.Add(new("weave.mixin.missing", Severity.Error, "Mixin class is absent: " + target, path));
+                            }
+                        }
+                    }
+                }
             }
             if (archive.GetEntry("fabric.mod.json") is { } fabric)
             {

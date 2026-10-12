@@ -1,10 +1,46 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using Moonrise.Models;
 
 namespace Moonrise.Services;
 
 public sealed class PackageCatalogService(JarMetadataParser parser)
 {
+    // Reviewed, shipped artifacts only. Never interpret catalog data as arbitrary local paths.
+    public static IReadOnlyList<PackageManifest> LoadBundledCatalog() =>
+    [
+        Bundled("moonrise-cosmetics", "Moonrise Cosmetics", "1.3.2", PackageKind.JavaAgent,
+            "Local Lunar cosmetics and outfit persistence; standalone Java agent for Minecraft 1.8.9.",
+            "runtime/maintained-builds/moonrise-cosmetics-1.3.2.jar",
+            "EFBAC1DC8F6B28EE1A13E294FF7DC03880C384306F1FFAB88738E3DCD1DC4354", "MIT; ASM BSD-3-Clause"),
+        Bundled("veyra", "Veyra", "0.1.1-moonrise.1", PackageKind.WeaveMod,
+            "Client mod for Weave 1.3.4 on Minecraft 1.8.9; ClickGUI: Enter.",
+            "runtime/catalog/Veyra-0.1.1-moonrise.1.jar",
+            "779760392BCA1F269D0EB325E78950249D355E94A09C90988108C3CCD94D95BD", "Distribution permission confirmed by owner")
+    ];
+
+    private static PackageManifest Bundled(string id, string name, string version, PackageKind kind,
+        string summary, string path, string hash, string license) => new()
+    {
+        Id = id, Slug = id, Name = name, Type = kind, Summary = summary, Description = summary,
+        CompatibilityLabel = "works-directly · Minecraft 1.8.9 (QA 2026-10-12)",
+        Authors = [new("Moonrise")], License = new(license), SupportedMinecraftVersions = ["1.8.9"],
+        InstallPolicy = PackageInstallPolicy.OneClick, RiskLevel = kind == PackageKind.JavaAgent
+            ? PackageRiskLevel.Normal : PackageRiskLevel.ServerDependent,
+        Releases = [new() { Version = version, PublishedAt = new DateTimeOffset(2026, 10, 12, 0, 0, 0, TimeSpan.Zero),
+            Artifact = new() { DownloadMode = PackageDownloadMode.Bundled, AssetUrl = path,
+                FileName = Path.GetFileName(path), Sha256 = hash, MinecraftVersions = ["1.8.9"] } }]
+    };
+
+    public static string ResolveBundledArtifact(PackageManifest package, PackageRelease release, string baseDirectory)
+    {
+        var approved = LoadBundledCatalog().SingleOrDefault(item => item.Id == package.Id);
+        var artifact = approved?.LatestRelease?.Artifact;
+        if (artifact is null || package.Type != approved!.Type || release.Version != approved.VersionLabel ||
+            release.Artifact.AssetUrl != artifact.AssetUrl || release.Artifact.FileName != artifact.FileName ||
+            release.Artifact.Sha256 != artifact.Sha256)
+            throw new InvalidDataException("Unrecognized bundled catalog artifact.");
+        return Path.Combine(baseDirectory, artifact.AssetUrl!.Replace('/', Path.DirectorySeparatorChar));
+    }
     private const long MaximumJarSize = 512L * 1024 * 1024;
 
     public IReadOnlyList<PackageInfo> Load(string directory, PackageKind kind, ISet<string> disabled)

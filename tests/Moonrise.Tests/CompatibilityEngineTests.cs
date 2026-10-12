@@ -81,6 +81,31 @@ public sealed class CompatibilityEngineTests : IDisposable
         Assert.Equal(generation, result.Requirements.WeaveGeneration); Assert.Equal("1.8.9", result.Requirements.MinecraftRange);
         Assert.Contains(result.Evidence, e => e.Source == "class.constant_pool"); Assert.Contains("weave.hooks", result.Metadata.Keys);
     }
+    [Fact] public void CurrentDeclarationsAreRetainedAndMissingTargetsBlockActivation()
+    {
+        var result = Mod("current-declarations", """{"entryPoints":["missing.Main"],"mixinConfigs":["missing.json"],"accessWideners":["missing.aw"],"namespace":"mcp-named"}""", WeaveGeneration.Current).Inspection!;
+        Assert.Contains("weave.entryPoints", result.Metadata.Keys);
+        Assert.Contains("weave.mixinConfigs", result.Metadata.Keys);
+        Assert.Contains("weave.accessWideners", result.Metadata.Keys);
+        Assert.Equal(3, result.Issues.Count(issue => issue.Code == "weave.declaration.missing"));
+    }
+    [Theory]
+    [InlineData(true)] [InlineData(false)]
+    public void CurrentMixinClassesMustExist(bool present)
+    {
+        var entries = new List<(string, byte[])>
+        {
+            Text("weave.mod.json", """{"entryPoints":["sample.Main"],"mixinConfigs":["sample.json"]}"""),
+            ("sample/Main.class", Class("net/weavemc/api/ModInitializer")),
+            Text("sample.json", """{"required":true,"package":"sample.mixin","mixins":["Feature"]}""")
+        };
+        if (present) entries.Add(("sample/mixin/Feature.class", Class()));
+        var result = PackageInspector.Inspect(Jar("mixin-target", entries.ToArray()));
+        Assert.Equal(!present, result.Issues.Any(issue => issue.Code == "weave.mixin.missing"));
+        var package = new Moonrise.Services.JarMetadataParser().ParseWeaveMod(Path.Combine(root, "mixin-target.jar"));
+        if (present) Assert.Equal(Moonrise.Services.WeaveApiGeneration.Current, new Moonrise.Services.WeaveModApiInspector().Inspect(package).Generation);
+        else Assert.Throws<InvalidDataException>(() => new Moonrise.Services.WeaveModApiInspector().Inspect(package));
+    }
     [Fact] public void ModIdDoesNotProveCurrentGeneration() => Assert.Equal(WeaveGeneration.Unknown, Mod("ambiguous", "{\"modId\":\"old\",\"compiledFor\":\"1.8.9\"}").Inspection!.Requirements.WeaveGeneration);
     [Fact] public void StringLiteralDoesNotProveGeneration()
     {
@@ -151,6 +176,34 @@ public sealed class CompatibilityEngineTests : IDisposable
     {
         var legacy = Mod("legacy", "{}", WeaveGeneration.Legacy); var current = Mod("current", "{}", WeaveGeneration.Current);
         Error(CompatibilityPlanner.Build(Request() with { Packages = [new("legacy", legacy), new("current", current)] }), "weave.generation.conflict");
+    }
+    [Fact] public void HooksOnlyLegacyPackageRetainsOriginalAndRejectsCurrentLoader()
+    {
+        var path = Jar("hooks-only", Text("weave.mod.json", """{"hooks":["sample.Hook"]}"""),
+            ("sample/Hook.class", Class("net/weavemc/loader/api/Hook", 55)));
+        var bytes = File.ReadAllBytes(path);
+        var mod = ArtifactSnapshots.Capture(path, "imported");
+        Assert.Equal(WeaveGeneration.Legacy, mod.Inspection!.Requirements.WeaveGeneration);
+        Assert.Equal(PackageType.WeaveMod, mod.Inspection.Requirements.Type);
+        Assert.Empty(mod.Inspection.Issues.Where(i => i.Severity == Severity.Error));
+        var loader = AgentArtifact("current-loader", WeaveGeneration.Current) with { Source = "managed.weave" };
+        var plan = CompatibilityPlanner.Build(Request() with
+        {
+            Packages = [new("arbitrary-hooks-package", mod)],
+            Agents = [Slot("loader", loader, role: "WeaveLoader")],
+            Weave = new(WeaveStrategy.Bundled, loader, "1.3.4", WeaveGeneration.Current, [], root)
+        });
+        Error(plan, "weave.generation.conflict");
+        Assert.Equal(bytes, File.ReadAllBytes(path));
+    }
+    [Theory]
+    [InlineData("{\"hooks\":[\"sample.Absent\"]}", "weave.declaration.missing")]
+    [InlineData("{\"hooks\":\"sample.Hook\"}", null)]
+    [InlineData("{\"hooks\":[null]}", null)]
+    public void InvalidHookDeclarationsAreRejected(string metadata, string? code)
+    {
+        var result = PackageInspector.Inspect(Jar("bad-hook", Text("weave.mod.json", metadata)));
+        Assert.Contains(result.Issues, i => i.Severity == Severity.Error && (code == null || i.Code == code));
     }
     [Fact] public void DuplicateLoaderRejected()
     {

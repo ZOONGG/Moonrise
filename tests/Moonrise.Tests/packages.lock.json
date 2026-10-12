@@ -153,6 +153,11 @@
         "resolved": "1.6.0",
         "contentHash": "COC1aiAJjCoA5GBF+QKL2uLqEBew4JsCkQmoHKbN3TlOZKa2fKLz5CpiRQKDz0RsAOEGsVKqOD5bomsXq/4STQ=="
       },
+      "Velopack": {
+        "type": "Transitive",
+        "resolved": "1.2.161",
+        "contentHash": "OpHNacIumnkhaaX3ZlQ/TCR4YPOJvud2/PAOoWb6o+mIrLwIVA275I5wAgt4q/1O2VrJeDwR1qFQyqzG4lUArg=="
+      },
       "xunit.abstractions": {
         "type": "Transitive",
         "resolved": "2.0.3",
@@ -198,7 +203,8 @@
         "dependencies": {
           "Microsoft.Data.Sqlite": "[8.0.11, )",
           "NSec.Cryptography": "[25.4.0, )",
-          "QRCoder": "[1.8.0, )"
+          "QRCoder": "[1.8.0, )",
+          "Velopack": "[1.2.161, )"
         }
       }
     },

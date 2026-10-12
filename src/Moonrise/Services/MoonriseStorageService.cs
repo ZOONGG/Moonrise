@@ -38,6 +38,9 @@ public sealed class MoonriseStorageService
                          "launch-*",
                          SearchOption.TopDirectoryOnly))
             {
+                if (!LaunchSessionService.IsLaunchDirectory(directory)
+                    || (File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
+                    continue;
                 var info = new DirectoryInfo(directory);
                 if (info.LastWriteTimeUtc >= now.UtcDateTime.AddHours(-1))
                     continue;

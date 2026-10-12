@@ -65,8 +65,8 @@ internal sealed class PackageIndexRecord
     public string Sha256 { get; set; } = string.Empty;
     public long FileSize { get; set; }
     public PackageKind Kind { get; set; }
-    public string Version { get; set; } = "—";
-    public string Entrypoint { get; set; } = "—";
+    public string Version { get; set; } = "РІР‚вЂќ";
+    public string Entrypoint { get; set; } = "РІР‚вЂќ";
     public string Identifier { get; set; } = string.Empty;
     public string SourceType { get; set; } = "manual";
     public string? SourceUrl { get; set; }
@@ -117,9 +117,11 @@ public sealed class LocalPackageLibrary
     {
         lock (_sync)
         {
+            StorageFormatGuard.Check(_paths.RootDirectory);
             _paths.EnsureUserDirectories();
             _index = ReadIndex();
-            LastLayoutMigrationResult = MigratePackageLayoutOnceCore();
+            LastLayoutMigrationResult = _paths.PreserveExistingPackageFiles
+                ? new PackageStorageMigrationResult(0, 0, true) : MigratePackageLayoutOnceCore();
             LastReconciliationResult = ReconcileCore(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
             ReplaceCollection();
         }
@@ -129,6 +131,7 @@ public sealed class LocalPackageLibrary
     {
         lock (_sync)
         {
+            StorageFormatGuard.Check(_paths.RootDirectory);
             _paths.EnsureUserDirectories();
             LastReconciliationResult = ReconcileCore(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
             ReplaceCollection();
@@ -140,7 +143,9 @@ public sealed class LocalPackageLibrary
     {
         lock (_sync)
         {
+            StorageFormatGuard.Check(_paths.RootDirectory);
             _paths.EnsureUserDirectories();
+            if (_paths.PreserveExistingPackageFiles) return new(0, 0, true);
             var result = MigratePackageLayoutOnceCore();
             ReplaceCollection();
             return result;
@@ -153,7 +158,8 @@ public sealed class LocalPackageLibrary
     {
         lock (_sync)
         {
-            if (_index.MigrationVersion >= 1)
+            StorageFormatGuard.Check(_paths.RootDirectory);
+            if (_paths.PreserveExistingPackageFiles || _index.MigrationVersion >= 1)
                 return 0;
 
             var disabledMods = disabledModNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -206,6 +212,7 @@ public sealed class LocalPackageLibrary
     {
         lock (_sync)
         {
+            StorageFormatGuard.Check(_paths.RootDirectory);
             var result = ImportCore(
                 sourcePath,
                 sourceType,
@@ -289,6 +296,7 @@ public sealed class LocalPackageLibrary
         string[] packageIdsBefore;
         lock (_sync)
         {
+            StorageFormatGuard.Check(_paths.RootDirectory);
             packageIdsBefore = _index.Packages.Select(item => item.PackageId).ToArray();
             reconciliation = ReconcileCore(unstable);
             LastReconciliationResult = reconciliation;
@@ -328,11 +336,14 @@ public sealed class LocalPackageLibrary
         ArgumentNullException.ThrowIfNull(package);
         lock (_sync)
         {
+            StorageFormatGuard.Check(_paths.RootDirectory);
             var record = FindRecord(package.PackageId);
             if (enabled && record.Kind is not (PackageKind.WeaveMod or PackageKind.JavaAgent))
                 throw new InvalidOperationException("Unsupported package cannot be launched.");
             record.Enabled = enabled;
             package.IsEnabled = enabled;
+            foreach (var current in Packages.Where(item => item.PackageId == package.PackageId))
+                current.IsEnabled = enabled;
             SaveIndex();
         }
     }
@@ -343,6 +354,7 @@ public sealed class LocalPackageLibrary
         ArgumentNullException.ThrowIfNull(package);
         lock (_sync)
         {
+            StorageFormatGuard.Check(_paths.RootDirectory);
             var record = FindRecord(package.PackageId);
             var valid = File.Exists(package.FullPath) &&
                 string.Equals(ComputeSha256(package.FullPath), record.Sha256, StringComparison.OrdinalIgnoreCase);
@@ -360,6 +372,7 @@ public sealed class LocalPackageLibrary
         ArgumentNullException.ThrowIfNull(package);
         lock (_sync)
         {
+            StorageFormatGuard.Check(_paths.RootDirectory);
             var record = FindRecord(package.PackageId);
             _index.Packages.Remove(record);
             var referenced = _index.Packages.Any(item =>
@@ -448,7 +461,7 @@ public sealed class LocalPackageLibrary
                 VerifyPathHash(path, hash);
                 VerifyPathHash(destination, hash);
                 if (!string.Equals(path, destination, StringComparison.OrdinalIgnoreCase))
-                    File.Delete(path);
+                    if (!_paths.PreserveExistingPackageFiles) File.Delete(path);
                 path = destination;
             }
 
@@ -475,6 +488,7 @@ public sealed class LocalPackageLibrary
                          !string.Equals(item.Path, canonical.Path, StringComparison.OrdinalIgnoreCase)))
             {
                 VerifyPathHash(duplicate.Path, hashGroup.Key);
+                if (_paths.PreserveExistingPackageFiles) continue;
                 File.Delete(duplicate.Path);
                 duplicatesRemoved++;
             }
@@ -527,6 +541,15 @@ public sealed class LocalPackageLibrary
                 existing.LastIntegrityCheckResult = "copy-in-progress";
                 reconciled.Add(existing);
             }
+        }
+
+        if (_paths.PreserveExistingPackageFiles)
+        {
+            // Keep legacy/unclassified metadata while leaving its originals in place.
+            foreach (var record in oldRecords.Where(record =>
+                         TryResolveManagedPath(record.ManagedFilePath, out var path) &&
+                         IsInside(path, _paths.UnclassifiedPackagesDirectory) && File.Exists(path)))
+                if (reconciled.All(item => item.PackageId != record.PackageId)) reconciled.Add(record);
         }
 
         var retainedIds = reconciled
@@ -658,7 +681,7 @@ public sealed class LocalPackageLibrary
                 VerifyManagedCopy(existing);
                 VerifyPathHash(source, hash);
                 if (!string.Equals(source, ResolveManagedPath(existing.ManagedFilePath), StringComparison.OrdinalIgnoreCase))
-                    File.Delete(source);
+                    if (!_paths.PreserveExistingPackageFiles) File.Delete(source);
                 migrationLog.Add($"REMOVED verified redundant legacy copy {source}; SHA-256={hash}");
                 migratedLegacyFiles++;
                 continue;
@@ -705,7 +728,7 @@ public sealed class LocalPackageLibrary
             SaveIndex();
             VerifyManagedCopy(record);
             if (!string.Equals(source, destination, StringComparison.OrdinalIgnoreCase))
-                File.Delete(source);
+                if (!_paths.PreserveExistingPackageFiles) File.Delete(source);
             migrationLog.Add(
                 $"{(invalid ? "PRESERVED invalid" : "MIGRATED unique")} legacy JAR -> " +
                 $"{Path.GetRelativePath(_paths.PackagesDirectory, destination)}; SHA-256={hash}");
@@ -880,7 +903,7 @@ public sealed class LocalPackageLibrary
         SaveIndex();
         VerifyManagedCopy(record);
         if (!string.Equals(source, destination, StringComparison.OrdinalIgnoreCase))
-            File.Delete(source);
+            if (!_paths.PreserveExistingPackageFiles) File.Delete(source);
     }
 
     private string GetCategoryDirectory(PackageKind kind) => kind switch
@@ -918,6 +941,7 @@ public sealed class LocalPackageLibrary
 
     private void RemoveEmptyLegacyDirectories()
     {
+        if (_paths.PreserveExistingPackageFiles) return;
         foreach (var root in LegacyPackageDirectories().Where(Directory.Exists))
         {
             foreach (var directory in Directory.EnumerateDirectories(root, "*", SearchOption.AllDirectories)
@@ -1101,7 +1125,7 @@ public sealed class LocalPackageLibrary
                 !string.Equals(source, managedPath, StringComparison.OrdinalIgnoreCase))
             {
                 VerifyPathHash(source, hash);
-                File.Delete(source);
+                if (!_paths.PreserveExistingPackageFiles) File.Delete(source);
             }
             return new PackageImportResult(
                 PackageImportStatus.AlreadyImported,
@@ -1145,7 +1169,7 @@ public sealed class LocalPackageLibrary
             (deleteIncomingAfterSuccess || IsInCategoryStorage(source)))
         {
             VerifyPathHash(source, hash);
-            File.Delete(source);
+            if (!_paths.PreserveExistingPackageFiles) File.Delete(source);
         }
         return new PackageImportResult(
             PackageImportStatus.Imported,
@@ -1174,8 +1198,8 @@ public sealed class LocalPackageLibrary
             Sha256 = hash,
             FileSize = new FileInfo(destination).Length,
             Kind = kind,
-            Version = metadata?.Version ?? "—",
-            Entrypoint = metadata?.Entrypoint ?? "—",
+            Version = metadata?.Version ?? "РІР‚вЂќ",
+            Entrypoint = metadata?.Entrypoint ?? "РІР‚вЂќ",
             Identifier = metadata?.Identifier ?? "sha256:" + hash.ToLowerInvariant(),
             SourceType = sourceType,
             SourceUrl = sourceUrl,
@@ -1358,6 +1382,8 @@ public sealed class LocalPackageLibrary
                                File.ReadAllText(_paths.PackageIndexPath),
                                JsonOptions)
                            ?? throw new JsonException("The package index is empty.");
+            if (document.FormatVersion != 1)
+                throw new InvalidDataException("Unsupported package index version; library was not modified.");
             if (document.Packages is null ||
                 document.Packages.Any(record =>
                     record is null ||
@@ -1441,6 +1467,7 @@ public sealed class LocalPackageLibrary
 
     private void SaveIndex()
     {
+        StorageFormatGuard.Check(_paths.RootDirectory);
         Directory.CreateDirectory(_paths.PackageMetadataDirectory);
         var temporary = _paths.PackageIndexPath + $".{Guid.NewGuid():N}.tmp";
         try

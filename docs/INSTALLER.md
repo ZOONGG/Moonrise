@@ -1,48 +1,21 @@
-# Moonrise installer
+# Windows installation
 
-Moonrise stable releases include a per-user Inno Setup installer named
-`Moonrise-Setup-<version>-x64.exe`. It contains a self-contained `win-x64`
-Release publish, so a separate .NET installation is not required.
+The first public beta uses Velopack 1.2.161: `Moonrise.App-beta-Setup.exe`.
+Package ID `Moonrise.App`, display name Moonrise, channel `beta`, version `0.1.0-beta.1`.
+The ID deliberately differs from the data directory to prevent install/update/uninstall from owning user data.
+Default installation: `%LOCALAPPDATA%\Moonrise.App`; settings and packages: `%LOCALAPPDATA%\Moonrise`.
+Setup is per-user, self-contained win-x64 and unsigned. No administrator rights or separate .NET runtime are required.
+Check its SHA-256, run Setup, then use the Moonrise shortcut. Normal uninstall uses Windows Installed Apps.
+Do not install into the Moonrise data directory. Old Inno installations are a separate distribution; they do not gain Velopack updates automatically.
+The Velopack installer does not promise the old Inno wizard or moonrise:// registration.
 
-The default installation directory is:
-
-```text
-%LocalAppData%\Programs\Moonrise
-```
-
-The installer does not require administrator rights by default. It provides a
-license page, destination selection, a Start Menu shortcut, an optional desktop
-shortcut, Add/Remove Programs registration, upgrade support, and a launch
-checkbox. The stable Inno `AppId` makes an install over an older version an
-upgrade rather than a second application.
-
-Application files and user data are separate. Normal upgrades and normal
-uninstallation preserve `%LocalAppData%\Moonrise`. The uninstaller displays an
-unchecked option to remove settings, the package library, downloads, cache,
-sessions, and logs. Selecting it permanently removes that directory.
-
-The installer registers `moonrise://` for the current user and removes the
-registration on uninstall. Supported links are:
-
-- `moonrise://catalog`
-- `moonrise://package/<package-id>`
-- `moonrise://install/<package-id>`
-
-Package identifiers are strictly validated. An install link opens and selects
-the catalog card, then asks for confirmation; it never silently installs code.
-
-Releases are currently unsigned until a code-signing certificate is available.
-Windows may therefore show a SmartScreen warning. Always compare the Setup
-SHA-256 value with the adjacent checksum file from the official GitHub Release.
-
-## Local release build
-
-Install Inno Setup 6, then run:
+Build using the pinned local CLI:
 
 ```powershell
-./tools/New-MoonriseRelease.ps1 -Version 1.0.0
+dotnet tool install vpk --version 1.2.161 --tool-path artifacts/velopack-tools
+./tools/New-MoonriseRelease.ps1 -Version 0.1.0-beta.1 -Velopack -VpkPath artifacts/velopack-tools/vpk.exe -OutputRoot artifacts/final-package
 ```
 
-The script restores locked packages, runs Release tests, publishes self-contained
-`win-x64`, creates the portable ZIP, compiles Setup, and writes SHA-256 files.
-It replaces the previous selected release output directory before building.
+The script verifies the bundled runtime JAR digests and corresponding source archive before packaging.
+Production builds must omit LocalUpdateFeed. Builds that specify it are local-only Moonrise.UpdateSmoke packages and must never be published.
+See [updates](UPDATES.md), [ZIP behavior](PORTABLE_MODE.md), and [final validation](final-release-validation.md).

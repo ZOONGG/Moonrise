@@ -37,7 +37,6 @@ public final class CosmeticsTransformerProbe {
         int assetClients = 0;
         int unlockResponses = 0;
         int persistenceStubs = 0;
-        int debugConfigurations = 0;
 
         try (URLClassLoader loader = new URLClassLoader(
                 new URL[] {lunarJar.toUri().toURL(), agentJar.toUri().toURL()},
@@ -47,12 +46,6 @@ public final class CosmeticsTransformerProbe {
             CosmeticsUnlockTransformer unlockTransformer = new CosmeticsUnlockTransformer();
             CosmeticsPersistenceTransformer persistenceTransformer =
                     new CosmeticsPersistenceTransformer();
-            Constructor<?> debugConstructor = Class.forName(
-                    "moonrise.cosmetics.CosmeticsAgent$DebugConfigurationTransformer")
-                    .getDeclaredConstructor();
-            debugConstructor.setAccessible(true);
-            ClassFileTransformer debugTransformer =
-                    (ClassFileTransformer) debugConstructor.newInstance();
             Enumeration<? extends ZipEntry> entries = zip.entries();
             while (entries.hasMoreElements()) {
                 ZipEntry entry = entries.nextElement();
@@ -92,17 +85,6 @@ public final class CosmeticsTransformerProbe {
                     continue;
                 }
                 byte[] original = read(zip, entry);
-                byte[] debugTransformed = debugTransformer.transform(
-                        loader,
-                        entry.getName().substring(0, entry.getName().length() - 6),
-                        null,
-                        null,
-                        original);
-                if (debugTransformed != null) {
-                    verifyBytecode(debugTransformed);
-                    System.out.println("cosmetics-debug-configuration=" + entry.getName());
-                    debugConfigurations++;
-                }
                 boolean reconnectPolicy =
                         CosmeticsAgent.containsAscii(original, "getReconnectAuthenticatorJwt")
                                 && CosmeticsAgent.containsAscii(original, "getReconnectDelay");
@@ -134,13 +116,13 @@ public final class CosmeticsTransformerProbe {
 
         if (reconnectPolicies != 1 || assetClients != 1 || unlockResponses != 1
                 || persistenceStubs != 1
-                || debugConfigurations != 1) {
+) {
             throw new IllegalStateException(
                     "Unexpected Lunar layout: reconnect=" + reconnectPolicies
                             + ", assets=" + assetClients
                             + ", unlock=" + unlockResponses
                             + ", persistence=" + persistenceStubs
-                            + ", debug=" + debugConfigurations);
+);
         }
         System.out.println("cosmetics-stability-transformer=verified");
     }

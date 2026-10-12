@@ -70,8 +70,8 @@ public sealed class Stage1RecoveryTests
         var paths = AppPaths.Discover(output, localAppData, searchForDevelopmentRoot: true);
         paths.EnsureUserDirectories();
 
-        Assert.Equal(AppMode.Development, paths.Mode);
-        Assert.Equal(Path.Combine(localAppData, "Moonrise", "dev"), paths.RootDirectory);
+        Assert.Equal(AppMode.Installed, paths.Mode);
+        Assert.Equal(Path.Combine(localAppData, "Moonrise"), paths.RootDirectory);
         Assert.StartsWith(
             Path.Combine(localAppData, "Moonrise") + Path.DirectorySeparatorChar,
             paths.RootDirectory + Path.DirectorySeparatorChar,

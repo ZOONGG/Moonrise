@@ -15,6 +15,8 @@ public static class ControlledGenesisPlanFactory
             sessionDirectory, profileId, gameVersion, profileLoaders);
         var javaCandidates = DiscoverJreCandidates(lunarJreDirectory);
         var resources = ControlledGenesisResources.Discover(ControlledGenesisDiscovery.ContractId, lunarRoot, sessionDirectory);
+        var auth = ControlledGenesisAuth.ProbePlayableLaunch();
+        if (!auth.CanAttemptGameHandshake) throw new AuthDependencyException(auth);
         var runtimeView = Path.Combine(runtime.WorkingDirectory, "runtime");
         var runtimeFiles = runtime.ClassPath.Concat(runtime.IchorClassPath).Concat(runtime.IchorExternalFiles)
             .DistinctBy(a => a.CanonicalPath).Where(a => Path.GetDirectoryName(a.CanonicalPath) == runtime.OfflineRoot).ToImmutableArray();

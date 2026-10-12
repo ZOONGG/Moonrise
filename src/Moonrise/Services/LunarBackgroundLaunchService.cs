@@ -85,6 +85,8 @@ public sealed class LunarBackgroundLaunchService
     private readonly CancellationTokenSource _watchStop = new();
     private bool _released;
     private bool _watchStarted;
+    private bool _retainForGameLifetime;
+    public bool OwnedWindowShown { get; private set; }
     private LunarLaunchWindowState _state = LunarLaunchWindowState.BackgroundHidden;
 
     public LunarBackgroundLaunchService(int rootProcessId)
@@ -226,9 +228,9 @@ public sealed class LunarBackgroundLaunchService
 
                 if (state is LunarLaunchWindowState.UserVisible or
                     LunarLaunchWindowState.InteractionRequired or
-                    LunarLaunchWindowState.MinecraftDetected or
                     LunarLaunchWindowState.LauncherExited or
-                    LunarLaunchWindowState.Cancelled)
+                    LunarLaunchWindowState.Cancelled ||
+                    state == LunarLaunchWindowState.MinecraftDetected && !_retainForGameLifetime)
                 {
                     return;
                 }
@@ -252,9 +254,10 @@ public sealed class LunarBackgroundLaunchService
             subscription?.Dispose();
             lock (_sync)
             {
+                _watchStarted = false;
                 if (cancellationToken.IsCancellationRequested ||
-                    _state is LunarLaunchWindowState.MinecraftDetected or
-                        LunarLaunchWindowState.LauncherExited or LunarLaunchWindowState.Cancelled)
+                    (_state == LunarLaunchWindowState.MinecraftDetected && !_retainForGameLifetime) ||
+                    _state is LunarLaunchWindowState.LauncherExited or LunarLaunchWindowState.Cancelled)
                     ReleaseOwnershipCore("watcher-ended");
             }
         }
@@ -277,6 +280,7 @@ public sealed class LunarBackgroundLaunchService
                 var hideResult = "not-requested";
                 if (window.IsVisible && classification.IsLunar)
                 {
+                    OwnedWindowShown = true;
                     var success = HideWithBoundedRetry(window.Handle, out var attempts);
                     hideResult = success
                         ? $"hidden;attempts={attempts}"
@@ -312,13 +316,15 @@ public sealed class LunarBackgroundLaunchService
 
     public bool RevealAndFocus() => ShowLunar();
 
-    public void MarkMinecraftDetected()
+    public void MarkMinecraftDetected(bool retainForGameLifetime = false)
     {
         lock (_sync)
         {
             if (_released) return;
             _state = LunarLaunchWindowState.MinecraftDetected;
-            ReleaseOwnershipCore("minecraft-detected");
+            _retainForGameLifetime = retainForGameLifetime;
+            OwnedWindowShown = false;
+            if (!retainForGameLifetime) ReleaseOwnershipCore("minecraft-detected");
         }
     }
 
@@ -359,6 +365,7 @@ public sealed class LunarBackgroundLaunchService
             var hideResult = "not-requested";
             if (window.IsVisible && classification.IsLunar)
             {
+                OwnedWindowShown = true;
                 var success = HideWithBoundedRetry(handle, out var attempts);
                 hideResult = success
                     ? $"hidden;attempts={attempts}"
@@ -508,7 +515,8 @@ public sealed class LunarBackgroundLaunchService
     }
 
     private bool ShouldHideWindows() =>
-        !_released && _state == LunarLaunchWindowState.BackgroundHidden;
+        !_released && (_state == LunarLaunchWindowState.BackgroundHidden ||
+            _state == LunarLaunchWindowState.MinecraftDetected && _retainForGameLifetime);
 
     private void SetState(LunarLaunchWindowState state)
     {
@@ -797,7 +805,9 @@ internal sealed class WindowsProcessTreeSnapshot : IProcessTreeSnapshot
     private const uint Th32csSnapProcess = 0x00000002;
     private static readonly nint InvalidHandleValue = new(-1);
 
-    public IReadOnlyList<ProcessTreeEntry> Capture()
+    public IReadOnlyList<ProcessTreeEntry> Capture() => Capture(includeExecutablePaths: true);
+
+    internal IReadOnlyList<ProcessTreeEntry> Capture(bool includeExecutablePaths)
     {
         var result = new List<ProcessTreeEntry>();
         var snapshot = CreateToolhelp32Snapshot(Th32csSnapProcess, 0);
@@ -815,9 +825,27 @@ internal sealed class WindowsProcessTreeSnapshot : IProcessTreeSnapshot
                 DateTimeOffset? startTimeUtc = null;
                 try
                 {
-                    using var process = Process.GetProcessById(processId);
-                    executablePath = process.MainModule?.FileName;
-                    startTimeUtc = process.StartTime.ToUniversalTime();
+                    if (includeExecutablePaths)
+                    {
+                        using var process = Process.GetProcessById(processId);
+                        executablePath = process.MainModule?.FileName;
+                        startTimeUtc = process.StartTime.ToUniversalTime();
+                    }
+                    else
+                    {
+                        // Preserve PID identity without repeatedly enumerating all processes
+                        // through Process.GetProcessById for every Toolhelp entry.
+                        var handle = OpenProcess(0x1000, false, processId);
+                        if (handle != 0)
+                        {
+                            try
+                            {
+                                if (GetProcessTimes(handle, out var created, out _, out _, out _))
+                                    startTimeUtc = new DateTimeOffset(DateTime.FromFileTimeUtc(created));
+                            }
+                            finally { CloseHandle(handle); }
+                        }
+                    }
                 }
                 catch (Exception exception) when (
                     exception is ArgumentException or InvalidOperationException or
@@ -858,6 +886,14 @@ internal sealed class WindowsProcessTreeSnapshot : IProcessTreeSnapshot
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern nint CreateToolhelp32Snapshot(uint flags, uint processId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern nint OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inherit, int processId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetProcessTimes(nint process, out long created, out long exited,
+        out long kernel, out long user);
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     [return: MarshalAs(UnmanagedType.Bool)]

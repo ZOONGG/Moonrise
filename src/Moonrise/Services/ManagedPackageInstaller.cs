@@ -1,11 +1,11 @@
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using System.Net.Http;
 using System.Security.Cryptography;
 using Moonrise.Models;
 
 namespace Moonrise.Services;
 
-public sealed class ManagedPackageInstaller(HttpClient httpClient, JarMetadataParser parser)
+public sealed class ManagedPackageInstaller(HttpClient httpClient, JarMetadataParser parser, string? bundleDirectory = null)
 {
     private const long MaximumPackageSize = 512L * 1024 * 1024;
 
@@ -19,8 +19,10 @@ public sealed class ManagedPackageInstaller(HttpClient httpClient, JarMetadataPa
         var artifact = release.Artifact;
         if (!package.CanInstall || artifact.AssetUrl is null || artifact.FileName is null || artifact.Sha256 is null)
             throw new InvalidOperationException("This package does not provide an installable artifact.");
-        var uri = new Uri(artifact.AssetUrl, UriKind.Absolute);
-        if (uri.Scheme != Uri.UriSchemeHttps) throw new InvalidDataException("Package downloads must use HTTPS.");
+        var bundledPath = artifact.DownloadMode == PackageDownloadMode.Bundled
+            ? PackageCatalogService.ResolveBundledArtifact(package, release, bundleDirectory ?? AppContext.BaseDirectory) : null;
+        var uri = bundledPath is null ? new Uri(artifact.AssetUrl, UriKind.Absolute) : null;
+        if (uri is not null && uri.Scheme != Uri.UriSchemeHttps) throw new InvalidDataException("Package downloads must use HTTPS.");
         ResolveDependencies(package, release, installed);
 
         var kindDirectory = Path.Combine(
@@ -32,16 +34,25 @@ public sealed class ManagedPackageInstaller(HttpClient httpClient, JarMetadataPa
         var rollback = destination + $".rollback-{Guid.NewGuid():N}";
         try
         {
-            using var response = await httpClient.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-            response.EnsureSuccessStatusCode();
-            if (response.Content.Headers.ContentLength > MaximumPackageSize)
-                throw new InvalidDataException("The package exceeds the 512 MB limit.");
-            await using (var source = await response.Content.ReadAsStreamAsync(cancellationToken))
-            await using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            if (bundledPath is not null)
             {
-                await source.CopyToAsync(output, cancellationToken);
-                if (output.Length <= 0 || output.Length > MaximumPackageSize)
-                    throw new InvalidDataException("The downloaded package size is invalid.");
+                var length = new FileInfo(bundledPath).Length;
+                if (length <= 0 || length > MaximumPackageSize) throw new InvalidDataException("Bundled package size is invalid.");
+                File.Copy(bundledPath, temporary, false);
+            }
+            else
+            {
+                using var response = await httpClient.GetAsync(uri!, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                response.EnsureSuccessStatusCode();
+                if (response.Content.Headers.ContentLength > MaximumPackageSize)
+                    throw new InvalidDataException("The package exceeds the 512 MB limit.");
+                await using (var source = await response.Content.ReadAsStreamAsync(cancellationToken))
+                await using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    await source.CopyToAsync(output, cancellationToken);
+                    if (output.Length <= 0 || output.Length > MaximumPackageSize)
+                        throw new InvalidDataException("The downloaded package size is invalid.");
+                }
             }
             if (artifact.FileSize is { } expectedSize && new FileInfo(temporary).Length != expectedSize)
                 throw new InvalidDataException("The downloaded package size does not match the catalog.");

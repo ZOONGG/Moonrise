@@ -18,7 +18,10 @@ public sealed record MaintainedCompatibilityBuildUse(
 
 public sealed record MaintainedCompatibilityBuildResolution(
     IReadOnlyList<PackageInfo> LaunchMods,
-    IReadOnlyList<MaintainedCompatibilityBuildUse> AppliedBuilds);
+    IReadOnlyList<MaintainedCompatibilityBuildUse> AppliedBuilds)
+{
+    public string? LegacyPathBlocker { get; init; }
+}
 
 public sealed class MaintainedCompatibilityBuildService
 {
@@ -41,9 +44,19 @@ public sealed class MaintainedCompatibilityBuildService
     ];
 
 
+    private static readonly MaintainedCompatibilityBuildRule[] AgentRules =
+    [
+        new("moonrise-cosmetics-production-1.3.2",
+            "BFDCFC1E5E00BB922708885CE35159DB0B1E3DE989240BF6F98BD1F269B55AB6",
+            "EFBAC1DC8F6B28EE1A13E294FF7DC03880C384306F1FFAB88738E3DCD1DC4354",
+            "moonrise-cosmetics-1.3.2.jar", "1.8.9", WeaveAgentService.Version)
+    ];
+
     private readonly AppPaths _paths;
     private readonly JarMetadataParser _parser;
     private readonly IReadOnlyList<MaintainedCompatibilityBuildRule> _rules;
+    private readonly IReadOnlyList<MaintainedCompatibilityBuildRule> _agentRules;
+    private readonly Action<LaunchPlan> _validateLegacyContract;
 
     public MaintainedCompatibilityBuildService(
         AppPaths paths,
@@ -53,20 +66,63 @@ public sealed class MaintainedCompatibilityBuildService
         _paths = paths ?? throw new ArgumentNullException(nameof(paths));
         _parser = parser ?? throw new ArgumentNullException(nameof(parser));
         _rules = (rules ?? ProductionRules).ToArray();
+        _agentRules = AgentRules;
+        _validateLegacyContract = plan => LegacyMappingResourceAdapter.ValidateRuntimeContract(
+            plan.Agents.Single(agent => agent.IsWeaveLoader).Path);
     }
 
-    public MaintainedCompatibilityBuildResolution Resolve(
-        string minecraftVersion,
-        IEnumerable<PackageInfo> enabledMods)
+    internal MaintainedCompatibilityBuildService(AppPaths paths, JarMetadataParser parser,
+        IEnumerable<MaintainedCompatibilityBuildRule>? rules, Action<LaunchPlan> validateLegacyContract,
+        IEnumerable<MaintainedCompatibilityBuildRule>? agentRules = null)
+        : this(paths, parser, rules)
+    {
+        _validateLegacyContract = validateLegacyContract;
+        _agentRules = (agentRules ?? AgentRules).ToArray();
+    }
+
+    public MaintainedCompatibilityBuildResolution Resolve(string minecraftVersion, IEnumerable<PackageInfo> enabledMods)
+        => ResolveCore(minecraftVersion, enabledMods, _rules, agentBuilds: false);
+
+    public MaintainedCompatibilityBuildResolution ResolveAgents(string minecraftVersion, IEnumerable<PackageInfo> enabledAgents)
+        => ResolveCore(minecraftVersion, enabledAgents, _agentRules, agentBuilds: true);
+
+    private MaintainedCompatibilityBuildResolution ResolveCore(
+        string minecraftVersion, IEnumerable<PackageInfo> enabledMods,
+        IReadOnlyList<MaintainedCompatibilityBuildRule> rules, bool agentBuilds)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(minecraftVersion);
         ArgumentNullException.ThrowIfNull(enabledMods);
 
+        var originals = enabledMods.ToArray();
+        string? legacyBlocker = null;
+        // Standalone hooks-only launch only. Multi-mod selections retain the
+        // existing exact-hash resolution, including every BWH launch.
+        if (!agentBuilds && minecraftVersion == "1.8.9" && originals.Length == 1 && File.Exists(originals[0].FullPath) &&
+            new WeaveModApiInspector().IsLegacyHooksOnly(originals[0]))
+        {
+            if (!LocalPackageLibrary.ComputeSha256(originals[0].FullPath).Equals(originals[0].Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Legacy hooks-only original failed its SHA-256 check.");
+            var plan = new CurrentLaunchPlanFactory().Create(originals, [], _paths.LegacyWeaveAgentPath,
+                useLegacyWeave: true, legacyWeaveAdapterPath: Path.Combine(_paths.AdaptersDirectory,
+                    "runtime", LegacyWeaveDirectoryAdapterService.Id + ".jar"));
+            try
+            {
+                _validateLegacyContract(plan);
+                return new MaintainedCompatibilityBuildResolution(originals, []);
+            }
+            catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException)
+            {
+                // No binary is removed or generated during preflight. Preserve
+                // the working maintained fallback when the pinned runtime is absent.
+                legacyBlocker = error.Message;
+            }
+        }
+
         var launchMods = new List<PackageInfo>();
         var applied = new List<MaintainedCompatibilityBuildUse>();
-        foreach (var original in enabledMods)
+        foreach (var original in originals)
         {
-            var rule = _rules.FirstOrDefault(candidate =>
+            var rule = rules.FirstOrDefault(candidate =>
                 string.Equals(candidate.TargetSha256, original.Sha256, StringComparison.OrdinalIgnoreCase));
             if (rule is null)
             {
@@ -82,6 +138,27 @@ public sealed class MaintainedCompatibilityBuildService
             }
 
             var buildPath = Path.Combine(_paths.AdaptersDirectory, "maintained-builds", rule.BuildFileName);
+            if (!File.Exists(buildPath) && _paths.Mode == AppMode.Development)
+            {
+                // Development/isolated roots reuse only exact, verified local
+                // artifacts from the ordinary per-user adapter library.
+                var shared = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Moonrise", "adapters", "maintained-builds", rule.BuildFileName);
+                if (File.Exists(shared)) buildPath = shared;
+            }
+            if (!File.Exists(buildPath))
+            {
+                // An already imported maintained artifact can satisfy the same
+                // exact rule regardless of its display filename.
+                foreach (var directory in new[] { agentBuilds ? _paths.AgentPackagesDirectory : _paths.WeavePackagesDirectory,
+                             Path.Combine(_paths.InstallationDirectory, "runtime", "maintained-builds") })
+                {
+                    if (!Directory.Exists(directory)) continue;
+                    var found = Directory.EnumerateFiles(directory, "*.jar").FirstOrDefault(path =>
+                        LocalPackageLibrary.ComputeSha256(path).Equals(rule.BuildSha256, StringComparison.OrdinalIgnoreCase));
+                    if (found is not null) { buildPath = found; break; }
+                }
+            }
             if (!File.Exists(buildPath))
             {
                 throw new FileNotFoundException(
@@ -96,7 +173,7 @@ public sealed class MaintainedCompatibilityBuildService
                     $"{original.OriginalFileName}: local compatibility build '{rule.Id}' failed its SHA-256 check.");
             }
 
-            var build = _parser.ParseWeaveMod(buildPath);
+            var build = agentBuilds ? _parser.ParseJavaAgent(buildPath) : _parser.ParseWeaveMod(buildPath);
             if (!string.Equals(build.Sha256, rule.BuildSha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException($"{original.OriginalFileName}: parsed compatibility-build hash changed.");
 
@@ -104,6 +181,6 @@ public sealed class MaintainedCompatibilityBuildService
             applied.Add(new MaintainedCompatibilityBuildUse(rule, original, build));
         }
 
-        return new MaintainedCompatibilityBuildResolution(launchMods, applied);
+        return new MaintainedCompatibilityBuildResolution(launchMods, applied) { LegacyPathBlocker = legacyBlocker };
     }
 }

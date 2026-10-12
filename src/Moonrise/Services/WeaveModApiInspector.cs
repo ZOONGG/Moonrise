@@ -12,7 +12,10 @@ public enum WeaveApiGeneration
     Mixed
 }
 
-public sealed record WeaveModApiInspection(PackageInfo Package, WeaveApiGeneration Generation);
+public sealed record WeaveModApiInspection(PackageInfo Package, WeaveApiGeneration Generation)
+{
+    public bool IsLegacyHooksOnly { get; init; }
+}
 
 public sealed record WeaveModSetInspection(IReadOnlyList<WeaveModApiInspection> Mods)
 {
@@ -25,6 +28,14 @@ public sealed class WeaveModApiInspector
 {
     private static readonly byte[] LegacyMarker = "net/weavemc/loader/api/"u8.ToArray();
     private static readonly byte[] CurrentMarker = "net/weavemc/api/"u8.ToArray();
+
+    public bool IsLegacyHooksOnly(PackageInfo package)
+    {
+        ArgumentNullException.ThrowIfNull(package);
+        using (var archive = ZipFile.OpenRead(package.FullPath))
+            if (!IsHooksOnly(archive)) return false;
+        return Inspect(package).IsLegacyHooksOnly;
+    }
 
     public WeaveModSetInspection Inspect(IEnumerable<PackageInfo> mods)
     {
@@ -58,7 +69,35 @@ public sealed class WeaveModApiInspector
             (false, true) => WeaveApiGeneration.Current,
             _ => WeaveApiGeneration.Unknown
         };
-        return new WeaveModApiInspection(package, generation);
+        if (generation == WeaveApiGeneration.Current)
+        {
+            var contract = Moonrise.Compatibility.PackageInspector.Inspect(path);
+            var errors = contract.Issues.Where(issue => issue.Severity == Moonrise.Compatibility.Severity.Error).ToArray();
+            if (errors.Length != 0)
+                throw new InvalidDataException(string.Join("; ", errors.Select(issue => issue.Code + ": " + issue.Message)));
+        }
+        return new WeaveModApiInspection(package, generation)
+        {
+            IsLegacyHooksOnly = generation == WeaveApiGeneration.Legacy02 && IsHooksOnly(archive)
+        };
+    }
+
+    private static bool IsHooksOnly(ZipArchive archive)
+    {
+        if (archive.GetEntry("weave.mod.json") is not { } metadata) return false;
+        using var reader = new StreamReader(metadata.Open());
+        using var document = JsonDocument.Parse(reader.ReadToEnd());
+        var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object ||
+            !root.TryGetProperty("hooks", out var hooks) || hooks.ValueKind != JsonValueKind.Array ||
+            hooks.GetArrayLength() == 0) return false;
+        foreach (var key in new[] { "entrypoints", "entryPoints", "mixinConfigs", "mixins", "tweakers", "accessWideners" })
+            if (root.TryGetProperty(key, out var declarations) &&
+                (declarations.ValueKind != JsonValueKind.Array || declarations.GetArrayLength() != 0)) return false;
+        foreach (var hook in hooks.EnumerateArray())
+            if (hook.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(hook.GetString()) ||
+                archive.GetEntry(hook.GetString()!.Replace('.', '/') + ".class") is null) return false;
+        return true;
     }
 
     private static bool Contains(ZipArchiveEntry entry, byte[] marker)

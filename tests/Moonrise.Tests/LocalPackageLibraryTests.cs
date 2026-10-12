@@ -11,6 +11,139 @@ namespace Moonrise.Tests;
 public sealed class LocalPackageLibraryTests
 {
     [Fact]
+    public void NextLaunchSelectionSurvivesLoadoutReconcileAndReopenWithoutChangingInFlightSelection()
+    {
+        using var temp = new TestDirectory();
+        var paths = AppPaths.DiscoverLocal(temp.Path, temp.Path);
+        var parser = new JarMetadataParser();
+        var library = new LocalPackageLibrary(paths, parser);
+        library.Load();
+        library.Import(CreateWeaveJar(temp.Path, "fractal.jar", "fractal"));
+        library.Import(CreateWeaveJar(temp.Path, "other.jar", "other"));
+        var profiles = new ModpackProfileService();
+        var fractal = library.Packages.Single(p => p.Identifier == "fractal");
+        var other = library.Packages.Single(p => p.Identifier == "other");
+        library.SetEnabled(fractal, true);
+        library.SetEnabled(other, false);
+        var profile = profiles.Create("one", "lunar", "1.8.9", library.Packages);
+        var resolver = new PackageLaunchResolver(parser, paths);
+        var inFlight = resolver.Resolve(library.Packages);
+        Assert.Equal(fractal.FullPath, Assert.Single(inFlight.WeaveMods).FullPath);
+        library.Reconcile(); // The UI can still hold the pre-reconciliation object.
+        library.SetEnabled(fractal, false);
+        Assert.Empty(resolver.Resolve(library.Packages).WeaveMods);
+        Assert.Single(inFlight.WeaveMods);
+        library.SetEnabled(other, true);
+        Assert.Equal(other.FullPath, Assert.Single(resolver.Resolve(library.Packages).WeaveMods).FullPath);
+        profiles.Apply(profile, library.Packages);
+        foreach (var package in library.Packages) library.SetEnabled(package, package.IsEnabled);
+        library.Reconcile();
+        var reopened = new LocalPackageLibrary(paths, parser);
+        reopened.Load();
+        var selection = resolver.Resolve(reopened.Packages);
+        Assert.Single(reopened.Packages, p => p.IsEnabled);
+        Assert.Equal(fractal.FullPath, Assert.Single(selection.WeaveMods).FullPath);
+        var plan = new CurrentLaunchPlanFactory().Create(selection.WeaveMods, selection.JavaAgents, "weave.jar", false);
+        Assert.Equal(fractal.FullPath, Assert.Single(plan.ModPaths));
+    }
+
+    [Fact]
+    public void Discover_UsesEmbeddedSmokeFeedWhenPresent()
+    {
+        using var temp = new TestDirectory();
+        var feed = typeof(AppPaths).Assembly.GetCustomAttributes(
+                typeof(System.Reflection.AssemblyMetadataAttribute), false)
+            .Cast<System.Reflection.AssemblyMetadataAttribute>()
+            .FirstOrDefault(item => item.Key == "MoonriseLocalUpdateFeed")?.Value;
+        var actual = AppPaths.Discover(temp.Path, temp.Path, true);
+        var expected = AppPaths.DiscoverLocal(temp.Path, temp.Path, feed);
+        Assert.Equal(expected.RootDirectory, actual.RootDirectory);
+    }
+
+    [Fact]
+    public void SharedScan_PreservesDuplicateOriginalsAndLegacyDirectories()
+    {
+        using var temp = new TestDirectory();
+        var paths = AppPaths.DiscoverLocal(temp.Path, temp.Path);
+        var library = new LocalPackageLibrary(paths, new JarMetadataParser());
+        library.Load();
+        var imported = library.Import(CreateWeaveJar(temp.Path, "duplicate.jar", "duplicate")).Package!;
+        var duplicate = Path.Combine(paths.WeavePackagesDirectory, "second.jar");
+        File.Copy(imported.FullPath, duplicate);
+        Directory.CreateDirectory(paths.LegacyInstalledPackagesDirectory);
+        library.Reconcile();
+        Assert.Single(library.Packages);
+        Assert.True(File.Exists(duplicate));
+        Assert.True(Directory.Exists(paths.LegacyInstalledPackagesDirectory));
+        library.Import(duplicate);
+        Assert.True(File.Exists(duplicate));
+    }
+
+    [Fact]
+    public void SharedRoot_PreservesImportEnabledMetadataAcrossExecutableLocations()
+    {
+        using var temp = new TestDirectory();
+        var first = AppPaths.DiscoverLocal(Path.Combine(temp.Path, "build-one"), temp.Path);
+        var second = AppPaths.DiscoverLocal(Path.Combine(temp.Path, "portable"), temp.Path);
+        var a = new LocalPackageLibrary(first, new JarMetadataParser());
+        a.Load();
+        var imported = a.Import(CreateWeaveJar(temp.Path, "shared.jar", "shared")).Package!;
+        a.SetEnabled(imported, true);
+        var b = new LocalPackageLibrary(second, new JarMetadataParser());
+        b.Load();
+        Assert.Equal(first.SettingsPath, second.SettingsPath);
+        Assert.Equal(imported.Sha256, Assert.Single(b.Packages).Sha256);
+        Assert.True(b.Packages[0].IsEnabled);
+        b.SetEnabled(b.Packages[0], false);
+        a.Load();
+        Assert.False(a.Packages[0].IsEnabled);
+        b.Remove(b.Packages[0]);
+        a.Load();
+        Assert.Empty(a.Packages);
+    }
+
+    [Fact]
+    public void UpdateSmoke_IsolatedAndStableAcrossVersions()
+    {
+        using var temp = new TestDirectory();
+        var normal = AppPaths.DiscoverLocal(temp.Path, temp.Path);
+        var one = AppPaths.DiscoverLocal(Path.Combine(temp.Path, "v1"), temp.Path, temp.Path);
+        var two = AppPaths.DiscoverLocal(Path.Combine(temp.Path, "v2"), temp.Path, temp.Path);
+        Assert.Equal(one.RootDirectory, two.RootDirectory);
+        Assert.NotEqual(normal.RootDirectory, one.RootDirectory);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(99)]
+    public void UnsupportedPackageFormat_DoesNotChangeFiles(int version)
+    {
+        using var temp = new TestDirectory();
+        var paths = AppPaths.DiscoverLocal(temp.Path, temp.Path);
+        Directory.CreateDirectory(paths.PackageMetadataDirectory);
+        var content = "{\"FormatVersion\":" + version + ",\"Packages\":[]}";
+        File.WriteAllText(paths.PackageIndexPath, content);
+        var library = new LocalPackageLibrary(paths, new JarMetadataParser());
+        Assert.Throws<InvalidDataException>(() => library.Load());
+        Assert.Throws<InvalidDataException>(() => library.Import("unused.jar"));
+        Assert.Equal(content, File.ReadAllText(paths.PackageIndexPath));
+    }
+
+    [Theory]
+    [InlineData("{\"SettingsSchemaVersion\":999}")]
+    [InlineData("{\"SettingsSchemaVersion\":\"999\"}")]
+    public void FutureSettings_SaveIsBlockedAndOriginalPreserved(string content)
+    {
+        using var temp = new TestDirectory();
+        var path = Path.Combine(temp.Path, "settings.json");
+        File.WriteAllText(path, content);
+        var service = new AppSettingsService(path);
+        Assert.Throws<InvalidDataException>(() => service.Load());
+        Assert.Throws<InvalidDataException>(() => service.Save(new MoonriseSettings()));
+        Assert.Equal(content, File.ReadAllText(path));
+    }
+
+    [Fact]
     public void LaunchResolution_AllowsZeroPackages()
     {
         var selection = new PackageLaunchResolver(new JarMetadataParser()).Resolve([]);

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
@@ -15,12 +15,14 @@
     <SelfContained>true</SelfContained>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
-    <Version>1.0.0</Version>
-    <FileVersion>1.0.0.0</FileVersion>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <Version>0.1.0-beta.1</Version>
+    <StartupObject>Moonrise.App</StartupObject>
+    <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
+    <FileVersion>0.1.0.0</FileVersion>
+    <AssemblyVersion>0.1.0.0</AssemblyVersion>
     <Authors>ZOONGG</Authors>
     <Company>ZOONGG</Company>
-    <Copyright>Copyright © 2026 ZOONGG</Copyright>
+    <Copyright>Copyright В© 2026 ZOONGG</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <Product>Moonrise</Product>
     <Title>Moonrise</Title>
@@ -32,17 +34,23 @@
     <DefaultMoonriseSupportApiBaseUrl Condition="'$(Configuration)' != 'Release'">http://127.0.0.1:8787</DefaultMoonriseSupportApiBaseUrl>
     <MoonriseSupportApiBaseUrl Condition="'$(MoonriseSupportApiBaseUrl)' == ''">$(DefaultMoonriseSupportApiBaseUrl)</MoonriseSupportApiBaseUrl>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(MoonriseFriendPortable)' == 'true'">
+    <DefineConstants>$(DefineConstants);MOONRISE_FRIEND_PORTABLE</DefineConstants>
+    <MoonriseLocalUpdateFeed></MoonriseLocalUpdateFeed>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
   <ItemGroup>
+    <AssemblyMetadata Include="MoonriseLocalUpdateFeed" Value="$(MoonriseLocalUpdateFeed)" Condition="'$(MoonriseLocalUpdateFeed)' != ''" />
     <AssemblyMetadata Include="MoonriseSupportApiBaseUrl" Value="$(MoonriseSupportApiBaseUrl)" />
     <EmbeddedResource Include="..\..\assets\languages\*.moonrise-language.json" LogicalName="Moonrise.LanguagePacks.%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\..\assets\languages\*.template.json" LogicalName="Moonrise.LanguageTemplates.%(Filename)%(Extension)" />
     <EmbeddedResource Include="..\..\assets\languages\README.md" LogicalName="Moonrise.LanguageTemplates.README.md" />
     <PackageReference Include="Microsoft.NET.ILLink.Tasks" Version="8.0.31" PrivateAssets="all" />
     <PackageReference Include="NSec.Cryptography" Version="25.4.0" />
+    <PackageReference Include="Velopack" Version="1.2.161" />
     <Using Remove="System.Drawing" />
     <Using Remove="System.Windows.Forms" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.11" />
@@ -53,15 +61,17 @@
     <Resource Include="Assets\LunarClient.png" />
     <Resource Include="Assets\weave-mod-icon.png" />
     <Resource Include="Assets\Backgrounds\moonrise-cosmic-hero.png" />
-    <EmbeddedResource Include="..\..\runtime\bridge\Moonrise.Native.dll"
-                      LogicalName="Moonrise.NativeBridge.dll" />
-    <EmbeddedResource Include="..\..\runtime\adapters\moonrise-bwh-exitlag-network-agent.jar"
-                      LogicalName="Moonrise.BwhNetworkAgent.jar" />
-    <Content Include="..\..\runtime\bridge\Moonrise.Native.dll"
-             Link="runtime\bridge\Moonrise.Native.dll"
-             CopyToOutputDirectory="PreserveNewest"
-             CopyToPublishDirectory="PreserveNewest"
-             ExcludeFromSingleFile="true" />
+    <EmbeddedResource Include="..\..\runtime\bridge\Moonrise.Native.dll" LogicalName="Moonrise.NativeBridge.dll" />
+    <EmbeddedResource Include="..\..\runtime\adapters\moonrise-bwh-exitlag-network-agent.jar" LogicalName="Moonrise.BwhNetworkAgent.jar" />
+    <Content Include="..\..\runtime\catalog\Veyra-0.1.1-moonrise.1.jar" Link="runtime\catalog\Veyra-0.1.1-moonrise.1.jar" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <Content Include="..\..\extensions\MixedWeave\*" Link="licenses\mixed-weave\%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <Content Include="..\..\tools\mixed-weave-adapter\*.java" Link="licenses\mixed-weave\moonrise-source\%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <Content Include="..\..\tools\Build-MixedWeaveAdapter.ps1" Link="licenses\mixed-weave\Build-MixedWeaveAdapter.ps1" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <Content Include="..\..\extensions\Moonrise.Cosmetics\ASM-LICENSE.txt" Link="licenses\ASM-LICENSE.txt" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <Content Include="..\..\runtime\main-cosmetics-build\moonrise-cosmetics-1.3.2.jar" Link="runtime\maintained-builds\moonrise-cosmetics-1.3.2.jar" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <Content Include="..\..\runtime\mixed-weave-adapter\moonrise-mixed-raven-abi-0.1.0.jar" Link="runtime\mixed-weave-adapter\moonrise-mixed-raven-abi-0.1.0.jar" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <Content Include="..\..\runtime\mixed-weave-adapter\moonrise-mixed-agent-0.1.0.jar" Link="runtime\mixed-weave-adapter\moonrise-mixed-agent-0.1.0.jar" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <Content Include="..\..\runtime\bridge\Moonrise.Native.dll" Link="runtime\bridge\Moonrise.Native.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" Condition="'$(MoonriseFriendPortable)' != 'true'" />
     <Content Include="..\..\README.md" Link="README.md" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
     <Content Include="..\..\THIRD_PARTY_NOTICES.md" Link="THIRD_PARTY_NOTICES.md" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
     <Content Include="..\..\LICENSE" Link="LICENSE" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />

@@ -18,7 +18,7 @@ env:
 
 jobs:
   build:
-    name: Build, test, and installer smoke test
+    name: Build, test, and Velopack package
     runs-on: windows-latest
     timeout-minutes: 35
 
@@ -59,16 +59,17 @@ jobs:
       - name: Run tests
         run: dotnet test Moonrise.sln -c Release --no-build --filter "Category!=PrivateAssets" --logger "trx;LogFileName=moonrise.trx" --results-directory artifacts/test-results
 
-      - name: Install Inno Setup
+      - name: Install pinned Velopack
         shell: pwsh
-        run: choco install innosetup --no-progress -y
+        run: dotnet tool install vpk --version 1.2.161 --tool-path artifacts/velopack-tools
 
       - name: Build Setup and Portable artifacts
         shell: pwsh
         run: |
           ./tools/New-MoonriseRelease.ps1 `
-            -Version "0.0.${{ github.run_number }}" `
+            -Version "0.1.0-beta.1" `
             -OutputRoot "artifacts/release" `
+            -Velopack -VpkPath artifacts/velopack-tools/vpk.exe `
             -SkipRestore `
             -SkipTests
 
@@ -76,21 +77,13 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: Moonrise-Windows-${{ github.run_number }}
-          path: |
-            artifacts/release/Moonrise-Setup-*
-            artifacts/release/Moonrise-Portable-*
-            artifacts/release/Moonrise-Release-Notes-*
+          path: artifacts/release/velopack/*
           if-no-files-found: error
           retention-days: 14
 
-      - name: Test clean install, upgrade, launch, uninstall, and data handling
-        timeout-minutes: 5
+      - name: Test isolated Velopack install and launch
         shell: pwsh
-        run: |
-          ./tools/Test-MoonriseInstaller.ps1 `
-            -SetupPath "artifacts/release/Moonrise-Setup-0.0.${{ github.run_number }}-x64.exe" `
-            -LaunchSmokeTest `
-            -TestUserDataDeletion
+        run: ./tools/Test-MoonriseVelopackInstaller.ps1 -SetupPath artifacts/release/velopack/Moonrise.App-beta-Setup.exe
 
       - name: Upload test results
         if: always()

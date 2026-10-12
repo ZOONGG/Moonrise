@@ -1,4 +1,4 @@
-<Window x:Class="Moonrise.MainWindow"
+﻿<Window x:Class="Moonrise.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
@@ -850,13 +850,7 @@
                     <Grid.ColumnDefinitions><ColumnDefinition Width="1.45*"/><ColumnDefinition Width="18"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                     <Border x:Name="LaunchProfileCard" Style="{StaticResource LaunchCard}">
                         <Grid VerticalAlignment="Top">
-                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="28"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                            <StackPanel Grid.Row="3" Margin="0,16,0,0" Loaded="LunarAccounts_Loaded">
-                                <TextBlock x:Name="LunarAccountStatus" Text="Проверка аккаунтов Lunar / Checking Lunar accounts" Style="{StaticResource Caption}" TextWrapping="Wrap"/>
-                                <ScrollViewer MaxHeight="110" VerticalScrollBarVisibility="Auto">
-                                    <ItemsControl x:Name="LunarAccountsList" DisplayMemberPath="DisplayLabel"/>
-                                </ScrollViewer>
-                            </StackPanel>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="28"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                             <Border Background="{DynamicResource SurfaceSecondary}" CornerRadius="{DynamicResource CardRadius}" Padding="16">
                                 <Grid>
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="50"/><ColumnDefinition/></Grid.ColumnDefinitions>
@@ -1032,22 +1026,23 @@
             </Grid>
 
             <Grid x:Name="CatalogPage" Visibility="Collapsed" Margin="30,24,30,28">
-                <TextBlock x:Name="CatalogComingSoonText" Text="Coming soon" Style="{StaticResource Heading}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            <Grid x:Name="CatalogContent" Visibility="Collapsed" Margin="30,24,30,28">
+
+            <Grid x:Name="CatalogContent">
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="18"/><RowDefinition Height="Auto"/><RowDefinition Height="12"/><RowDefinition/></Grid.RowDefinitions>
                 <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                     <StackPanel><TextBlock x:Name="CatalogTitle" Text="Catalog" Style="{StaticResource Heading}"/><TextBlock x:Name="CatalogSubtitle" Text="Discover packages for Lunar Client." Style="{StaticResource Caption}" Margin="0,7,0,0"/></StackPanel>
                     <Button x:Name="RefreshCatalogButton" Grid.Column="1" Content="Refresh" Style="{StaticResource ButtonBase}" Click="RefreshCatalogButton_Click"/>
                 </Grid>
-                <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="160"/><ColumnDefinition Width="160"/></Grid.ColumnDefinitions><TextBox x:Name="CatalogSearchBox" TextChanged="CatalogFilter_Changed" ToolTip="Search / Поиск"/><ComboBox x:Name="CatalogKindComboBox" Grid.Column="1" Margin="10,0,0,0" SelectionChanged="CatalogFilter_Changed"><ComboBoxItem x:Name="CatalogAllItem" Content="All" IsSelected="True"/><ComboBoxItem x:Name="CatalogModsItem" Content="Weave mods"/><ComboBoxItem x:Name="CatalogAgentsItem" Content="Java agents"/></ComboBox><ComboBox x:Name="CatalogSortComboBox" Grid.Column="2" Margin="10,0,0,0" SelectionChanged="CatalogFilter_Changed"><ComboBoxItem x:Name="CatalogNameSortItem" Content="Name" IsSelected="True"/><ComboBoxItem x:Name="CatalogUpdatedSortItem" Content="Recently updated"/><ComboBoxItem x:Name="CatalogDownloadsSortItem" Content="Downloads"/><ComboBoxItem x:Name="CatalogInstallsSortItem" Content="Moonrise installs"/></ComboBox></Grid>
+                <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="160"/><ColumnDefinition Width="160"/></Grid.ColumnDefinitions><TextBox x:Name="CatalogSearchBox" TextChanged="CatalogFilter_Changed" ToolTip="Search / Поиск"/><ComboBox x:Name="CatalogKindComboBox" Grid.Column="1" Margin="10,0,0,0" SelectionChanged="CatalogFilter_Changed"><ComboBoxItem x:Name="CatalogAllItem" Content="All" IsSelected="True"/><ComboBoxItem x:Name="CatalogModsItem" Content="Weave mods"/><ComboBoxItem x:Name="CatalogAgentsItem" Content="Java agents"/></ComboBox><ComboBox x:Name="CatalogSortComboBox" Grid.Column="2" Margin="10,0,0,0" SelectionChanged="CatalogFilter_Changed"><ComboBoxItem x:Name="CatalogNameSortItem" Content="Name" IsSelected="True"/><ComboBoxItem x:Name="CatalogUpdatedSortItem" Content="Recently updated"/></ComboBox></Grid>
                 <Border Grid.Row="4" Style="{StaticResource Card}" Padding="0" ClipToBounds="True">
                     <Grid>
                     <ListBox x:Name="CatalogList" Background="Transparent" Foreground="{DynamicResource TextPrimary}" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" SelectionChanged="CatalogList_SelectionChanged">
+                            <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Padding" Value="0"/></Style></ListBox.ItemContainerStyle>
                             <ListBox.ItemTemplate><DataTemplate>
-                                <Grid Height="92" Margin="18,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="220"/><ColumnDefinition Width="120"/></Grid.ColumnDefinitions>
-                                    <StackPanel VerticalAlignment="Center"><TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14"/><TextBlock Text="{Binding AuthorLabel}" Foreground="{DynamicResource TextSecondary}" FontSize="12" Margin="0,4,0,0"/><TextBlock Text="{Binding Summary}" Foreground="{DynamicResource TextMuted}" FontSize="12" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding RiskLabel}" Foreground="{DynamicResource Danger}" FontSize="11" Margin="0,3,0,0"/></StackPanel>
+                                <Grid Height="92" Margin="18,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="220"/><ColumnDefinition Width="170"/></Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center"><TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="14"/><TextBlock Text="{Binding TypeLabel}" Foreground="{DynamicResource TextSecondary}" FontSize="12" Margin="0,4,0,0"/><TextBlock Text="{Binding Summary}" Foreground="{DynamicResource TextMuted}" FontSize="12" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding CompatibilityLabel}" Foreground="{DynamicResource Danger}" FontSize="11" Margin="0,3,0,0"/></StackPanel>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBlock Text="{Binding VersionLabel}" Foreground="{DynamicResource TextSecondary}"/><TextBlock Text="{Binding VersionsLabel}" Foreground="{DynamicResource TextMuted}" FontSize="12" Margin="0,5,0,0" TextTrimming="CharacterEllipsis"/></StackPanel>
-                                    <Button Grid.Column="2" Content="Install / Установить" Style="{StaticResource ButtonBase}" Tag="{Binding}" IsEnabled="{Binding CanInstall}" Click="InstallCatalogPackageButton_Click"/>
+                                    <Button Grid.Column="2" Content="Установить / Install" Style="{StaticResource ButtonBase}" Tag="{Binding}" IsEnabled="{Binding CanInstall}" Click="InstallCatalogPackageButton_Click"/>
                                 </Grid>
                             </DataTemplate></ListBox.ItemTemplate>
                         </ListBox>
@@ -1067,8 +1062,9 @@
                         <Border x:Name="CatalogDetailsDrawer" Width="340" HorizontalAlignment="Right" Background="{DynamicResource DrawerSurface}" BorderBrush="{DynamicResource BorderPrimary}" BorderThickness="1,0,0,0" Padding="22" Visibility="Collapsed" Panel.ZIndex="5">
                             <StackPanel DataContext="{Binding SelectedItem, ElementName=CatalogList}">
                                 <TextBlock Text="{Binding Name}" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap"/><TextBlock Text="{Binding Summary}" Foreground="{DynamicResource TextSecondary}" Margin="0,8,0,18" TextWrapping="Wrap"/>
-                                <TextBlock x:Name="CatalogCompatibilityLabel" Text="COMPATIBILITY" Foreground="{DynamicResource TextMuted}" FontSize="11" FontWeight="Bold"/><TextBlock Text="{Binding RiskLabel}" Foreground="{DynamicResource Danger}" Margin="0,5,0,14" TextWrapping="Wrap"/>
+                                <TextBlock x:Name="CatalogCompatibilityLabel" Text="COMPATIBILITY" Foreground="{DynamicResource TextMuted}" FontSize="11" FontWeight="Bold"/><TextBlock Text="{Binding CompatibilityLabel}" Foreground="{DynamicResource Danger}" Margin="0,5,0,14" TextWrapping="Wrap"/>
                                 <TextBlock x:Name="CatalogLicenseLabel" Text="LICENSE" Foreground="{DynamicResource TextMuted}" FontSize="11" FontWeight="Bold"/><TextBlock Text="{Binding LicenseLabel}" Foreground="{DynamicResource TextSecondary}" Margin="0,5,0,0"/>
+                            <Button Content="Установить / Install" Margin="0,18,0,0" Style="{StaticResource ButtonBase}" Tag="{Binding}" IsEnabled="{Binding CanInstall}" Click="InstallCatalogPackageButton_Click"/>
                             </StackPanel>
                         </Border>
                     </Grid>
@@ -1174,8 +1170,30 @@
                             </WrapPanel>
                         </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource Card}" Margin="0,0,0,14"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="260"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock x:Name="UpdatesTitle" Text="Updates" FontWeight="SemiBold"/><TextBlock x:Name="UpdatesHint" Text="Check official releases on GitHub. Releases are currently unsigned." Style="{StaticResource Caption}" Margin="0,4,0,0" TextWrapping="Wrap"/></StackPanel><StackPanel Grid.Column="1" VerticalAlignment="Center"><StackPanel Orientation="Horizontal"><CheckBox x:Name="CheckForUpdatesCheckBox" Style="{StaticResource SmoothSwitch}" Click="CheckForUpdatesCheckBox_Click"/><TextBlock x:Name="UpdateStatusText" Text="" Foreground="{DynamicResource TextMuted}" Margin="10,0,0,0" VerticalAlignment="Center"/></StackPanel><StackPanel Orientation="Horizontal" Margin="0,8,0,0"><CheckBox x:Name="PrereleaseUpdatesCheckBox" Style="{StaticResource SmoothSwitch}" Click="PrereleaseUpdatesCheckBox_Click"/><TextBlock x:Name="PrereleaseUpdatesText" Text="Prerelease channel" Foreground="{DynamicResource TextMuted}" Margin="10,0,0,0" VerticalAlignment="Center"/></StackPanel></StackPanel><StackPanel Grid.Column="2" Orientation="Horizontal"><Button x:Name="CheckUpdateButton" Content="Check" Style="{StaticResource ButtonBase}" Click="CheckUpdateButton_Click"/><Button x:Name="InstallUpdateButton" Content="Install and restart" Style="{StaticResource ButtonBase}" Margin="8,0,0,0" Visibility="Collapsed" Click="InstallUpdateButton_Click"/></StackPanel></Grid></Border>
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+                        <StackPanel>
+                            <TextBlock x:Name="UpdatesTitle" Text="Updates" FontWeight="SemiBold"/>
+                            <TextBlock x:Name="UpdatesHint" Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                            <TextBlock x:Name="UpdateVersionText" Margin="0,10,0,0"/>
+                            <TextBlock x:Name="AvailableUpdateText" Margin="0,4,0,0"/>
+                            <TextBlock x:Name="UpdateStatusText" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                            <ProgressBar x:Name="UpdateDownloadProgress" Minimum="0" Maximum="100" Height="5" Margin="0,8,0,0" Visibility="Collapsed"/>
+                            <TextBlock x:Name="UpdateGameHint" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                            <WrapPanel Margin="0,10,0,0">
+                                <Button x:Name="CheckUpdateButton" Style="{StaticResource ButtonBase}" Click="CheckUpdateButton_Click"/>
+                                <Button x:Name="DownloadUpdateButton" Style="{StaticResource ButtonBase}" Margin="8,0,0,0" Visibility="Collapsed" Click="DownloadUpdateButton_Click"/>
+                                <Button x:Name="InstallUpdateButton" Style="{StaticResource ButtonBase}" Margin="8,0,0,0" Visibility="Collapsed" Click="InstallUpdateButton_Click"/>
+                            </WrapPanel>
+                            <StackPanel Visibility="Collapsed">
+                                <CheckBox x:Name="AutoDownloadUpdatesCheckBox" Style="{StaticResource SmoothSwitch}" Click="AutoDownloadUpdatesCheckBox_Click"/>
+                                <CheckBox x:Name="CheckForUpdatesCheckBox" Click="CheckForUpdatesCheckBox_Click"/>
+                                <CheckBox x:Name="PrereleaseUpdatesCheckBox" Click="PrereleaseUpdatesCheckBox_Click"/>
+                                <TextBlock x:Name="PrereleaseUpdatesText"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
                     <Border Style="{StaticResource Card}" Margin="0,0,0,14"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock x:Name="DiagnosticsSettingsTitle" Text="Diagnostics" FontWeight="SemiBold"/><TextBlock x:Name="DiagnosticsSettingsHint" Text="View local launch and installation events." Style="{StaticResource Caption}" Margin="0,4,0,0"/></StackPanel><StackPanel Grid.Column="1" Orientation="Horizontal"><Button x:Name="OpenDiagnosticsSettingsButton" Content="Open diagnostics" Style="{StaticResource ButtonBase}" Click="OpenDiagnosticsButton_Click"/><Button x:Name="OpenDiagnosticsLogsButton" Content="Open logs" Style="{StaticResource ButtonBase}" Margin="8,0,0,0" Click="OpenLogsButton_Click"/></StackPanel></Grid></Border>
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,14"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock x:Name="ExperimentalWeaveTitle" Text="Experimental Weave compatibility" FontWeight="SemiBold"/><TextBlock x:Name="ExperimentalWeaveHint" Text="Use verified legacy adapters with Weave 1.3.4. Unknown legacy packages remain unsupported." Style="{StaticResource Caption}" Margin="0,4,16,0" TextWrapping="Wrap"/></StackPanel><CheckBox x:Name="ExperimentalWeaveCheckBox" Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource SmoothSwitch}" Click="ExperimentalWeaveCheckBox_Click"/></Grid></Border>
                     <Border Style="{StaticResource Card}" Margin="0,0,0,14"><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock x:Name="DeveloperModeTitle" Text="Developer mode" FontWeight="SemiBold"/><TextBlock x:Name="DeveloperModeHint" Text="Show local package inspection and manifest tools." Style="{StaticResource Caption}" Margin="0,4,0,0"/></StackPanel><CheckBox x:Name="DeveloperModeCheckBox" Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource SmoothSwitch}" Click="DeveloperModeCheckBox_Click"/></Grid></Border>
                     <Border x:Name="AboutCard" Style="{StaticResource Card}">
                         <Grid>

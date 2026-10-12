@@ -10,10 +10,12 @@ public sealed class AppSettingsService(string path)
 
     public MoonriseSettings Load()
     {
+        EnsureSupported();
         try
         {
             var settings = File.Exists(_path)
-                ? JsonSerializer.Deserialize<MoonriseSettings>(File.ReadAllText(_path)) ?? new MoonriseSettings()
+                ? JsonSerializer.Deserialize<MoonriseSettings>(File.ReadAllText(_path))
+                  ?? throw new JsonException("The settings document is empty.")
                 : new MoonriseSettings();
             if (settings.SettingsSchemaVersion < MoonriseSettings.CurrentSettingsSchemaVersion)
             {
@@ -51,12 +53,15 @@ public sealed class AppSettingsService(string path)
 
     public void Save(MoonriseSettings settings)
     {
+        EnsureSupported();
         settings.SettingsSchemaVersion = MoonriseSettings.CurrentSettingsSchemaVersion;
         Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
         var temporary = _path + ".tmp";
         File.WriteAllText(temporary, JsonSerializer.Serialize(settings, JsonOptions));
         File.Move(temporary, _path, true);
     }
+
+    private void EnsureSupported() => Moonrise.Infrastructure.StorageFormatGuard.CheckSettings(_path);
 
     private void TrySaveMigration(MoonriseSettings settings)
     {

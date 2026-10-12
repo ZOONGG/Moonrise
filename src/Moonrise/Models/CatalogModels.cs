@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 namespace Moonrise.Models;
 
@@ -49,7 +49,10 @@ public sealed class PackageManifest
     [JsonIgnore] public bool CanInstall => !Archived &&
         InstallPolicy is PackageInstallPolicy.OneClick or PackageInstallPolicy.ConfirmationRequired &&
         LatestRelease?.Artifact.DownloadMode is PackageDownloadMode.GithubRelease or
-            PackageDownloadMode.UpstreamDirect or PackageDownloadMode.UpstreamRaw or PackageDownloadMode.MoonriseRelease;
+            PackageDownloadMode.UpstreamDirect or PackageDownloadMode.UpstreamRaw or PackageDownloadMode.MoonriseRelease or PackageDownloadMode.Bundled;
+    [JsonIgnore] public string LicenseLabel => License?.Name ?? "—";
+    public string CompatibilityLabel { get; init; } = "untested";
+    [JsonIgnore] public string TypeLabel => Type == PackageKind.JavaAgent ? "Java Agent" : "Weave Mod";
     [JsonIgnore] public string RiskLabel => RiskLevel switch
     {
         PackageRiskLevel.Normal => "Normal / Обычный",
@@ -105,7 +108,8 @@ public enum PackageDownloadMode
     MoonriseRelease,
     SourceOnly,
     ExternalPage,
-    Unavailable
+    Unavailable,
+    Bundled
 }
 
 public enum CatalogSignatureStatus { UnsignedDevelopment, SignedProduction }

@@ -1112,6 +1112,8 @@ static char *augment_ansi_environment(const char *environment)
     return result;
 }
 
+#include "startup_capture.h"
+
 static BOOL WINAPI hooked_create_process_w(
     LPCWSTR application_name,
     LPWSTR command_line,
@@ -1162,6 +1164,24 @@ static BOOL WINAPI hooked_create_process_w(
         }
     }
 
+    WCHAR capture_directory[32768];
+    startup_capture *out_capture = NULL, *err_capture = NULL;
+    STARTUPINFOW capture_startup;
+    DWORD capture_length = GetEnvironmentVariableW(L"MOONRISE_DEV_STARTUP_CAPTURE", capture_directory, 32768);
+    BOOL capture_extended_skipped = capture_length && capture_is_java(application_name, command_line) && (creation_flags & EXTENDED_STARTUPINFO_PRESENT);
+    if (capture_length && capture_length < 32000 && capture_is_java(application_name, command_line) &&
+        startup_info && !(creation_flags & EXTENDED_STARTUPINFO_PRESENT)) {
+        out_capture = prepare_startup_capture((startup_info->dwFlags & STARTF_USESTDHANDLES) ? startup_info->hStdOutput : NULL);
+        err_capture = prepare_startup_capture((startup_info->dwFlags & STARTF_USESTDHANDLES) ? startup_info->hStdError : NULL);
+        if (out_capture && err_capture) {
+            capture_startup = *startup_info;
+            capture_startup.dwFlags |= STARTF_USESTDHANDLES;
+            capture_startup.hStdOutput = out_capture->write;
+            capture_startup.hStdError = err_capture->write;
+            startup_info = &capture_startup;
+            inherit_handles = TRUE;
+        }
+    }
     LPVOID environment_to_use = augmented_environment != NULL ? augmented_environment : environment;
     BOOL created = g_original_create_process_w(
         application_name,
@@ -1192,6 +1212,11 @@ static BOOL WINAPI hooked_create_process_w(
         ReleaseSRWLockExclusive(&g_environment_lock);
     }
 
+    if (capture_extended_skipped && created && process_information)
+        safe_log("startup-capture-unsupported-extended-handles", process_information->dwProcessId, ERROR_NOT_SUPPORTED);
+    if (out_capture) finish_startup_capture(out_capture, capture_directory, created && process_information ? process_information->dwProcessId : 0, L"stdout");
+    if (err_capture) finish_startup_capture(err_capture, capture_directory, created && process_information ? process_information->dwProcessId : 0, L"stderr");
+    if (out_capture && err_capture && created && process_information) safe_log("startup-capture-attached", process_information->dwProcessId, 0);
     if (!created || process_information == NULL)
     {
         return created;
